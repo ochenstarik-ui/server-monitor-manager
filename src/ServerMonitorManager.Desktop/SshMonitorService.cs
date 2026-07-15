@@ -1,0 +1,192 @@
+using System.Diagnostics;
+using System.Globalization;
+using System.Text.RegularExpressions;
+using Windows.Storage;
+
+namespace ServerMonitorManager_Desktop;
+
+public sealed record ServerMetrics(
+    string Hostname,
+    double CpuPercent,
+    long MemoryUsedKb,
+    long MemoryTotalKb,
+    long DiskUsedKb,
+    long DiskTotalKb,
+    TimeSpan Uptime,
+    TimeSpan Latency);
+
+public sealed partial class SshMonitorService
+{
+    private const string KeyFileName = "server-monitor-manager-ed25519";
+
+    public async Task<string> EnsureKeyPairAsync(CancellationToken cancellationToken = default)
+    {
+        var keyFolder = await ApplicationData.Current.LocalFolder.CreateFolderAsync(
+            "ssh",
+            CreationCollisionOption.OpenIfExists);
+        var privateKeyPath = Path.Combine(keyFolder.Path, KeyFileName);
+        var publicKeyPath = privateKeyPath + ".pub";
+
+        if (!File.Exists(privateKeyPath) || !File.Exists(publicKeyPath))
+        {
+            var arguments = new[]
+            {
+                "-q", "-t", "ed25519", "-a", "64", "-N", string.Empty,
+                "-C", "server-monitor-manager", "-f", privateKeyPath
+            };
+            await RunProcessAsync(ResolveOpenSshTool("ssh-keygen.exe"), arguments, cancellationToken);
+        }
+
+        return (await File.ReadAllTextAsync(publicKeyPath, cancellationToken)).Trim();
+    }
+
+    public async Task<ServerMetrics> QueryAsync(
+        ServerProfileData profile,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateProfile(profile);
+        await EnsureKeyPairAsync(cancellationToken);
+
+        var localFolder = ApplicationData.Current.LocalFolder.Path;
+        var privateKeyPath = Path.Combine(localFolder, "ssh", KeyFileName);
+        var knownHostsPath = Path.Combine(localFolder, "ssh", "known_hosts");
+        var target = $"{profile.User}@{profile.Host}";
+        var arguments = new[]
+        {
+            "-i", privateKeyPath,
+            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=8",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", $"UserKnownHostsFile={knownHostsPath}",
+            target,
+            "metrics"
+        };
+
+        var stopwatch = Stopwatch.StartNew();
+        var output = await RunProcessAsync(
+            ResolveOpenSshTool("ssh.exe"),
+            arguments,
+            cancellationToken);
+        stopwatch.Stop();
+
+        var values = output
+            .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+            .Select(line => line.Split('=', 2))
+            .Where(parts => parts.Length == 2)
+            .ToDictionary(parts => parts[0], parts => parts[1], StringComparer.Ordinal);
+
+        var cpuCount = ReadLong(values, "CPU_COUNT", 1);
+        var load1 = ReadDouble(values, "LOAD1");
+        var cpuPercent = Math.Clamp(load1 / Math.Max(1, cpuCount) * 100, 0, 100);
+        var memoryTotal = ReadLong(values, "MEM_TOTAL_KB");
+        var memoryAvailable = ReadLong(values, "MEM_AVAILABLE_KB");
+        var diskTotal = ReadLong(values, "DISK_TOTAL_KB");
+        var diskAvailable = ReadLong(values, "DISK_AVAILABLE_KB");
+
+        return new ServerMetrics(
+            values.GetValueOrDefault("HOSTNAME", profile.Name),
+            cpuPercent,
+            Math.Max(0, memoryTotal - memoryAvailable),
+            memoryTotal,
+            Math.Max(0, diskTotal - diskAvailable),
+            diskTotal,
+            TimeSpan.FromSeconds(ReadLong(values, "UPTIME_SECONDS")),
+            stopwatch.Elapsed);
+    }
+
+    private static void ValidateProfile(ServerProfileData profile)
+    {
+        if (!SafeHostRegex().IsMatch(profile.Host))
+        {
+            throw new InvalidOperationException("Некорректный адрес сервера.");
+        }
+
+        if (!SafeUserRegex().IsMatch(profile.User))
+        {
+            throw new InvalidOperationException("Некорректное имя SSH-пользователя.");
+        }
+
+        if (profile.Port is < 1 or > 65535)
+        {
+            throw new InvalidOperationException("SSH-порт должен быть от 1 до 65535.");
+        }
+    }
+
+    private static async Task<string> RunProcessAsync(
+        string fileName,
+        IEnumerable<string> arguments,
+        CancellationToken cancellationToken)
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = fileName,
+            UseShellExecute = false,
+            CreateNoWindow = true,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo)
+            ?? throw new InvalidOperationException($"Не удалось запустить {Path.GetFileName(fileName)}.");
+        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
+        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
+
+        try
+        {
+            await process.WaitForExitAsync(cancellationToken);
+        }
+        catch
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            throw;
+        }
+
+        var output = await outputTask;
+        var error = await errorTask;
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException(
+                string.IsNullOrWhiteSpace(error)
+                    ? $"SSH завершился с кодом {process.ExitCode}."
+                    : error.Trim());
+        }
+
+        return output;
+    }
+
+    private static string ResolveOpenSshTool(string fileName)
+    {
+        var systemTool = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.System),
+            "OpenSSH",
+            fileName);
+        return File.Exists(systemTool) ? systemTool : fileName;
+    }
+
+    private static long ReadLong(IReadOnlyDictionary<string, string> values, string key, long fallback = 0)
+        => values.TryGetValue(key, out var value)
+            && long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : fallback;
+
+    private static double ReadDouble(IReadOnlyDictionary<string, string> values, string key)
+        => values.TryGetValue(key, out var value)
+            && double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
+                ? parsed
+                : 0;
+
+    [GeneratedRegex("^[A-Za-z0-9._:-]{1,255}$", RegexOptions.CultureInvariant)]
+    private static partial Regex SafeHostRegex();
+
+    [GeneratedRegex("^[a-z_][a-z0-9_-]{0,31}$", RegexOptions.CultureInvariant)]
+    private static partial Regex SafeUserRegex();
+}

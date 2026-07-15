@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ServerMonitorManager.Desktop (Package)": {
+      "commandName": "MsixPackage"
+    },
+    "ServerMonitorManager.Desktop (Unpackaged)": {
+      "commandName": "Project"
+    }
+  }
+}

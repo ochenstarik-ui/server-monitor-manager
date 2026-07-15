@@ -8,7 +8,8 @@ public sealed record ServerProfileData(
     string Name,
     string Host,
     int Port,
-    string User);
+    string User,
+    bool IsHub = false);
 
 public sealed class ServerViewModel : INotifyPropertyChanged
 {
@@ -25,6 +26,7 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     public ServerProfileData Profile { get; }
     public string Name => Profile.Name;
     public string Endpoint => $"{Profile.User}@{Profile.Host}:{Profile.Port}";
+    public bool IsHub => Profile.IsHub;
     public string Status { get => _status; set => Set(ref _status, value); }
     public string CpuText { get => _cpuText; set => Set(ref _cpuText, value); }
     public double CpuPercent { get => _cpuPercent; set => Set(ref _cpuPercent, value); }

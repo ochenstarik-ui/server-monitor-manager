@@ -15,18 +15,14 @@
 ## Архитектура
 
 ```text
-Windows client
-      |
-      | HTTPS / WebSocket, mTLS
-      v
-Control node (может работать на одном из ваших серверов)
-      ^
-      | только исходящие соединения агентов
-      |
-Linux agents  ----  управляемые WireGuard links  ----  Linux agents
+Windows client -- ограниченный SSH --> главный WireGuard Hub с белым IP
+                                            ^
+                                            | исходящие WireGuard-соединения
+                                            |
+                              Hermes / Home / другие серверы
 ```
 
-Мониторинг и межсерверные связи разделены. Регистрация агента не создаёт сетевого туннеля и не выдаёт доступ к SSH. Каждая связь создаётся отдельно, имеет список разрешённых адресов и портов, может иметь срок действия и всегда поддерживает ручной `Disconnect`.
+Hub объединяет узлы в приватной подсети, но по умолчанию запрещает транзит между ними. Каждая связь `источник → цель` включается и отключается отдельно. Поэтому можно оставить `Hermes → Home`, отключив только `Hermes → Server2`. Обратное направление не появляется автоматически.
 
 Подробности: [архитектура](docs/architecture.md), [модель безопасности](docs/security-model.md), [план разработки](docs/roadmap.md) и [контракт Linux-установщика](docs/installer-contract.md).
 
@@ -47,44 +43,45 @@ tests/
 
 Проект находится на стадии первого тестируемого Windows MVP. Репозиторий переименован из `mobile-server-manager`, потому что первой целевой платформой теперь является Windows. Клиент создаёт отдельный Ed25519-ключ, сохраняет профили локально и получает живые метрики серверов через системный OpenSSH.
 
-Установочный скрипт Linux-части хранится в репозитории [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server) под именем `ochenstarik-server-monitor-manager.sh`. Его копия находится в [`deploy/`](deploy/). Скрипт создаёт отдельного пользователя `ochenstarik-monitor` и SSH forced-command: ключ мониторинга не получает shell, PTY, port forwarding или право выполнять произвольные команды.
+Установочный скрипт Linux-части хранится в репозитории [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server) под именем `ochenstarik-server-monitor-manager.sh`. Он устанавливает режим Hub или Node, создаёт отдельного пользователя `ochenstarik-monitor` и SSH forced-command: ключ приложения не получает shell, PTY, port forwarding или право выполнять произвольные команды.
 
 ## Быстрый тест на трёх серверах
 
 1. Запустите Windows-клиент и нажмите `SSH-ключ` → `Копировать`.
-2. На каждом Ubuntu/Debian-сервере запустите одну команду:
+2. На сервере с белым IP скачайте установщик и выберите режим Hub:
 
 ```bash
-curl -fsSL \
-  https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/agent/server-monitor-installer/ochenstarik-server-monitor-manager.sh \
-  | sudo bash -s -- install
+curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/agent/server-monitor-installer/ochenstarik-server-monitor-manager.sh
+chmod 700 ochenstarik-server-monitor-manager.sh
+sudo ./ochenstarik-server-monitor-manager.sh hub
 ```
 
-3. Вставьте скопированный публичный ключ по запросу скрипта.
-4. В приложении нажмите `Добавить сервер`, укажите IP/домен, текущий SSH-порт и пользователя `ochenstarik-monitor`.
-5. Повторите для остальных серверов и нажмите `Обновить`.
+3. Откройте выбранный UDP-порт WireGuard (по умолчанию `51820`) и создайте коды узлов:
+
+```bash
+sudo ochenstarik-smm node-code hermes
+sudo ochenstarik-smm node-code home
+sudo ochenstarik-smm node-code server2
+```
+
+4. На каждом вторичном сервере запустите `sudo ./ochenstarik-server-monitor-manager.sh node`, вставьте SSH-ключ приложения и код именно этого узла. Белый IP вторичным серверам не нужен.
+5. В приложении добавьте главный сервер с пользователем `ochenstarik-monitor` и отметьте `Это главный Mesh Hub`.
+6. Нажмите обновление в панели связей, выберите источник и цель, затем `Разрешить` или `Отключить`.
 
 Приватный ключ хранится в локальном каталоге packaged-приложения Windows. Первый SSH-host key принимается в режиме `accept-new`, затем проверяется по отдельному `known_hosts` приложения.
 
-Для повторяемой установки без ручного ввода публичный ключ можно передать через окружение. Это публичная часть ключа, не секрет:
-
-```bash
-curl -fsSL \
-  https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/agent/server-monitor-installer/ochenstarik-server-monitor-manager.sh \
-  | sudo env SERVER_MONITOR_PUBLIC_KEY='ssh-ed25519 AAAA... server-monitor-manager' \
-    bash -s -- install
-```
-
 Для предварительной проверки вместо запуска через pipe скачайте файл, выполните `bash -n` и просмотрите его содержимое.
+
+Код Node содержит приватный ключ WireGuard узла. Считайте его секретом, используйте только на предназначенном сервере и не сохраняйте в Git или истории сообщений.
 
 ## Принципы безопасности
 
-- никаких общих root-паролей и приватных SSH-ключей в control node;
-- на первом SSH-MVP — отдельный ключ мониторинга и pinned `known_hosts`; enrollment tokens появятся вместе с постоянным агентом;
+- никаких общих root-паролей и приватных SSH-ключей на Hub;
+- отдельный ключ мониторинга и pinned `known_hosts`; код регистрации Node передаётся один раз вручную;
 - отдельная идентичность для пользователя, устройства, агента и автоматизации;
 - опасные действия требуют повторного подтверждения и попадают в неизменяемый аудит;
 - доступ Hermes выдаётся отдельному Unix-пользователю и SSH-ключу с минимальными правами;
-- отключение Link удаляет маршруты и peer-конфигурацию, а не только скрывает кнопку в интерфейсе.
+- отключение Link сразу удаляет разрешённую пару из nftables на Hub, не затрагивая другие связи узла.
 
 ## Лицензия и секреты
 

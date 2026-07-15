@@ -44,31 +44,8 @@ public sealed partial class SshMonitorService
         ServerProfileData profile,
         CancellationToken cancellationToken = default)
     {
-        ValidateProfile(profile);
-        await EnsureKeyPairAsync(cancellationToken);
-
-        var localFolder = ApplicationData.Current.LocalFolder.Path;
-        var privateKeyPath = Path.Combine(localFolder, "ssh", KeyFileName);
-        var knownHostsPath = Path.Combine(localFolder, "ssh", "known_hosts");
-        var target = $"{profile.User}@{profile.Host}";
-        var arguments = new[]
-        {
-            "-i", privateKeyPath,
-            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=8",
-            "-o", "IdentitiesOnly=yes",
-            "-o", "StrictHostKeyChecking=accept-new",
-            "-o", $"UserKnownHostsFile={knownHostsPath}",
-            target,
-            "metrics"
-        };
-
         var stopwatch = Stopwatch.StartNew();
-        var output = await RunProcessAsync(
-            ResolveOpenSshTool("ssh.exe"),
-            arguments,
-            cancellationToken);
+        var output = await RunRestrictedCommandAsync(profile, "metrics", cancellationToken);
         stopwatch.Stop();
 
         var values = output
@@ -94,6 +71,40 @@ public sealed partial class SshMonitorService
             diskTotal,
             TimeSpan.FromSeconds(ReadLong(values, "UPTIME_SECONDS")),
             stopwatch.Elapsed);
+    }
+
+    public async Task<string> RunRestrictedCommandAsync(
+        ServerProfileData profile,
+        string command,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateProfile(profile);
+        if (!SafeRestrictedCommandRegex().IsMatch(command))
+        {
+            throw new InvalidOperationException("Некорректная команда управления Mesh.");
+        }
+
+        await EnsureKeyPairAsync(cancellationToken);
+        var localFolder = ApplicationData.Current.LocalFolder.Path;
+        var privateKeyPath = Path.Combine(localFolder, "ssh", KeyFileName);
+        var knownHostsPath = Path.Combine(localFolder, "ssh", "known_hosts");
+        var target = $"{profile.User}@{profile.Host}";
+        var arguments = new[]
+        {
+            "-i", privateKeyPath,
+            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
+            "-o", "BatchMode=yes",
+            "-o", "ConnectTimeout=8",
+            "-o", "IdentitiesOnly=yes",
+            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", $"UserKnownHostsFile={knownHostsPath}",
+            target,
+            command
+        };
+        return await RunProcessAsync(
+            ResolveOpenSshTool("ssh.exe"),
+            arguments,
+            cancellationToken);
     }
 
     private static void ValidateProfile(ServerProfileData profile)
@@ -189,4 +200,7 @@ public sealed partial class SshMonitorService
 
     [GeneratedRegex("^[a-z_][a-z0-9_-]{0,31}$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeUserRegex();
+
+    [GeneratedRegex("^(metrics|mesh (nodes|links|status|connect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31}|disconnect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31}))$", RegexOptions.CultureInvariant)]
+    private static partial Regex SafeRestrictedCommandRegex();
 }

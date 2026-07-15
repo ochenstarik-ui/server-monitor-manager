@@ -16,12 +16,13 @@ public sealed partial class MainPage : Page
     public MainPage()
     {
         InitializeComponent();
-        ManualLinkToggle.Toggled += ManualLinkToggle_Toggled;
         Loaded += MainPage_Loaded;
         MainNavigation.SelectedItem = MainNavigation.MenuItems[0];
     }
 
     public ObservableCollection<ServerViewModel> Servers { get; } = [];
+    public ObservableCollection<MeshNodeViewModel> MeshNodes { get; } = [];
+    public ObservableCollection<MeshLinkViewModel> MeshLinks { get; } = [];
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
@@ -116,12 +117,17 @@ public sealed partial class MainPage : Page
             SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact
         };
         var userBox = new TextBox { Header = "Пользователь", Text = "ochenstarik-monitor" };
+        var hubBox = new CheckBox
+        {
+            Content = "Это главный Mesh Hub"
+        };
+        AutomationProperties.SetName(hubBox, "Использовать сервер как главный Mesh Hub");
         var validationText = new TextBlock { TextWrapping = TextWrapping.Wrap };
         var content = new StackPanel
         {
             Spacing = 12,
             MinWidth = 420,
-            Children = { nameBox, hostBox, portBox, userBox, validationText }
+            Children = { nameBox, hostBox, portBox, userBox, hubBox, validationText }
         };
         var dialog = new ContentDialog
         {
@@ -154,7 +160,8 @@ public sealed partial class MainPage : Page
             nameBox.Text.Trim(),
             hostBox.Text.Trim(),
             checked((int)portBox.Value),
-            userBox.Text.Trim());
+            userBox.Text.Trim(),
+            hubBox.IsChecked == true);
         var server = new ServerViewModel(profile);
         Servers.Add(server);
         await SaveProfilesAsync();
@@ -184,6 +191,10 @@ public sealed partial class MainPage : Page
         WarningValueText.Text = warnings.ToString(CultureInfo.InvariantCulture);
         WarningDetailText.Text = warnings == 0 ? "Нет предупреждений" : "Проверьте SSH и ключ";
         HeaderStatusText.Text = $"SSH monitoring · {Servers.Count} сервер(а) · обновлено {DateTime.Now:HH:mm:ss}";
+        if (Servers.Any(server => server.IsHub))
+        {
+            await RefreshMeshAsync(showSuccess: false);
+        }
     }
 
     private async Task RefreshServerAsync(ServerViewModel server)
@@ -256,26 +267,112 @@ public sealed partial class MainPage : Page
         LinkActionInfo.IsOpen = true;
     }
 
-    private void ManualLinkToggle_Toggled(object sender, RoutedEventArgs e)
-        => ApplyLinkState(ManualLinkToggle.IsOn);
+    private ServerViewModel? FindHub()
+        => Servers.FirstOrDefault(server => server.IsHub);
 
-    private void DisconnectButton_Click(object sender, RoutedEventArgs e)
-        => ManualLinkToggle.IsOn = false;
-
-    private void ApplyLinkState(bool isActive)
+    private async Task RefreshMeshAsync(bool showSuccess = true)
     {
-        LinkStatusText.Text = isActive
-            ? "Защищённая связь активна"
-            : "Связь отключена вручную";
-        LinkStatusText.Opacity = isActive ? 1 : 0.68;
-        DisconnectButton.IsEnabled = isActive;
-        TerminalButton.IsEnabled = isActive;
-        ShowInfo(
-            isActive ? "Связь включена" : "Hermes отключён от Home Lab",
-            isActive
-                ? "Маршрут доступен только для SSH-порта 20202."
-                : "Желаемое состояние сохранено: Disabled. Оба агента должны подтвердить удаление peer и маршрута.",
-            isActive ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+        var hub = FindHub();
+        if (hub is null)
+        {
+            ShowInfo("Mesh Hub не выбран", "Добавьте главный сервер или отметьте его как Mesh Hub.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var nodesOutput = await _ssh.RunRestrictedCommandAsync(hub.Profile, "mesh nodes", timeout.Token);
+            var linksOutput = await _ssh.RunRestrictedCommandAsync(hub.Profile, "mesh links", timeout.Token);
+            MeshNodes.Clear();
+            foreach (var line in nodesOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!line.StartsWith("NODE=", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var fields = line[5..].Split('|');
+                if (fields.Length == 4 && int.TryParse(fields[3], out var age))
+                {
+                    MeshNodes.Add(new MeshNodeViewModel(fields[0], fields[1], fields[2], age));
+                }
+            }
+
+            MeshLinks.Clear();
+            foreach (var line in linksOutput.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries))
+            {
+                if (!line.StartsWith("LINK=", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+                var fields = line[5..].Split('|');
+                if (fields.Length >= 2)
+                {
+                    MeshLinks.Add(new MeshLinkViewModel(fields[0], fields[1]));
+                }
+            }
+
+            ActiveLinksValueText.Text = MeshLinks.Count.ToString(CultureInfo.InvariantCulture);
+            MeshStatusText.Text = $"{MeshNodes.Count} узлов · {MeshLinks.Count} активных связей";
+            if (showSuccess)
+            {
+                ShowInfo("Mesh обновлён", MeshStatusText.Text, InfoBarSeverity.Success);
+            }
+        }
+        catch (Exception exception)
+        {
+            MeshStatusText.Text = "Hub недоступен";
+            ShowInfo("Не удалось получить Mesh-состояние", CompactError(exception), InfoBarSeverity.Error);
+        }
+    }
+
+    private async void RefreshMeshButton_Click(object sender, RoutedEventArgs e)
+        => await RefreshMeshAsync();
+
+    private async void ConnectLinkButton_Click(object sender, RoutedEventArgs e)
+        => await ChangeLinkAsync(enable: true);
+
+    private async void DisconnectLinkButton_Click(object sender, RoutedEventArgs e)
+        => await ChangeLinkAsync(enable: false);
+
+    private async Task ChangeLinkAsync(bool enable)
+    {
+        var hub = FindHub();
+        if (hub is null)
+        {
+            ShowInfo("Mesh Hub не выбран", "Сначала добавьте главный сервер с отметкой Mesh Hub.", InfoBarSeverity.Warning);
+            return;
+        }
+        if (SourceNodeBox.SelectedItem is not MeshNodeViewModel source
+            || TargetNodeBox.SelectedItem is not MeshNodeViewModel target)
+        {
+            ShowInfo("Выберите серверы", "Укажите источник и сервер назначения.", InfoBarSeverity.Warning);
+            return;
+        }
+        if (source.Name == target.Name)
+        {
+            ShowInfo("Некорректная связь", "Источник и назначение должны отличаться.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            var action = enable ? "connect" : "disconnect";
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            await _ssh.RunRestrictedCommandAsync(
+                hub.Profile,
+                $"mesh {action} {source.Name} {target.Name}",
+                timeout.Token);
+            await RefreshMeshAsync(showSuccess: false);
+            ShowInfo(
+                enable ? "Связь включена" : "Связь отключена",
+                $"{source.Name} → {target.Name}",
+                enable ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
+        }
+        catch (Exception exception)
+        {
+            ShowInfo("Не удалось изменить связь", CompactError(exception), InfoBarSeverity.Error);
+        }
     }
 
     private void MainNavigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

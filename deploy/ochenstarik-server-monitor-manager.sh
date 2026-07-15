@@ -27,8 +27,17 @@ detect_system() {
 }
 
 read_public_key() {
-  printf '\nВ Windows-приложении нажмите «SSH-ключ» → «Копировать».\n'
-  read -rp 'Вставьте публичный ключ: ' PUBLIC_KEY
+  if [[ -n "${SERVER_MONITOR_PUBLIC_KEY:-}" ]]; then
+    PUBLIC_KEY="$SERVER_MONITOR_PUBLIC_KEY"
+    log "Публичный ключ получен из SERVER_MONITOR_PUBLIC_KEY"
+  else
+    printf '\nВ Windows-приложении нажмите «SSH-ключ» → «Копировать».\n'
+    if [[ -r /dev/tty ]]; then
+      IFS= read -r -p 'Вставьте публичный ключ: ' PUBLIC_KEY < /dev/tty
+    else
+      die "Нет интерактивного терминала. Передайте ключ через SERVER_MONITOR_PUBLIC_KEY"
+    fi
+  fi
   PUBLIC_KEY="${PUBLIC_KEY//$'\r'/}"
   [[ "$PUBLIC_KEY" =~ ^ssh-ed25519[[:space:]]+[A-Za-z0-9+/]+={0,3}([[:space:]].*)?$ ]] \
     || die "Ожидается публичный ключ формата ssh-ed25519 AAAA..."
@@ -138,7 +147,11 @@ install_server_part() {
 
 uninstall_server_part() {
   local answer
-  read -rp 'Удалить пользователя мониторинга и forced-command? [y/N]: ' answer
+  if [[ -r /dev/tty ]]; then
+    IFS= read -r -p 'Удалить пользователя мониторинга и forced-command? [y/N]: ' answer < /dev/tty
+  else
+    die "Для удаления требуется интерактивный терминал"
+  fi
   [[ "$answer" =~ ^[Yy]$ ]] || { log "Отменено"; return 0; }
   rm -f -- "$MONITOR_COMMAND"
   if getent passwd "$MONITOR_USER" >/dev/null; then

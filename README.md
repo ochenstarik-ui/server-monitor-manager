@@ -52,13 +52,12 @@ tests/
 ## Быстрый тест на трёх серверах
 
 1. Запустите Windows-клиент и нажмите `SSH-ключ` → `Копировать`.
-2. На каждом Ubuntu/Debian-сервере скачайте и запустите установщик:
+2. На каждом Ubuntu/Debian-сервере запустите одну команду:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
-chmod 700 ochenstarik-server-monitor-manager.sh
-bash -n ochenstarik-server-monitor-manager.sh
-sudo ./ochenstarik-server-monitor-manager.sh install
+curl -fsSL \
+  https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/agent/server-monitor-installer/ochenstarik-server-monitor-manager.sh \
+  | sudo bash -s -- install
 ```
 
 3. Вставьте скопированный публичный ключ по запросу скрипта.
@@ -66,6 +65,17 @@ sudo ./ochenstarik-server-monitor-manager.sh install
 5. Повторите для остальных серверов и нажмите `Обновить`.
 
 Приватный ключ хранится в локальном каталоге packaged-приложения Windows. Первый SSH-host key принимается в режиме `accept-new`, затем проверяется по отдельному `known_hosts` приложения.
+
+Для повторяемой установки без ручного ввода публичный ключ можно передать через окружение. Это публичная часть ключа, не секрет:
+
+```bash
+curl -fsSL \
+  https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/agent/server-monitor-installer/ochenstarik-server-monitor-manager.sh \
+  | sudo env SERVER_MONITOR_PUBLIC_KEY='ssh-ed25519 AAAA... server-monitor-manager' \
+    bash -s -- install
+```
+
+Для предварительной проверки вместо запуска через pipe скачайте файл, выполните `bash -n` и просмотрите его содержимое.
 
 ## Принципы безопасности
 

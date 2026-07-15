@@ -278,7 +278,7 @@
                             <InfoBar
                                 IsClosable="False"
                                 IsOpen="True"
-                                Message="Связь направленная: Hermes → Home разрешает Hermes обращаться к Home. Обратное направление включается отдельно."
+                                Message="Связь направленная: AI-агент → Home разрешает агенту обращаться к Home. Обратное направление включается отдельно."
                                 Severity="Informational" />
                         </StackPanel>
                     </Border>

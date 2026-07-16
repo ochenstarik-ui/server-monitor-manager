@@ -25,7 +25,9 @@ public sealed class MeshLinkViewModel
         string cidr,
         string protocol,
         int port,
-        long expiresUnix)
+        long expiresUnix,
+        string state,
+        long version)
     {
         Source = source;
         Target = target;
@@ -33,6 +35,8 @@ public sealed class MeshLinkViewModel
         Protocol = protocol;
         Port = port;
         ExpiresUnix = expiresUnix;
+        State = state;
+        Version = version;
     }
 
     public string Source { get; set; }
@@ -41,8 +45,10 @@ public sealed class MeshLinkViewModel
     public string Protocol { get; set; }
     public int Port { get; set; }
     public long ExpiresUnix { get; set; }
+    public string State { get; set; }
+    public long Version { get; set; }
     public string ExpirationText => ExpiresUnix == 0
         ? "вручную"
         : $"до {DateTimeOffset.FromUnixTimeSeconds(ExpiresUnix).ToLocalTime():dd.MM HH:mm}";
-    public string Label => $"{Source} → {Target} · {Protocol.ToUpperInvariant()}/{Port} · {Cidr} · {ExpirationText}";
+    public string Label => $"{Source} → {Target} · {Protocol.ToUpperInvariant()}/{Port} · {Cidr} · {ExpirationText} · {State} v{Version}";
 }

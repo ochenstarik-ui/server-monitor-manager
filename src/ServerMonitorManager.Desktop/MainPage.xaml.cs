@@ -306,9 +306,10 @@ public sealed partial class MainPage : Page
                     continue;
                 }
                 var fields = line[5..].Split('|');
-                if (fields.Length >= 7
+                if (fields.Length >= 8
                     && int.TryParse(fields[4], CultureInfo.InvariantCulture, out var port)
-                    && long.TryParse(fields[5], CultureInfo.InvariantCulture, out var expiresUnix))
+                    && long.TryParse(fields[5], CultureInfo.InvariantCulture, out var expiresUnix)
+                    && long.TryParse(fields[7], CultureInfo.InvariantCulture, out var version))
                 {
                     MeshLinks.Add(new MeshLinkViewModel(
                         fields[0],
@@ -316,7 +317,9 @@ public sealed partial class MainPage : Page
                         fields[2],
                         fields[3],
                         port,
-                        expiresUnix));
+                        expiresUnix,
+                        fields[6],
+                        version));
                 }
             }
 
@@ -411,14 +414,21 @@ public sealed partial class MainPage : Page
                 ? $"{protocol} {port} {ttlMinutes}"
                 : $"{protocol} {port}";
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
-            await _ssh.RunRestrictedCommandAsync(
+            var commandOutput = await _ssh.RunRestrictedCommandAsync(
                 hub.Profile,
                 $"mesh {action} {source.Name} {target.Name} {policyArguments}",
                 timeout.Token);
+            var confirmation = commandOutput
+                .Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+                .FirstOrDefault(line => line.StartsWith("LINK_STATE=", StringComparison.Ordinal));
+            if (confirmation is null)
+            {
+                throw new InvalidOperationException("Hub не подтвердил фактическое состояние Link.");
+            }
             await RefreshMeshAsync(showSuccess: false);
             ShowInfo(
-                enable ? "Связь включена" : "Связь отключена",
-                $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port}",
+                enable ? "Hub подтвердил Active" : "Hub подтвердил Disabled",
+                $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port} · {confirmation[11..]}",
                 enable ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
         }
         catch (Exception exception)

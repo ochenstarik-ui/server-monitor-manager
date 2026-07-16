@@ -4,6 +4,7 @@
 bin/
 obj/
 artifacts/
+.artifacts/
 TestResults/
 *.user
 *.suo

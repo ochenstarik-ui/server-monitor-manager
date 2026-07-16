@@ -1,0 +1,39 @@
+name: Linux control and agent
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore ServerMonitorManager.slnx
+
+      - name: Build
+        run: dotnet build ServerMonitorManager.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release --no-build
+
+      - name: Verify formatting
+        run: dotnet format ServerMonitorManager.slnx --verify-no-changes --no-restore
+
+      - name: Publish agent amd64
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+
+      - name: Publish agent arm64
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true

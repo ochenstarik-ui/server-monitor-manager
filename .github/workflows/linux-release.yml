@@ -1,0 +1,55 @@
+name: Linux release artifacts
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        runtime: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish agent
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/agent
+
+      - name: Publish control
+        run: dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/control
+
+      - name: Package
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          archive="server-monitor-manager-${{ matrix.runtime }}.tar.gz"
+          tar -C out -czf "$archive" agent control
+          sha256sum "$archive" > "$archive.sha256"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-monitor-manager-${{ matrix.runtime }}
+          path: |
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz.sha256
+
+      - name: Attach to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz.sha256

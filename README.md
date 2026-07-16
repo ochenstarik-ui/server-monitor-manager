@@ -45,6 +45,28 @@ tests/
 
 Установочный скрипт Linux-части хранится в репозитории [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server) под именем `ochenstarik-server-monitor-manager.sh`. Он устанавливает режим Hub или Node, создаёт отдельного пользователя `ochenstarik-monitor` и SSH forced-command: ключ приложения не получает shell, PTY, port forwarding или право выполнять произвольные команды.
 
+В разработческой ветке также появился первый срез постоянного control layer: ASP.NET Core 10 Hub, SQLite и исходящий Linux Agent. Регистрация использует одноразовый token и CSR, дальнейшие heartbeat-запросы — mTLS. Этот слой ещё не заменяет проверенный SSH/WireGuard установщик: сначала будут добавлены release-бинарники, systemd-установка и миграция Links.
+
+Alpha-установка постоянного слоя после обычных ролей Hub/Node:
+
+```bash
+# Hub
+sudo ./ochenstarik-server-monitor-manager.sh install-control-hub
+sudo ./ochenstarik-server-monitor-manager.sh control-code home
+
+# соответствующий Node — вставить полученный SMMCTL1
+sudo ./ochenstarik-server-monitor-manager.sh install-control-agent
+```
+
+Архив выбирается автоматически для amd64 или arm64 и проверяется по SHA-256. Для Control Hub требуется входящий TCP-порт `7443`; Agent открытых входящих портов не создаёт.
+
+Проверка control layer для разработчиков:
+
+```bash
+dotnet build ServerMonitorManager.slnx --configuration Release
+dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release
+```
+
 ## Быстрый тест на трёх серверах
 
 1. Запустите Windows-клиент и нажмите `SSH-ключ` → `Копировать`.

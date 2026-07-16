@@ -70,12 +70,12 @@
 
 ## Этап 6 — постоянный control layer
 
-- [ ] статический Linux agent для amd64/arm64;
+- [x] самодостаточный single-file Linux agent для amd64/arm64;
 - [ ] SQLite inventory, policies, history и audit;
-- [ ] исходящие mTLS agent sessions;
+- [x] исходящие mTLS agent sessions;
 - [ ] WebSocket/stream событий для desktop client;
 - [ ] ограниченный локальный буфер и downsampling;
-- [ ] idempotency key и защита от replay;
+- [x] idempotency key и защита от replay;
 - [ ] тест нагрузки 50–100 Node на одном Hub.
 
 ## Этап 7 — релиз и другие платформы

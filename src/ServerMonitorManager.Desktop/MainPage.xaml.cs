@@ -3,7 +3,9 @@ using System.Globalization;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Foundation;
 
 namespace ServerMonitorManager_Desktop;
 
@@ -11,6 +13,8 @@ public sealed partial class MainPage : Page
 {
     private readonly ServerStorage _storage = new();
     private readonly SshMonitorService _ssh = new();
+    private readonly MetricsHistoryStorage _historyStorage = new();
+    private readonly List<MetricSampleData> _history = [];
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _loaded;
@@ -36,11 +40,17 @@ public sealed partial class MainPage : Page
 
         _loaded = true;
         _refreshTimer.Start();
+        _history.AddRange(await _historyStorage.LoadAsync());
         foreach (var profile in await _storage.LoadAsync())
         {
             Servers.Add(new ServerViewModel(profile));
         }
         UpdateEmptyState();
+        if (Servers.Count > 0)
+        {
+            ServerList.SelectedIndex = 0;
+            RenderHistory();
+        }
 
         if (Servers.Count > 0)
         {
@@ -266,7 +276,9 @@ public sealed partial class MainPage : Page
             return;
         }
         Servers.Remove(selected);
+        _history.RemoveAll(sample => sample.ServerId == selected.Profile.Id);
         await SaveProfilesAsync();
+        await _historyStorage.SaveAsync(_history);
         UpdateEmptyState();
         ShowInfo("Профиль удалён", selected.Name, InfoBarSeverity.Success);
     }
@@ -289,6 +301,7 @@ public sealed partial class MainPage : Page
             }
 
             await Task.WhenAll(Servers.Select(RefreshServerAsync));
+            await _historyStorage.SaveAsync(_history);
             var online = Servers.Count(server => server.IsOnline);
             var warnings = Servers.Count(server => !server.IsOnline || server.HasWarning);
             AvailabilityValueText.Text = $"{online} / {Servers.Count}";
@@ -329,6 +342,25 @@ public sealed partial class MainPage : Page
             server.LatencyText = $"{metrics.Latency.TotalMilliseconds:F0} ms";
             server.Status = $"Онлайн · uptime {FormatUptime(metrics.Uptime)}";
             server.IsOnline = true;
+            _history.Add(new MetricSampleData(
+                server.Profile.Id,
+                DateTimeOffset.Now,
+                metrics.CpuPercent,
+                memoryPercent,
+                diskPercent));
+            var overflow = _history
+                .Where(sample => sample.ServerId == server.Profile.Id)
+                .OrderByDescending(sample => sample.Timestamp)
+                .Skip(240)
+                .ToList();
+            foreach (var sample in overflow)
+            {
+                _history.Remove(sample);
+            }
+            if (ServerList.SelectedItem == server)
+            {
+                RenderHistory();
+            }
         }
         catch (Exception exception)
         {
@@ -380,6 +412,52 @@ public sealed partial class MainPage : Page
         => bytes >= 1024L * 1024 * 1024
             ? $"{bytes / 1024d / 1024d / 1024d:F1} GB"
             : $"{bytes / 1024d / 1024d:F1} MB";
+
+    private void ServerList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        => RenderHistory();
+
+    private void HistoryChart_SizeChanged(object sender, SizeChangedEventArgs e)
+        => RenderHistory();
+
+    private void RenderHistory()
+    {
+        if (ServerList.SelectedItem is not ServerViewModel server)
+        {
+            HistoryCaptionText.Text = "Выберите сервер";
+            CpuHistoryLine.Points = new PointCollection();
+            MemoryHistoryLine.Points = new PointCollection();
+            DiskHistoryLine.Points = new PointCollection();
+            return;
+        }
+
+        var samples = _history
+            .Where(sample => sample.ServerId == server.Profile.Id)
+            .OrderBy(sample => sample.Timestamp)
+            .ToList();
+        HistoryCaptionText.Text = samples.Count == 0
+            ? $"{server.Name} · данные появятся после обновления"
+            : $"{server.Name} · {samples.Count} точек · {samples[0].Timestamp:dd.MM HH:mm} — {samples[^1].Timestamp:dd.MM HH:mm}";
+        CpuHistoryLine.Points = BuildHistoryPoints(samples.Select(sample => sample.CpuPercent).ToList());
+        MemoryHistoryLine.Points = BuildHistoryPoints(samples.Select(sample => sample.MemoryPercent).ToList());
+        DiskHistoryLine.Points = BuildHistoryPoints(samples.Select(sample => sample.DiskPercent).ToList());
+    }
+
+    private PointCollection BuildHistoryPoints(IReadOnlyList<double> values)
+    {
+        var points = new PointCollection();
+        if (values.Count == 0 || HistoryChart.ActualWidth <= 0 || HistoryChart.ActualHeight <= 0)
+        {
+            return points;
+        }
+        var step = values.Count == 1 ? 0 : HistoryChart.ActualWidth / (values.Count - 1);
+        for (var index = 0; index < values.Count; index++)
+        {
+            var x = values.Count == 1 ? HistoryChart.ActualWidth : index * step;
+            var y = HistoryChart.ActualHeight * (1 - Math.Clamp(values[index], 0, 100) / 100d);
+            points.Add(new Point(x, y));
+        }
+        return points;
+    }
 
     private static string CompactError(Exception exception)
     {

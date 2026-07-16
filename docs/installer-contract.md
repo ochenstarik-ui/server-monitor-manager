@@ -1,25 +1,74 @@
 # Контракт Linux-установщика
 
-Файл `ochenstarik-server-monitor-manager.sh` находится в `ochenstarik-ui/lightweight-server`; синхронная копия хранится в `deploy/` этого репозитория.
+Единственный исходный файл `ochenstarik-server-monitor-manager.sh` хранится в `ochenstarik-ui/lightweight-server`. В репозитории desktop client не должна находиться устаревающая копия.
 
-## Первый тестовый этап: SSH pull
+## Поддерживаемые роли
 
-До появления постоянного агента Windows-клиент получает метрики через OpenSSH. Установщик:
+### Monitor only
 
-- поддерживает Ubuntu/Debian с systemd;
-- запрашивает публичный ключ `ssh-ed25519`, созданный Windows-клиентом;
-- читает интерактивный ключ из `/dev/tty`, поэтому поддерживает установку через `curl | sudo bash`;
-- поддерживает повторяемый режим через `SERVER_MONITOR_PUBLIC_KEY`;
-- проверяет синтаксис ключа через `ssh-keygen`;
-- устанавливает и включает OpenSSH Server, не меняя текущий SSH-порт;
-- создаёт отдельного системного пользователя `ochenstarik-monitor` без пароля;
-- устанавливает root-owned metrics command;
-- записывает ключ как `restrict,command="..."`;
-- не создаёт UFW-правил и не открывает дополнительных портов;
-- поддерживает `install`, `status` и `uninstall`;
-- допускает безопасный повторный запуск для замены ключа мониторинга.
+Режим `install` устанавливает SSH monitoring endpoint без WireGuard:
 
-Forced-command отдаёт только строки `KEY=VALUE`:
+- Ubuntu/Debian с systemd;
+- публичный ключ `ssh-ed25519` из Windows-клиента;
+- отдельный системный пользователь `ochenstarik-monitor` без пароля;
+- root-owned forced-command;
+- сохранение существующего SSH-порта;
+- отсутствие нового публичного API.
+
+### Hub
+
+Режим `hub` дополнительно:
+
+- устанавливает WireGuard и nftables;
+- запрашивает публичный IPv4/домен и UDP-порт;
+- создаёт `smm0` с адресом `10.77.0.1/24`;
+- включает IPv4 forwarding;
+- устанавливает минимальный root helper и systemd restore unit;
+- хранит публичные identities Node и политики Links;
+- разрешает транзит только по явной политике.
+
+### Node
+
+Режим `node`:
+
+- локально генерирует WireGuard keypair;
+- принимает одноразовый enrollment token;
+- отправляет Hub только публичный ключ;
+- получает внутренний адрес и подписанную конфигурацию;
+- создаёт только исходящее WireGuard-соединение;
+- не требует белого IP или входящего публичного порта.
+
+## Команды жизненного цикла
+
+Целевой интерфейс:
+
+```text
+install-monitor
+install-hub
+install-node
+status
+update
+rollback
+uninstall-monitor
+uninstall-node
+uninstall-hub
+```
+
+Каждая установка и обновление должны быть идемпотентными. Перед изменением рабочей конфигурации создаётся root-only backup. Ошибка проверки или запуска автоматически восстанавливает последнюю рабочую версию.
+
+Удаление роли должно убрать только принадлежащие ей файлы, units, интерфейсы и правила. Удаление Hub требует отдельного подтверждения и не должно молча оставлять включённый forwarding или nftables ACL.
+
+## Forced-command
+
+Ключ мониторинга допускает только:
+
+- `metrics`;
+- read-only `mesh nodes`, `mesh links`, `mesh status` на Hub;
+- строго типизированные изменения Link с проверкой параметров.
+
+Он не должен позволять shell, PTY, agent forwarding, TCP forwarding или произвольную команду. Полный SSH-терминал использует отдельную identity.
+
+## Минимальный metrics snapshot
 
 ```text
 PROTOCOL=1
@@ -29,13 +78,23 @@ LOAD1=0.42
 CPU_COUNT=4
 MEM_TOTAL_KB=...
 MEM_AVAILABLE_KB=...
+SWAP_TOTAL_KB=...
+SWAP_FREE_KB=...
 DISK_TOTAL_KB=...
 DISK_AVAILABLE_KB=...
+DISK_INODES_TOTAL=...
+DISK_INODES_FREE=...
+NETWORK_RX_BYTES=...
+NETWORK_TX_BYTES=...
 KERNEL=...
 ```
 
-Ключ мониторинга не должен позволять shell, PTY, agent forwarding, TCP forwarding или выполнение переданной клиентом команды. Полноценный SSH-терминал использует отдельную пользовательскую identity и не входит в этот ключ.
+## Проверки перед применением
 
-## Будущий этап: постоянный агент
-
-После проверки UX на нескольких серверах SSH pull будет дополнен статическим агентом для потоковых метрик, systemd events, короткого локального буфера и управляемых WireGuard Links. Агент будет регистрироваться одноразовым token и работать по исходящему mTLS-соединению без входящего API.
+- `bash -n` и ShellCheck;
+- проверка SSH-ключа через `ssh-keygen`;
+- `sshd -t` перед reload;
+- `wg-quick strip` и пробный запуск конфигурации;
+- `nft --check` перед заменой таблицы;
+- проверка systemd unit;
+- сохранение активной SSH-сессии до подтверждения нового доступа.

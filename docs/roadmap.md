@@ -1,52 +1,85 @@
 # План разработки
 
-## Этап 0 — фундамент
+## Этап 0 — репозиторий и контракт
 
 - [x] переименовать проект в Server Monitor Manager;
-- [x] разделить мониторинг, терминал и Links в архитектуре;
-- [x] определить безопасный контракт установки агента;
+- [x] выбрать звёздную архитектуру Hub/Node для первого Mesh;
+- [x] разделить monitoring identity, terminal identity и AI-agent identity;
+- [x] описать направленные Links и kill switch;
 - [ ] выбрать лицензию;
-- [ ] настроить CI, форматирование, тесты и релизные checksum.
+- [ ] добавить CI, форматирование, тесты и release checksum;
+- [ ] объединить PR приложения и установщика в `main`.
 
-## Этап 1 — Windows MVP
+## Этап 1 — Windows SSH MVP
 
-- [x] установить .NET SDK и официальный WinUI 3 toolchain;
-- [x] создать packaged WinUI 3 приложение с воспроизводимым CLI-запуском через WinApp;
-- [x] реализовать shell: Overview, Servers, Links, Sessions, Settings;
-- [x] добавить локальные demo-данные и адаптивный dashboard;
-- [x] генерировать отдельный Ed25519 SSH-ключ и хранить его в локальном каталоге packaged-приложения;
-- [x] сохранять профили серверов локально без паролей;
-- [x] собрать и реально запустить x64-приложение.
+- [x] создать packaged WinUI 3 приложение;
+- [x] добавить адаптивный Overview и профили нескольких серверов;
+- [x] генерировать отдельный Ed25519 SSH-ключ;
+- [x] сохранять профили локально без паролей;
+- [x] получать CPU/load, RAM, disk, uptime и latency;
+- [x] собрать и реально запустить x64-приложение;
+- [ ] редактирование и удаление серверов;
+- [ ] единственный изменяемый Hub;
+- [ ] настоящие страницы Servers, Links, Sessions и Settings.
 
-## Этап 2 — мониторинг одного сервера
+## Этап 2 — установщик Hub/Node
 
-- [x] первый бездемонный Linux endpoint через SSH forced-command;
-- [ ] статический постоянный Linux agent для amd64/arm64;
-- [ ] control node с SQLite, mTLS enrollment и WebSocket событиями;
-- [ ] CPU, RAM, disk, network, uptime и systemd units;
-- [ ] ограниченный локальный буфер и downsampling;
-- [ ] installer, update, rollback и uninstall;
-- [ ] предупреждения о диске, памяти и недоступности.
+- [x] SSH forced-command для Ubuntu/Debian;
+- [x] роли `hub` и `node`;
+- [x] WireGuard Hub и исходящие Node-соединения;
+- [x] постоянный nftables ACL на Hub;
+- [x] список узлов и handshake-состояние;
+- [ ] явные зависимости `sudo`, `visudo` и `ping` для минимального Debian;
+- [ ] безопасные `update` и `rollback`;
+- [ ] полный `uninstall-monitor`, `uninstall-node` и `uninstall-hub`;
+- [ ] интеграционный тест повторной установки и reboot.
 
-## Этап 3 — несколько серверов и терминал
+## Этап 3 — безопасная регистрация
 
-- [ ] группы, теги, поиск и сводные статусы;
-- [ ] прямой SSH из Windows-клиента;
-- [ ] known_hosts pinning и отдельные profiles;
-- [ ] типизированные безопасные действия с аудитом;
-- [ ] экспорт диагностики без секретов.
+- [ ] локальная генерация WireGuard-ключа на Node;
+- [ ] одноразовый enrollment token;
+- [ ] срок действия не более 10 минут;
+- [ ] атомарное погашение token;
+- [ ] отзыв и повторная регистрация Node;
+- [ ] подтверждение fingerprint Hub;
+- [ ] защита desktop SSH-ключа через DPAPI.
 
-## Этап 4 — Links и AI-агенты
+## Этап 4 — управляемые Links
 
-- [ ] WireGuard peer helper с минимальными привилегиями;
-- [ ] policies по CIDR, протоколу, порту и TTL;
-- [ ] connect/disconnect с подтверждением обоих узлов;
+- [x] направленные пары source → destination;
+- [x] ручное добавление и удаление nftables ACL из Windows-клиента;
+- [ ] политики по CIDR, TCP/UDP и порту;
+- [ ] TTL и автоматическое истечение;
+- [ ] состояния Connecting, Active, Disconnecting, Partial, Disabled и Failed;
+- [ ] версия политики и подтверждение применения;
 - [ ] обязательное отключение после reconnect;
-- [ ] отдельная automation identity для AI-агента;
+- [ ] append-only аудит;
 - [ ] интеграционные тесты kill switch и частичных отказов.
 
-## Этап 5 — другие платформы
+## Этап 5 — мониторинг и терминал
 
-- [ ] macOS и Linux desktop clients после стабилизации Core/API;
-- [ ] Android/iOS как companion-клиенты;
-- [ ] push-уведомления без передачи административных секретов стороннему push-провайдеру.
+- [ ] swap, inode, network и выбранные systemd units;
+- [ ] предупреждения по диску, памяти и недоступности;
+- [ ] автоматическое обновление и короткая локальная история;
+- [ ] графики и экспорт диагностики без секретов;
+- [ ] отдельный прямой SSH-терминал;
+- [ ] отдельная terminal identity и подтверждение пользователя;
+- [ ] отдельная automation identity для AI-агента.
+
+## Этап 6 — постоянный control layer
+
+- [ ] статический Linux agent для amd64/arm64;
+- [ ] SQLite inventory, policies, history и audit;
+- [ ] исходящие mTLS agent sessions;
+- [ ] WebSocket/stream событий для desktop client;
+- [ ] ограниченный локальный буфер и downsampling;
+- [ ] idempotency key и защита от replay;
+- [ ] тест нагрузки 50–100 Node на одном Hub.
+
+## Этап 7 — релиз и другие платформы
+
+- [ ] подписанный Windows installer и GitHub Release;
+- [ ] checksum Linux-установщика и бинарников;
+- [ ] macOS и Linux desktop после стабилизации Core/API;
+- [ ] Android/iOS companion clients;
+- [ ] push-уведомления без административных секретов у push-провайдера.

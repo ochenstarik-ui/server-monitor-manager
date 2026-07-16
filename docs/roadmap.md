@@ -29,9 +29,9 @@
 - [x] WireGuard Hub и исходящие Node-соединения;
 - [x] постоянный nftables ACL на Hub;
 - [x] список узлов и handshake-состояние;
-- [ ] явные зависимости `sudo`, `visudo` и `ping` для минимального Debian;
-- [ ] безопасные `update` и `rollback`;
-- [ ] полный `uninstall-monitor`, `uninstall-node` и `uninstall-hub`;
+- [x] явные зависимости `sudo`, `visudo` и `ping` для минимального Debian;
+- [x] безопасные `update` и `rollback` с root-only backup;
+- [x] полный `uninstall-monitor`, `uninstall-node` и `uninstall-hub`;
 - [ ] интеграционный тест повторной установки и reboot.
 
 ## Этап 3 — безопасная регистрация

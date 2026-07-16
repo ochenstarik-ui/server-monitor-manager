@@ -39,7 +39,7 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
     {
         var startInfo = new ProcessStartInfo
         {
-            FileName = "/usr/bin/sudo",
+            FileName = options.Value.PrivilegeEscalationPath,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             UseShellExecute = false,

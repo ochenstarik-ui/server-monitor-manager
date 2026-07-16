@@ -34,9 +34,11 @@ builder.Services.AddOptions<ControlOptions>()
     .Validate(options =>
             !string.IsNullOrWhiteSpace(options.DatabasePath)
             && !string.IsNullOrWhiteSpace(options.CertificateAuthorityPath)
+            && !string.IsNullOrWhiteSpace(options.HubHelperPath)
+            && !string.IsNullOrWhiteSpace(options.PrivilegeEscalationPath)
             && options.HeartbeatSeconds is >= 10 and <= 300
             && options.MaxBufferedMetricAgeHours is >= 1 and <= 168,
-        "Control paths are required, HeartbeatSeconds must be 10-300, and buffered metrics 1-168 hours.")
+        "Control, helper, and privilege escalation paths are required; HeartbeatSeconds must be 10-300, and buffered metrics 1-168 hours.")
     .ValidateOnStart();
 builder.Services.AddSingleton<ControlStore>();
 builder.Services.AddSingleton<CertificateAuthority>();

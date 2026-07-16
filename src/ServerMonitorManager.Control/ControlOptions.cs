@@ -15,4 +15,6 @@ public sealed class ControlOptions
     public int MaxBufferedMetricAgeHours { get; init; } = 24;
 
     public string HubHelperPath { get; init; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
+
+    public string PrivilegeEscalationPath { get; init; } = "/usr/bin/sudo";
 }

@@ -51,6 +51,8 @@
 
 Control service не получает общий доступ к root helper. Отдельный root-owned wrapper принимает только проверенные `link-connect` и `link-disconnect`; команды регистрации, удаления Node и произвольные аргументы ему недоступны.
 
+Репозиторий Control проверяет границу запуска helper отдельным Linux integration test: реальный дочерний процесс, обязательный non-interactive privilege wrapper, сохранение `Disabled/Partial` в SQLite и восстановление после пересоздания Control process. Проверка настоящих nftables ruleset и reboot хоста выполняется вместе с исходным установщиком, без его копирования в этот репозиторий.
+
 ## Команды жизненного цикла
 
 Целевой интерфейс:

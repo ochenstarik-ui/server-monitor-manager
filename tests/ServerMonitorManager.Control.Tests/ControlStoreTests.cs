@@ -11,6 +11,34 @@ public sealed class ControlStoreTests : IAsyncDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"smm-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public void DiagnosticsExportOmitsRawIdentitiesAndNormalizesStates()
+    {
+        const string endpoint = "root@secret.example.test:20202";
+        const string node = "private-home-node:10.77.0.23";
+        const string source = "confidential-ai-agent";
+        const string target = "confidential-home";
+        const string serverId = "private-local-server-id";
+
+        var json = DiagnosticsExportService.CreateJson(
+            [new DiagnosticServerInput(endpoint, true, true, false, 12.345)],
+            [new DiagnosticNodeInput(node, "unexpected-private-state", 42)],
+            [new DiagnosticLinkInput(source, target, "tcp", 22, "Partial", 7, 0)],
+            [new DiagnosticMetricInput(serverId, DateTimeOffset.UtcNow, 1, 2, 3)],
+            controlConfigured: true);
+
+        Assert.DoesNotContain(endpoint, json, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret.example.test", json, StringComparison.Ordinal);
+        Assert.DoesNotContain(node, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(source, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(target, json, StringComparison.Ordinal);
+        Assert.DoesNotContain(serverId, json, StringComparison.Ordinal);
+        Assert.Contains("endpoint_fingerprint", json, StringComparison.Ordinal);
+        Assert.Contains("node_fingerprint", json, StringComparison.Ordinal);
+        Assert.Contains("\"state\": \"unknown\"", json, StringComparison.Ordinal);
+        Assert.Contains("\"state\": \"partial\"", json, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task EnrollmentTokenIsAtomicAndIdempotent()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

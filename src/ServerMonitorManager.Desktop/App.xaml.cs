@@ -21,7 +21,7 @@ namespace ServerMonitorManager_Desktop;
 /// </summary>
 public partial class App : Application
 {
-    private Window? _window;
+    internal static Window? MainWindow { get; private set; }
 
     /// <summary>
     /// Initializes the singleton application object.  This is the first line of authored code
@@ -38,7 +38,7 @@ public partial class App : Application
     /// <param name="args">Details about the launch request and process.</param>
     protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
     {
-        _window = new MainWindow();
-        _window.Activate();
+        MainWindow = new MainWindow();
+        MainWindow.Activate();
     }
 }

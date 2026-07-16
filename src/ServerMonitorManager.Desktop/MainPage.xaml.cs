@@ -7,6 +7,8 @@ using Microsoft.UI.Xaml.Media;
 using ServerMonitorManager.Core;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
+using Windows.Storage;
+using Windows.Storage.Pickers;
 
 namespace ServerMonitorManager_Desktop;
 
@@ -111,6 +113,68 @@ public sealed partial class MainPage : Page
         catch (Exception exception)
         {
             ShowInfo("Не удалось создать SSH-ключ", exception.Message, InfoBarSeverity.Error);
+        }
+    }
+
+    private async void ExportDiagnosticsButton_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var window = App.MainWindow
+                ?? throw new InvalidOperationException("Главное окно приложения недоступно.");
+            var picker = new FileSavePicker
+            {
+                SuggestedStartLocation = PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"server-monitor-manager-diagnostics-{DateTimeOffset.Now:yyyyMMdd-HHmmss}"
+            };
+            picker.FileTypeChoices.Add("JSON diagnostics", [".json"]);
+            WinRT.Interop.InitializeWithWindow.Initialize(
+                picker,
+                WinRT.Interop.WindowNative.GetWindowHandle(window));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null)
+            {
+                return;
+            }
+
+            var json = DiagnosticsExportService.CreateJson(
+                Servers.Select(server => new DiagnosticServerInput(
+                    $"{server.Profile.Host}:{server.Profile.Port}",
+                    server.IsHub,
+                    server.IsOnline,
+                    server.HasWarning,
+                    server.CpuPercent)),
+                MeshNodes.Select(node => new DiagnosticNodeInput(
+                    $"{node.Name}:{node.Address}",
+                    node.State,
+                    node.HandshakeAgeSeconds)),
+                MeshLinks.Select(link => new DiagnosticLinkInput(
+                    link.Source,
+                    link.Target,
+                    link.Protocol,
+                    link.Port,
+                    link.State,
+                    link.Version,
+                    link.ExpiresUnix)),
+                _history.Select(sample => new DiagnosticMetricInput(
+                    sample.ServerId,
+                    sample.Timestamp,
+                    sample.CpuPercent,
+                    sample.MemoryPercent,
+                    sample.DiskPercent)),
+                _control.IsConfigured);
+            await FileIO.WriteTextAsync(file, json);
+            ShowInfo(
+                "Диагностика экспортирована",
+                "Файл не содержит адресов серверов, пользователей, ключей, сертификатов или токенов.",
+                InfoBarSeverity.Success);
+        }
+        catch (Exception exception)
+        {
+            ShowInfo(
+                "Не удалось экспортировать диагностику",
+                CompactError(exception),
+                InfoBarSeverity.Error);
         }
     }
 

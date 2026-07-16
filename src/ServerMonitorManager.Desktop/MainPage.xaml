@@ -99,6 +99,11 @@
                         Click="DeleteServerButton_Click"
                         Icon="Delete"
                         Label="Удалить" />
+                    <AppBarButton
+                        AutomationProperties.Name="Экспортировать безопасную диагностику"
+                        Click="ExportDiagnosticsButton_Click"
+                        Icon="Save"
+                        Label="Диагностика" />
                 </CommandBar>
             </Grid>
 

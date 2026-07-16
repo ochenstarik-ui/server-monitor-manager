@@ -12,6 +12,7 @@ The current alpha combines a packaged WinUI 3 desktop client, an ASP.NET Core co
 - keeps several server profiles, groups, tags, favorites, alerts, and short local metric history;
 - generates a dedicated Ed25519 SSH key and stores private material only on the Windows device;
 - opens direct SSH terminals without sending a private terminal key to the Hub;
+- exports support diagnostics with hashed endpoint identities and without hosts, users, keys, certificates, or tokens;
 - joins servers through one Hub with a public IP; secondary servers need outbound access only;
 - creates directional Links such as `AI agent → Home server:22` and disables each Link independently;
 - limits Links by source, destination `/32`, TCP/UDP port, policy version, and optional TTL;

@@ -120,7 +120,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 The current development branch implements Windows SSH monitoring, the Hub/Node WireGuard installer, directional Links, one-time enrollment, mTLS Agent and Operator identities, certificate revocation/re-enrollment, SQLite control state, audit, authenticated event streaming, Windows Control API integration, and a bounded durable Agent buffer with downsampling.
 
-Still planned: reconnect reconciliation, kill-switch failure tests, a 50–100 Node load test, signed Windows installer, and desktop/mobile clients for additional platforms.
+Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Still planned: kill-switch integration tests, a 50–100 Node load test, signed Windows installer, and desktop/mobile clients for additional platforms.
 
 ## License and project policy
 

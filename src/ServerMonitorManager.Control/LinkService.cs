@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Text.Json;
 using ServerMonitorManager.Core;
 
@@ -8,6 +9,8 @@ public sealed class LinkService(
     ILinkPolicyApplier applier,
     ControlEventBroker events)
 {
+    private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconciliationLocks = new();
+
     public async Task<LinkPolicy> CreateAsync(
         LinkPolicyCreateRequest request,
         string actor,
@@ -68,6 +71,54 @@ public sealed class LinkService(
             Publish("link.partial", link);
         }
         return link;
+    }
+
+    public async Task<LinkReconciliationResult> ReconcileDisabledLinksForNodeAsync(
+        string nodeId,
+        CancellationToken cancellationToken)
+    {
+        var reconciled = 0;
+        var failed = 0;
+        var links = await store.ListEffectiveLinksForNodeAsync(nodeId, cancellationToken);
+        foreach (var candidate in links.Where(link => link.DesiredState == "Disabled"))
+        {
+            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                var current = (await store.ListEffectiveLinksForNodeAsync(nodeId, cancellationToken))
+                    .SingleOrDefault(link => link.Id == candidate.Id && link.DesiredState == "Disabled");
+                if (current is null)
+                {
+                    continue;
+                }
+
+                var actor = $"system:reconnect:{nodeId}";
+                var link = await store.SetLinkActualStateAsync(
+                    current.Id, "Disconnecting", null, actor, cancellationToken) ?? current;
+                Publish("link.reconciling", link);
+                try
+                {
+                    await applier.ApplyDisconnectAsync(link, cancellationToken);
+                    link = await store.SetLinkActualStateAsync(
+                        link.Id, "Disabled", null, actor, cancellationToken) ?? link;
+                    Publish("link.disabled", link);
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    link = await store.SetLinkActualStateAsync(
+                        link.Id, "Partial", CompactError(exception), actor, cancellationToken) ?? link;
+                    Publish("link.partial", link);
+                    failed++;
+                }
+                reconciled++;
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        return new LinkReconciliationResult(reconciled, failed);
     }
 
     private void Publish(string type, LinkPolicy link)

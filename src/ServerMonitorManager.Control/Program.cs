@@ -221,6 +221,7 @@ agents.MapPost("/heartbeat", async (
     AgentHeartbeat heartbeat,
     HttpContext context,
     ControlStore controlStore,
+    LinkService linkService,
     IOptions<ControlOptions> options,
     CancellationToken cancellationToken) =>
 {
@@ -251,16 +252,26 @@ agents.MapPost("/heartbeat", async (
 
     try
     {
-        var response = await controlStore.RecordHeartbeatAsync(
+        var mutation = await controlStore.RecordHeartbeatAsync(
             heartbeat,
             options.Value.HeartbeatSeconds,
             cancellationToken);
+        if (mutation.RequiresReconciliation)
+        {
+            var reconciliation = await linkService.ReconcileDisabledLinksForNodeAsync(
+                heartbeat.NodeId, cancellationToken);
+            if (reconciliation.Failed == 0)
+            {
+                await controlStore.CompleteAgentReconciliationAsync(
+                    heartbeat.NodeId, cancellationToken);
+            }
+        }
         var broker = context.RequestServices.GetRequiredService<ControlEventBroker>();
         broker.Publish(
             "agent.heartbeat",
             heartbeat.NodeId,
             JsonSerializer.Serialize(heartbeat, SmmJsonContext.Default.AgentHeartbeat));
-        return Results.Ok(response);
+        return Results.Ok(mutation.Response);
     }
     catch (IdempotencyConflictException)
     {

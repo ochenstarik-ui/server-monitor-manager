@@ -6,8 +6,8 @@
 - [x] выбрать звёздную архитектуру Hub/Node для первого Mesh;
 - [x] разделить monitoring identity, terminal identity и AI-agent identity;
 - [x] описать направленные Links и kill switch;
-- [ ] выбрать лицензию;
-- [ ] добавить CI, форматирование, тесты и release checksum;
+- [x] выбрать лицензию;
+- [x] добавить CI, форматирование, тесты и release checksum;
 - [ ] объединить PR приложения и установщика в `main`.
 
 ## Этап 1 — Windows SSH MVP
@@ -50,9 +50,9 @@
 - [x] ручное добавление и удаление nftables ACL из Windows-клиента;
 - [x] политики по целевому `/32`, TCP/UDP и порту;
 - [x] TTL и автоматическое истечение;
-- [ ] состояния Connecting, Active, Disconnecting, Partial, Disabled и Failed;
+- [x] состояния Connecting, Active, Disconnecting, Partial, Disabled и Failed;
 - [x] версия политики и подтверждение применения на Hub;
-- [ ] обязательное отключение после reconnect;
+- [x] обязательное отключение после reconnect;
 - [x] локальный append-only JSONL-аудит операций Link;
 - [ ] интеграционные тесты kill switch и частичных отказов.
 

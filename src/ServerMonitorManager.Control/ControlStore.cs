@@ -62,6 +62,11 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             );
             CREATE INDEX IF NOT EXISTS ix_metric_samples_node_time
                 ON metric_samples(node_id, recorded_at DESC);
+            CREATE TABLE IF NOT EXISTS agent_reconciliation (
+                node_id TEXT PRIMARY KEY REFERENCES agents(node_id) ON DELETE CASCADE,
+                required INTEGER NOT NULL,
+                requested_at TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS idempotency (
                 operation_key TEXT PRIMARY KEY,
                 request_hash TEXT NOT NULL,
@@ -341,7 +346,7 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 
-    public async Task<AgentHeartbeatResponse> RecordHeartbeatAsync(
+    public async Task<AgentHeartbeatMutation> RecordHeartbeatAsync(
         AgentHeartbeat heartbeat,
         int nextHeartbeatSeconds,
         CancellationToken cancellationToken = default)
@@ -357,11 +362,49 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             cancellationToken);
         if (cached is not null)
         {
+            var cachedReconciliationRequired = await IsAgentReconciliationRequiredAsync(
+                connection, transaction, heartbeat.NodeId, cancellationToken);
             await transaction.CommitAsync(cancellationToken);
-            return cached;
+            return new AgentHeartbeatMutation(cached, cachedReconciliationRequired);
         }
 
         var now = DateTimeOffset.UtcNow;
+        var previous = connection.CreateCommand();
+        previous.Transaction = transaction;
+        previous.CommandText = "SELECT status, last_seen_at FROM agents WHERE node_id = $node;";
+        previous.Parameters.AddWithValue("$node", heartbeat.NodeId);
+        string previousStatus;
+        DateTimeOffset? previousLastSeenAt;
+        await using (var reader = await previous.ExecuteReaderAsync(cancellationToken))
+        {
+            if (!await reader.ReadAsync(cancellationToken))
+            {
+                throw new InvalidOperationException("Unknown agent node id.");
+            }
+            previousStatus = reader.GetString(0);
+            previousLastSeenAt = reader.IsDBNull(1) ? null : DateTimeOffset.Parse(reader.GetString(1));
+        }
+        var reconnectThreshold = TimeSpan.FromSeconds(Math.Max(60, nextHeartbeatSeconds * 3));
+        var requiresReconciliation = previousStatus != "Online"
+                                     || previousLastSeenAt is null
+                                     || now - previousLastSeenAt >= reconnectThreshold;
+        if (requiresReconciliation)
+        {
+            var requireReconciliation = connection.CreateCommand();
+            requireReconciliation.Transaction = transaction;
+            requireReconciliation.CommandText = """
+                INSERT INTO agent_reconciliation(node_id, required, requested_at)
+                VALUES ($node, 1, $now)
+                ON CONFLICT(node_id) DO UPDATE SET
+                    required = 1,
+                    requested_at = excluded.requested_at;
+                """;
+            requireReconciliation.Parameters.AddWithValue("$node", heartbeat.NodeId);
+            requireReconciliation.Parameters.AddWithValue("$now", now.ToString("O"));
+            await requireReconciliation.ExecuteNonQueryAsync(cancellationToken);
+        }
+        var reconciliationRequired = await IsAgentReconciliationRequiredAsync(
+            connection, transaction, heartbeat.NodeId, cancellationToken);
         var update = connection.CreateCommand();
         update.Transaction = transaction;
         update.CommandText = """
@@ -400,7 +443,22 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             SmmJsonContext.Default.AgentHeartbeatResponse,
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return response;
+        return new AgentHeartbeatMutation(response, reconciliationRequired);
+    }
+
+    public async Task CompleteAgentReconciliationAsync(
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE agent_reconciliation
+            SET required = 0
+            WHERE node_id = $node;
+            """;
+        command.Parameters.AddWithValue("$node", nodeId);
+        await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
     public async Task<IReadOnlyList<AgentSummary>> ListAgentsAsync(CancellationToken cancellationToken = default)
@@ -733,6 +791,20 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             await transaction.RollbackAsync(cancellationToken);
             return null;
         }
+        if (existing.DesiredState == "Disabled"
+            || await HasNewerLinkAsync(connection, transaction, existing, cancellationToken))
+        {
+            await WriteIdempotentAsync(
+                connection,
+                transaction,
+                $"link-disable:{actor}:{id}:{request.IdempotencyKey}",
+                Fingerprint(request, SmmJsonContext.Default.LinkPolicyDisableRequest),
+                existing,
+                SmmJsonContext.Default.LinkPolicy,
+                cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+            return new LinkMutation(existing, true);
+        }
         var now = DateTimeOffset.UtcNow;
         var link = existing with
         {
@@ -822,6 +894,36 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         return result;
     }
 
+    public async Task<IReadOnlyList<LinkPolicy>> ListEffectiveLinksForNodeAsync(
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<LinkPolicy>();
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT current.*
+            FROM links AS current
+            WHERE (current.source_node_id = $node OR current.target_node_id = $node)
+              AND NOT EXISTS (
+                  SELECT 1
+                  FROM links AS newer
+                  WHERE newer.source_node_id = current.source_node_id
+                    AND newer.target_node_id = current.target_node_id
+                    AND newer.protocol = current.protocol
+                    AND newer.port = current.port
+                    AND newer.version > current.version)
+            ORDER BY current.version;
+            """;
+        command.Parameters.AddWithValue("$node", nodeId);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(ReadLink(reader));
+        }
+        return result;
+    }
+
     private static void AddLinkParameters(SqliteCommand command, LinkPolicy link)
     {
         command.Parameters.AddWithValue("$id", link.Id);
@@ -841,6 +943,23 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue("$updated", link.UpdatedAt.ToString("O"));
     }
 
+    private static async Task<bool> IsAgentReconciliationRequiredAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string nodeId,
+        CancellationToken cancellationToken)
+    {
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT COALESCE((
+                SELECT required FROM agent_reconciliation WHERE node_id = $node
+            ), 0);
+            """;
+        command.Parameters.AddWithValue("$node", nodeId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
     private static async Task<LinkPolicy?> ReadLinkAsync(
         SqliteConnection connection,
         SqliteTransaction transaction,
@@ -853,6 +972,31 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue("$id", id);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken) ? ReadLink(reader) : null;
+    }
+
+    private static async Task<bool> HasNewerLinkAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        LinkPolicy link,
+        CancellationToken cancellationToken)
+    {
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM links
+                WHERE source_node_id = $source
+                  AND target_node_id = $target
+                  AND protocol = $protocol
+                  AND port = $port
+                  AND version > $version);
+            """;
+        command.Parameters.AddWithValue("$source", link.SourceNodeId);
+        command.Parameters.AddWithValue("$target", link.TargetNodeId);
+        command.Parameters.AddWithValue("$protocol", link.Protocol);
+        command.Parameters.AddWithValue("$port", link.Port);
+        command.Parameters.AddWithValue("$version", link.Version);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 
     private static LinkPolicy ReadLink(SqliteDataReader reader)
@@ -997,6 +1141,12 @@ public sealed class IdempotencyConflictException : Exception
 public sealed record ControlIdentity(string Id, string Role);
 
 public sealed record LinkMutation(LinkPolicy Link, bool IsReplay);
+
+public sealed record AgentHeartbeatMutation(
+    AgentHeartbeatResponse Response,
+    bool RequiresReconciliation);
+
+public sealed record LinkReconciliationResult(int Applied, int Failed);
 
 public sealed record AgentReenrollmentMutation(
     CertificateReenrollmentTicket Ticket,

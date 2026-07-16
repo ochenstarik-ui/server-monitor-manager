@@ -54,8 +54,13 @@ public sealed class ControlStoreTests : IAsyncDisposable
         var first = await store.RecordHeartbeatAsync(heartbeat, 30, cancellationToken);
         var retry = await store.RecordHeartbeatAsync(heartbeat, 30, cancellationToken);
 
-        Assert.Equal(first, retry);
-        Assert.Equal(1, first.Sequence);
+        Assert.Equal(first.Response, retry.Response);
+        Assert.True(first.RequiresReconciliation);
+        Assert.True(retry.RequiresReconciliation);
+        Assert.Equal(1, first.Response.Sequence);
+        await store.CompleteAgentReconciliationAsync("home", cancellationToken);
+        var completedRetry = await store.RecordHeartbeatAsync(heartbeat, 30, cancellationToken);
+        Assert.False(completedRetry.RequiresReconciliation);
         await using (var connection = new SqliteConnection(
             $"Data Source={Path.Combine(_directory, "control.db")}"))
         {
@@ -68,6 +73,118 @@ public sealed class ControlStoreTests : IAsyncDisposable
             heartbeat with { LoadOne = 0.9 },
             30,
             cancellationToken));
+    }
+
+    [Fact]
+    public async Task ReconnectReappliesOnlyLatestDisabledPolicy()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "ai-agent", "AB12", cancellationToken);
+        await EnrollAgentAsync(store, "home", "CD34", cancellationToken);
+        var broker = new ControlEventBroker();
+        var applier = new CountingPolicyApplier();
+        var service = new LinkService(store, applier, broker);
+
+        var first = await service.CreateAsync(
+            new LinkPolicyCreateRequest(
+                "ai-agent", "home", "tcp", 22, 60, "first", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        await service.DisableAsync(
+            first.Id,
+            new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        _ = await service.CreateAsync(
+            new LinkPolicyCreateRequest(
+                "ai-agent", "home", "tcp", 22, 60, "replacement", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+
+        var disconnectsBeforeStaleRequest = applier.DisconnectCalls;
+        var stale = await service.DisableAsync(
+            first.Id,
+            new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        Assert.Equal("Disabled", stale?.DesiredState);
+        Assert.Equal(disconnectsBeforeStaleRequest, applier.DisconnectCalls);
+
+        var activeResult = await service.ReconcileDisabledLinksForNodeAsync("home", cancellationToken);
+        Assert.Equal(new LinkReconciliationResult(0, 0), activeResult);
+
+        var latest = (await store.ListEffectiveLinksForNodeAsync("home", cancellationToken)).Single();
+        await service.DisableAsync(
+            latest.Id,
+            new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        var beforeReconnect = applier.DisconnectCalls;
+
+        var disabledResult = await service.ReconcileDisabledLinksForNodeAsync("home", cancellationToken);
+
+        Assert.Equal(new LinkReconciliationResult(1, 0), disabledResult);
+        Assert.Equal(beforeReconnect + 1, applier.DisconnectCalls);
+        var persisted = (await store.ListEffectiveLinksForNodeAsync("home", cancellationToken)).Single();
+        Assert.Equal("Disabled", persisted.DesiredState);
+        Assert.Equal("Disabled", persisted.ActualState);
+    }
+
+    [Fact]
+    public async Task FailedReconnectRemainsPendingUntilFirewallSucceeds()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "ai-agent", "EF56", cancellationToken);
+        await EnrollAgentAsync(store, "home", "7890", cancellationToken);
+        var applier = new CountingPolicyApplier();
+        var service = new LinkService(store, applier, new ControlEventBroker());
+        var active = await service.CreateAsync(
+            new LinkPolicyCreateRequest(
+                "ai-agent", "home", "tcp", 22, 60, "test", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        await service.DisableAsync(
+            active.Id,
+            new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+
+        var heartbeat = new AgentHeartbeat(
+            "home", "test", DateTimeOffset.UtcNow, 0.5, 1, 2, 3, 4, 5, 6, 7,
+            Guid.NewGuid().ToString());
+        var first = await store.RecordHeartbeatAsync(heartbeat, 30, cancellationToken);
+        Assert.True(first.RequiresReconciliation);
+
+        applier.FailDisconnect = true;
+        var failed = await service.ReconcileDisabledLinksForNodeAsync("home", cancellationToken);
+        Assert.Equal(new LinkReconciliationResult(1, 1), failed);
+        var retry = await store.RecordHeartbeatAsync(
+            heartbeat with
+            {
+                SentAt = DateTimeOffset.UtcNow,
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            30,
+            cancellationToken);
+        Assert.True(retry.RequiresReconciliation);
+
+        applier.FailDisconnect = false;
+        var succeeded = await service.ReconcileDisabledLinksForNodeAsync("home", cancellationToken);
+        Assert.Equal(new LinkReconciliationResult(1, 0), succeeded);
+        await store.CompleteAgentReconciliationAsync("home", cancellationToken);
+        var completed = await store.RecordHeartbeatAsync(
+            heartbeat with
+            {
+                SentAt = DateTimeOffset.UtcNow,
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            30,
+            cancellationToken);
+        Assert.False(completed.RequiresReconciliation);
     }
 
     [Fact]
@@ -318,6 +435,29 @@ public sealed class ControlStoreTests : IAsyncDisposable
             Assert.Equal(link.Id, persisted.Id);
             Assert.Equal("Disabled", persisted.DesiredState);
             Assert.Equal("Disconnecting", persisted.ActualState);
+        }
+    }
+
+    private sealed class CountingPolicyApplier : ILinkPolicyApplier
+    {
+        public int ConnectCalls { get; private set; }
+        public int DisconnectCalls { get; private set; }
+        public bool FailDisconnect { get; set; }
+
+        public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
+        {
+            ConnectCalls++;
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
+        {
+            DisconnectCalls++;
+            if (FailDisconnect)
+            {
+                throw new InvalidOperationException("simulated firewall failure");
+            }
+            return Task.CompletedTask;
         }
     }
 }

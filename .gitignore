@@ -1,0 +1,15 @@
+.vs/
+.idea/
+.vscode/
+bin/
+obj/
+artifacts/
+.artifacts/
+TestResults/
+*.user
+*.suo
+*.pfx
+*.key
+*.pem
+*.token
+appsettings.Production.json

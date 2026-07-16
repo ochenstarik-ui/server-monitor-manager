@@ -1,0 +1,421 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="ServerMonitorManager_Desktop.MainPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:local="using:ServerMonitorManager_Desktop"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <NavigationView
+        x:Name="MainNavigation"
+        AlwaysShowHeader="False"
+        IsBackButtonVisible="Collapsed"
+        IsSettingsVisible="True"
+        PaneDisplayMode="LeftCompact"
+        SelectionChanged="MainNavigation_SelectionChanged">
+        <NavigationView.MenuItems>
+            <NavigationViewItem Content="Обзор" Tag="overview">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Home" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Серверы" Tag="servers">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Library" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Связи" Tag="links">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Link" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+            <NavigationViewItem Content="Сессии" Tag="sessions">
+                <NavigationViewItem.Icon>
+                    <SymbolIcon Symbol="Contact" />
+                </NavigationViewItem.Icon>
+            </NavigationViewItem>
+        </NavigationView.MenuItems>
+
+        <Grid Padding="32,24,32,32">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Spacing="4">
+                    <TextBlock
+                        Style="{StaticResource TitleTextBlockStyle}"
+                        Text="Server Monitor Manager" />
+                    <TextBlock
+                        x:Name="HeaderStatusText"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        Text="SSH monitoring · серверы ещё не добавлены" />
+                </StackPanel>
+                <CommandBar
+                    Grid.Column="1"
+                    Background="Transparent"
+                    DefaultLabelPosition="Right">
+                    <AppBarButton
+                        AutomationProperties.Name="Обновить метрики всех серверов"
+                        Click="RefreshButton_Click"
+                        Icon="Refresh"
+                        Label="Обновить" />
+                    <AppBarButton
+                        AutomationProperties.Name="Показать публичный SSH-ключ"
+                        Click="SshKeyButton_Click"
+                        Icon="Permissions"
+                        Label="SSH-ключ" />
+                    <AppBarButton
+                        AutomationProperties.Name="Подключить Control Hub"
+                        Click="ControlHubButton_Click"
+                        Icon="Link"
+                        Label="Control Hub" />
+                    <AppBarButton
+                        AutomationProperties.Name="Открыть прямой SSH-терминал"
+                        Click="TerminalButton_Click"
+                        Icon="OpenFile"
+                        Label="Терминал" />
+                    <AppBarButton
+                        AutomationProperties.Name="Добавить сервер"
+                        Click="AddServerButton_Click"
+                        Icon="Add"
+                        Label="Добавить сервер" />
+                    <AppBarButton
+                        AutomationProperties.Name="Изменить выбранный сервер"
+                        Click="EditServerButton_Click"
+                        Icon="Edit"
+                        Label="Изменить" />
+                    <AppBarButton
+                        AutomationProperties.Name="Удалить выбранный сервер"
+                        Click="DeleteServerButton_Click"
+                        Icon="Delete"
+                        Label="Удалить" />
+                </CommandBar>
+            </Grid>
+
+            <InfoBar
+                x:Name="LinkActionInfo"
+                Grid.Row="1"
+                Margin="0,16,0,0"
+                IsClosable="True"
+                IsOpen="False"
+                Severity="Informational" />
+
+            <Border
+                x:Name="OverviewSummary"
+                Grid.Row="2"
+                Margin="0,24,0,0"
+                Padding="20,18"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1"
+                CornerRadius="8">
+                <Grid ColumnSpacing="18">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="1" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Доступность" />
+                        <TextBlock x:Name="AvailabilityValueText" FontSize="24" FontWeight="SemiBold" Text="0" />
+                        <TextBlock x:Name="AvailabilityDetailText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Добавьте серверы" />
+                    </StackPanel>
+                    <Rectangle Grid.Column="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Средняя нагрузка" />
+                        <TextBlock x:Name="AverageLoadValueText" FontSize="24" FontWeight="SemiBold" Text="—" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="CPU за 5 минут" />
+                    </StackPanel>
+                    <Rectangle Grid.Column="3" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Grid.Column="4" Spacing="4">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Активные связи" />
+                        <TextBlock x:Name="ActiveLinksValueText" FontSize="24" FontWeight="SemiBold" Text="0" />
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="разрешённые направления" />
+                    </StackPanel>
+                    <Rectangle Grid.Column="5" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <StackPanel Grid.Column="6" Spacing="4">
+                        <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Предупреждения" />
+                        <TextBlock x:Name="WarningValueText" FontSize="24" FontWeight="SemiBold" Text="0" />
+                        <TextBlock x:Name="WarningDetailText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Нет данных" />
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <ScrollViewer x:Name="WorkspaceScroll" Grid.Row="3" Margin="0,28,0,0">
+                <Grid x:Name="WorkspaceGrid" ColumnSpacing="24" RowSpacing="24">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition x:Name="InspectorColumn" Width="0" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <StackPanel x:Name="ServerWorkspace" Spacing="12">
+                        <Grid>
+                            <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Серверы" />
+                            <Button
+                                HorizontalAlignment="Right"
+                                Background="Transparent"
+                                Content="Все серверы" />
+                        </Grid>
+
+                        <TextBlock
+                            x:Name="EmptyServersText"
+                            Margin="12,24"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Text="Добавьте первый сервер и установите на нём публичный SSH-ключ." />
+                        <ListView
+                            x:Name="ServerList"
+                            ItemsSource="{x:Bind Servers}"
+                            SelectionChanged="ServerList_SelectionChanged"
+                            SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid MinHeight="78" ColumnSpacing="16">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="14" />
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock
+                                            VerticalAlignment="Center"
+                                            FontSize="18"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Text="●" />
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock FontWeight="SemiBold" Text="{Binding Name}" />
+                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Endpoint}" />
+                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding Status}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding CpuText}" />
+                                            <ProgressBar Margin="0,6,0,0" Maximum="100" Value="{Binding CpuPercent}" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="3" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MemoryText}" />
+                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding DiskText}" />
+                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding HealthText}" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            Grid.Column="4"
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="{Binding LatencyText}" />
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+
+                        <Border
+                            Padding="16"
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="8">
+                            <StackPanel Spacing="10">
+                                <Grid>
+                                    <StackPanel Spacing="2">
+                                        <TextBlock FontWeight="SemiBold" Text="История ресурсов" />
+                                        <TextBlock
+                                            x:Name="HistoryCaptionText"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="Выберите сервер"
+                                            TextWrapping="Wrap" />
+                                    </StackPanel>
+                                    <StackPanel HorizontalAlignment="Right" Orientation="Horizontal" Spacing="12">
+                                        <TextBlock Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Text="CPU" />
+                                        <TextBlock Foreground="{ThemeResource SystemFillColorCautionBrush}" Text="RAM" />
+                                        <TextBlock Foreground="{ThemeResource SystemFillColorCriticalBrush}" Text="Диск" />
+                                    </StackPanel>
+                                </Grid>
+                                <Grid
+                                    x:Name="HistoryChart"
+                                    Height="170"
+                                    SizeChanged="HistoryChart_SizeChanged">
+                                    <Polyline
+                                        x:Name="CpuHistoryLine"
+                                        Stroke="{ThemeResource AccentFillColorDefaultBrush}"
+                                        StrokeLineJoin="Round"
+                                        StrokeThickness="2" />
+                                    <Polyline
+                                        x:Name="MemoryHistoryLine"
+                                        Stroke="{ThemeResource SystemFillColorCautionBrush}"
+                                        StrokeLineJoin="Round"
+                                        StrokeThickness="2" />
+                                    <Polyline
+                                        x:Name="DiskHistoryLine"
+                                        Stroke="{ThemeResource SystemFillColorCriticalBrush}"
+                                        StrokeLineJoin="Round"
+                                        StrokeThickness="2" />
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+
+                    <Border
+                        x:Name="LinkInspector"
+                        Grid.Row="1"
+                        Margin="0,0,0,0"
+                        Padding="20"
+                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        CornerRadius="8">
+                        <StackPanel Spacing="18">
+                            <Grid>
+                                <StackPanel Spacing="3">
+                                    <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Связи серверов" />
+                                    <TextBlock
+                                        x:Name="MeshStatusText"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Text="Добавьте главный Mesh Hub" />
+                                </StackPanel>
+                                <Button
+                                    HorizontalAlignment="Right"
+                                    AutomationProperties.Name="Обновить список серверов и связей"
+                                    Click="RefreshMeshButton_Click">
+                                    <FontIcon Glyph="&#xE72C;" />
+                                </Button>
+                            </Grid>
+
+                            <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />
+
+                            <ComboBox
+                                x:Name="SourceNodeBox"
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Источник доступа"
+                                ItemsSource="{x:Bind MeshNodes}" />
+                            <ComboBox
+                                x:Name="TargetNodeBox"
+                                HorizontalAlignment="Stretch"
+                                DisplayMemberPath="Label"
+                                Header="Целевой сервер"
+                                ItemsSource="{x:Bind MeshNodes}" />
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <ComboBox
+                                    x:Name="LinkProtocolBox"
+                                    Header="Протокол"
+                                    SelectedIndex="0">
+                                    <ComboBoxItem Content="TCP" Tag="tcp" />
+                                    <ComboBoxItem Content="UDP" Tag="udp" />
+                                </ComboBox>
+                                <NumberBox
+                                    x:Name="LinkPortBox"
+                                    Grid.Column="1"
+                                    Header="Порт"
+                                    Maximum="65535"
+                                    Minimum="1"
+                                    SpinButtonPlacementMode="Compact"
+                                    Value="22" />
+                            </Grid>
+
+                            <NumberBox
+                                x:Name="LinkTtlBox"
+                                Header="TTL, минут (0 — до ручного отключения)"
+                                Maximum="525600"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact"
+                                Value="120" />
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Button
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Click="ConnectLinkButton_Click"
+                                    Content="Разрешить"
+                                    Style="{StaticResource AccentButtonStyle}" />
+                                <Button
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Center"
+                                    Click="DisconnectLinkButton_Click"
+                                    Content="Отключить" />
+                            </Grid>
+
+                            <TextBlock FontWeight="SemiBold" Text="Разрешённые направления" />
+                            <ListView
+                                x:Name="MeshLinksList"
+                                MaxHeight="220"
+                                ItemsSource="{x:Bind MeshLinks}"
+                                SelectionMode="Single">
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:MeshLinkViewModel">
+                                        <TextBlock Margin="4,8" Text="{x:Bind Label}" />
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+
+                            <InfoBar
+                                IsClosable="False"
+                                IsOpen="True"
+                                Message="Связь направленная: AI-агент → Home разрешает агенту обращаться к Home. Обратное направление включается отдельно."
+                                Severity="Informational" />
+                        </StackPanel>
+                    </Border>
+
+                    <VisualStateManager.VisualStateGroups>
+                        <VisualStateGroup>
+                            <VisualState x:Name="NarrowState" />
+                            <VisualState x:Name="WideState">
+                                <VisualState.StateTriggers>
+                                    <AdaptiveTrigger MinWindowWidth="1080" />
+                                </VisualState.StateTriggers>
+                                <VisualState.Setters>
+                                    <Setter Target="InspectorColumn.Width" Value="360" />
+                                    <Setter Target="LinkInspector.(Grid.Row)" Value="0" />
+                                    <Setter Target="LinkInspector.(Grid.Column)" Value="1" />
+                                </VisualState.Setters>
+                            </VisualState>
+                        </VisualStateGroup>
+                    </VisualStateManager.VisualStateGroups>
+                </Grid>
+            </ScrollViewer>
+
+            <StackPanel
+                x:Name="NavigationPlaceholder"
+                Grid.Row="3"
+                Margin="0,36,0,0"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Top"
+                MaxWidth="560"
+                Spacing="12"
+                Visibility="Collapsed">
+                <TextBlock x:Name="PlaceholderTitle" HorizontalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}" />
+                <TextBlock
+                    x:Name="PlaceholderDescription"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextAlignment="Center"
+                    TextWrapping="Wrap" />
+            </StackPanel>
+        </Grid>
+    </NavigationView>
+</Page>

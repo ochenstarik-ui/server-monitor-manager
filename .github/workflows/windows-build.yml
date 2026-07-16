@@ -1,0 +1,30 @@
+name: Windows build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj -p:Platform=x64 -p:PublishReadyToRun=true -r win-x64
+
+      - name: Build x64 Release
+        run: dotnet build src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --configuration Release -p:Platform=x64 -p:PublishReadyToRun=true -r win-x64 --no-restore
+
+      - name: Verify formatting
+        run: dotnet format src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore

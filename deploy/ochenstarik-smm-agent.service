@@ -1,0 +1,28 @@
+[Unit]
+Description=Ochenstarik Server Monitor Manager Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ochenstarik-smm-agent
+Group=ochenstarik-smm-agent
+EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env
+ExecStart=/usr/local/lib/ochenstarik-server-monitor-manager/agent/ochenstarik-smm-agent
+Restart=on-failure
+RestartSec=10s
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/agent
+
+[Install]
+WantedBy=multi-user.target

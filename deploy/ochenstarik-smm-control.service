@@ -1,0 +1,27 @@
+[Unit]
+Description=Ochenstarik Server Monitor Manager Control Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ochenstarik-smm-control
+Group=ochenstarik-smm-control
+EnvironmentFile=/etc/ochenstarik-server-monitor-manager/control.env
+ExecStart=/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control
+Restart=on-failure
+RestartSec=10s
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager
+
+[Install]
+WantedBy=multi-user.target

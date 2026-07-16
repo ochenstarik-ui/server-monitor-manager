@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj" />
+  <Project Path="src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj" />
+  <Project Path="src/ServerMonitorManager.Core/ServerMonitorManager.Core.csproj" />
+  <Project Path="tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj" />
+</Solution>

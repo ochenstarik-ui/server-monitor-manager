@@ -122,6 +122,8 @@ Implemented: Windows SSH monitoring, Hub/Node WireGuard installer, directional L
 
 Still planned: certificate revoke/re-enroll, offline Agent buffering and downsampling, reconnect reconciliation, kill-switch failure tests, a 50–100 Node load test, signed Windows installer, and desktop/mobile clients for additional platforms.
 
-## Project policy
+## License and project policy
 
-The project is under active alpha development. Review scripts and release checksums before testing, use disposable or backed-up servers, and do not expose the Control port without firewall restrictions. A source license will be selected before the first stable public release; until then, the repository does not grant an implied open-source license.
+Copyright 2026 ochenstarik-ui. Server Monitor Manager is licensed under the [Apache License 2.0](LICENSE), including its explicit patent grant and redistribution conditions.
+
+The project is under active alpha development. Review scripts and release checksums before testing, use disposable or backed-up servers, and do not expose the Control port without firewall restrictions.

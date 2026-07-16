@@ -36,4 +36,8 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 `v0.1.0-alpha.2` 是测试版，已包含 Windows 客户端、Hub/Node 安装器、Links、mTLS、SQLite、审计和事件流。待完成：离线缓冲、证书撤销、重连协调、50–100 Node 压测和签名 Windows 安装器。
 
+## 许可证
+
+Copyright 2026 ochenstarik-ui。本项目采用 [Apache License 2.0](../../LICENSE)。
+
 文档：[架构](../architecture.md)、[安全模型](../security-model.md)、[路线图](../roadmap.md)、[安装器协议](../installer-contract.md)。

@@ -34,4 +34,8 @@ Shared root password नहीं है और Node की WireGuard private ke
 
 `v0.1.0-alpha.2` testing release है। Windows client, Hub/Node installer, Links, mTLS, SQLite, audit और event stream तैयार हैं। Offline buffer, certificate revocation, reconnect reconciliation, 50–100 Node load test और signed Windows installer अभी बाकी हैं।
 
+## लाइसेंस
+
+Copyright 2026 ochenstarik-ui। यह परियोजना [Apache License 2.0](../../LICENSE) के अंतर्गत उपलब्ध है।
+
 दस्तावेज़: [architecture](../architecture.md), [security](../security-model.md), [roadmap](../roadmap.md), [installer](../installer-contract.md)।

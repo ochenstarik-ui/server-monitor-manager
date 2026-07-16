@@ -40,4 +40,8 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 `v0.1.0-alpha.2` предназначен для тестирования. Уже готовы Windows SSH-monitoring, Hub/Node installer, Links, mTLS, SQLite, аудит и поток событий. Остались offline-буфер Agent, отзыв сертификатов, reconnect reconciliation, нагрузочный тест 50–100 Node и подписанный Windows installer. До стабильного релиза используйте тестовые или резервируемые серверы.
 
+## Лицензия
+
+Copyright 2026 ochenstarik-ui. Проект распространяется по [Apache License 2.0](../../LICENSE).
+
 Документы: [архитектура](../architecture.md), [безопасность](../security-model.md), [roadmap](../roadmap.md), [контракт установщика](../installer-contract.md).

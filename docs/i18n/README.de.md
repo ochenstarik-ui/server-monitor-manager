@@ -34,4 +34,8 @@ Es gibt kein gemeinsames Root-Passwort; der private WireGuard-Schlüssel bleibt 
 
 `v0.1.0-alpha.2` ist eine Testversion. Windows-Client, Hub/Node-Installer, Links, mTLS, SQLite, Audit und Events sind vorhanden. Offen sind Offline-Puffer, Zertifikatswiderruf, Reconnect-Abgleich, Lasttest mit 50–100 Nodes und signierter Windows-Installer.
 
+## Lizenz
+
+Copyright 2026 ochenstarik-ui. Das Projekt steht unter der [Apache License 2.0](../../LICENSE).
+
 Dokumentation: [Architektur](../architecture.md), [Sicherheit](../security-model.md), [Roadmap](../roadmap.md), [Installer](../installer-contract.md).

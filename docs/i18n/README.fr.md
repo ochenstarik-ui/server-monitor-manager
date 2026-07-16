@@ -34,4 +34,8 @@ Aucun mot de passe root n'est partagé et la clé WireGuard privée reste sur le
 
 `v0.1.0-alpha.2` est destiné aux tests. Client Windows, installateur Hub/Node, Links, mTLS, SQLite, audit et événements sont disponibles. Restent le tampon hors ligne, la révocation des certificats, la réconciliation, le test de 50–100 Nodes et l'installateur Windows signé.
 
+## Licence
+
+Copyright 2026 ochenstarik-ui. Le projet est distribué sous [licence Apache 2.0](../../LICENSE).
+
 Documentation : [architecture](../architecture.md), [sécurité](../security-model.md), [roadmap](../roadmap.md), [installateur](../installer-contract.md).

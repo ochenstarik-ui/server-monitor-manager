@@ -34,4 +34,8 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 الإصدار `v0.1.0-alpha.2` للاختبار. يتضمن عميل Windows ومثبت Hub/Node وLinks وmTLS وSQLite والتدقيق والأحداث. المتبقي: التخزين دون اتصال، إلغاء الشهادات، مصالحة إعادة الاتصال، اختبار 50–100 Node ومثبت Windows موقّع.
 
+## الترخيص
+
+Copyright 2026 ochenstarik-ui. يتوفر المشروع بموجب [Apache License 2.0](../../LICENSE).
+
 الوثائق: [البنية](../architecture.md)، [الأمان](../security-model.md)، [الخطة](../roadmap.md)، [عقد المثبت](../installer-contract.md).

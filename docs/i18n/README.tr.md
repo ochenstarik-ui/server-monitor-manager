@@ -34,4 +34,8 @@ Ortak root parolası yoktur ve Node'un WireGuard özel anahtarı Node'dan çıkm
 
 `v0.1.0-alpha.2` test sürümüdür. Windows client, Hub/Node installer, Links, mTLS, SQLite, audit ve event stream hazırdır. Offline buffer, sertifika iptali, yeniden bağlantı uzlaştırması, 50–100 Node yük testi ve imzalı Windows installer sıradadır.
 
+## Lisans
+
+Copyright 2026 ochenstarik-ui. Proje [Apache License 2.0](../../LICENSE) altında dağıtılır.
+
 Belgeler: [mimari](../architecture.md), [güvenlik](../security-model.md), [yol haritası](../roadmap.md), [kurucu sözleşmesi](../installer-contract.md).

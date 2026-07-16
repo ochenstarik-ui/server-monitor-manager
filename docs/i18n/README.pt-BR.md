@@ -34,4 +34,8 @@ Não há senha root compartilhada e a chave WireGuard privada nunca sai do Node.
 
 `v0.1.0-alpha.2` é uma versão de teste. Cliente Windows, instalador Hub/Node, Links, mTLS, SQLite, auditoria e eventos estão prontos. Restam buffer offline, revogação de certificado, reconciliação, teste com 50–100 Nodes e instalador Windows assinado.
 
+## Licença
+
+Copyright 2026 ochenstarik-ui. O projeto é distribuído sob a [Licença Apache 2.0](../../LICENSE).
+
 Documentação: [arquitetura](../architecture.md), [segurança](../security-model.md), [roadmap](../roadmap.md), [instalador](../installer-contract.md).

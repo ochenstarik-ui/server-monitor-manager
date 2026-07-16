@@ -36,4 +36,8 @@ No hay contraseña root compartida ni claves WireGuard privadas de Nodes en el H
 
 `v0.1.0-alpha.2` es una versión de prueba. Ya incluye cliente Windows, instalador Hub/Node, Links, mTLS, SQLite, auditoría y eventos. Faltan el búfer offline, revocación de certificados, reconciliación tras reconexión, prueba de 50–100 Nodes e instalador Windows firmado.
 
+## Licencia
+
+Copyright 2026 ochenstarik-ui. El proyecto se distribuye bajo la [Licencia Apache 2.0](../../LICENSE).
+
 Documentación: [arquitectura](../architecture.md), [seguridad](../security-model.md), [plan](../roadmap.md), [instalador](../installer-contract.md).

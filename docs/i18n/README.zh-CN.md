@@ -34,7 +34,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 系统不共享 root 密码，Node 的 WireGuard 私钥不会离开本机。监控、终端、Agent、Operator 和 AI 自动化身份相互隔离。SSH 使用无 shell、PTY、转发权限的 forced-command；mTLS 限制角色；nftables 仅允许明确 Link；SQLite 在执行防火墙变更前保存目标状态和审计。
 
-`v0.1.0-alpha.3` 是测试版。当前开发分支已包含 Windows 客户端、Hub/Node 安装器、Links、mTLS、证书撤销与重新注册、SQLite、审计、事件流以及带降采样的有限离线缓冲。待完成：重连协调、50–100 Node 压测和签名 Windows 安装器。
+`v0.1.0-alpha.4` 是测试版。当前开发分支已包含 Windows 客户端、Hub/Node 安装器、Links、mTLS、证书撤销与重新注册、SQLite、审计、事件流以及带降采样的有限离线缓冲。待完成：重连协调、50–100 Node 压测和签名 Windows 安装器。
 
 ## 许可证
 

@@ -116,7 +116,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 ## Current status
 
-`v0.1.0-alpha.3` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, Bash syntax checks, self-contained `linux-x64`/`linux-arm64` artifacts, and checksums are automated in GitHub Actions.
+`v0.1.0-alpha.4` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, Bash syntax checks, self-contained `linux-x64`/`linux-arm64` artifacts, and checksums are automated in GitHub Actions.
 
 The current development branch implements Windows SSH monitoring, the Hub/Node WireGuard installer, directional Links, one-time enrollment, mTLS Agent and Operator identities, certificate revocation/re-enrollment, SQLite control state, audit, authenticated event streaming, Windows Control API integration, and a bounded durable Agent buffer with downsampling.
 

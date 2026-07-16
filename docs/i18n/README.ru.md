@@ -38,7 +38,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 Нет общих root-паролей; приватный WireGuard-ключ Node не покидает Node. Идентичности monitoring, terminal, Agent, Operator и AI-автоматизации разделены. Monitoring SSH использует forced-command без shell/PTY/forwarding. Agent может отправлять heartbeat только своего узла, Operator управляет inventory и Links. Отключение Link сначала сохраняется в SQLite, затем удаляет разрешение nftables; повтор запроса не повторяет побочный эффект.
 
-`v0.1.0-alpha.3` предназначен для тестирования. В текущей ветке разработки уже готовы Windows SSH-monitoring, Hub/Node installer, Links, mTLS, отзыв и повторная регистрация сертификатов, SQLite, аудит, поток событий и ограниченный offline-буфер Agent с downsampling. Остались reconnect reconciliation, нагрузочный тест 50–100 Node и подписанный Windows installer. До стабильного релиза используйте тестовые или резервируемые серверы.
+`v0.1.0-alpha.4` предназначен для тестирования. В текущей ветке разработки уже готовы Windows SSH-monitoring, Hub/Node installer, Links, mTLS, отзыв и повторная регистрация сертификатов, SQLite, аудит, поток событий и ограниченный offline-буфер Agent с downsampling. Остались reconnect reconciliation, нагрузочный тест 50–100 Node и подписанный Windows installer. До стабильного релиза используйте тестовые или резервируемые серверы.
 
 ## Лицензия
 

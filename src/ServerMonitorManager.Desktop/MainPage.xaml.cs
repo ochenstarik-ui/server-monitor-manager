@@ -154,6 +154,11 @@ public sealed partial class MainPage : Page
         {
             return;
         }
+        if (hubBox.IsChecked == true && Servers.Any(server => server.IsHub))
+        {
+            ShowInfo("Hub уже выбран", "Измените существующий Hub или снимите эту отметку.", InfoBarSeverity.Warning);
+            return;
+        }
 
         var profile = new ServerProfileData(
             Guid.NewGuid().ToString("N"),
@@ -167,6 +172,99 @@ public sealed partial class MainPage : Page
         await SaveProfilesAsync();
         UpdateEmptyState();
         await RefreshServerAsync(server);
+    }
+
+    private async void EditServerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ServerList.SelectedItem is not ServerViewModel selected)
+        {
+            ShowInfo("Сервер не выбран", "Выберите сервер в списке для изменения.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var nameBox = new TextBox { Header = "Название", Text = selected.Profile.Name };
+        var hostBox = new TextBox { Header = "IP или домен", Text = selected.Profile.Host };
+        var portBox = new NumberBox
+        {
+            Header = "SSH-порт",
+            Value = selected.Profile.Port,
+            Minimum = 1,
+            Maximum = 65535,
+            SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact
+        };
+        var userBox = new TextBox { Header = "Пользователь", Text = selected.Profile.User };
+        var hubBox = new CheckBox { Content = "Это главный Mesh Hub", IsChecked = selected.IsHub };
+        AutomationProperties.SetName(hubBox, "Использовать сервер как главный Mesh Hub");
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Изменить сервер",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                MinWidth = 420,
+                Children = { nameBox, hostBox, portBox, userBox, hubBox }
+            },
+            PrimaryButtonText = "Сохранить",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(nameBox.Text)
+            || string.IsNullOrWhiteSpace(hostBox.Text)
+            || string.IsNullOrWhiteSpace(userBox.Text)
+            || double.IsNaN(portBox.Value))
+        {
+            ShowInfo("Данные не сохранены", "Название, адрес, порт и пользователь обязательны.", InfoBarSeverity.Warning);
+            return;
+        }
+        if (hubBox.IsChecked == true && Servers.Any(server => server.IsHub && server != selected))
+        {
+            ShowInfo("Hub уже выбран", "В конфигурации может быть только один главный Mesh Hub.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var index = Servers.IndexOf(selected);
+        var updated = new ServerViewModel(new ServerProfileData(
+            selected.Profile.Id,
+            nameBox.Text.Trim(),
+            hostBox.Text.Trim(),
+            checked((int)portBox.Value),
+            userBox.Text.Trim(),
+            hubBox.IsChecked == true));
+        Servers[index] = updated;
+        await SaveProfilesAsync();
+        await RefreshServerAsync(updated);
+        ShowInfo("Сервер изменён", updated.Name, InfoBarSeverity.Success);
+    }
+
+    private async void DeleteServerButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ServerList.SelectedItem is not ServerViewModel selected)
+        {
+            ShowInfo("Сервер не выбран", "Выберите сервер в списке для удаления.", InfoBarSeverity.Warning);
+            return;
+        }
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"Удалить {selected.Name}?",
+            Content = "Удаляется только локальный профиль. Серверная часть и WireGuard Node останутся установленными.",
+            PrimaryButtonText = "Удалить профиль",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+        Servers.Remove(selected);
+        await SaveProfilesAsync();
+        UpdateEmptyState();
+        ShowInfo("Профиль удалён", selected.Name, InfoBarSeverity.Success);
     }
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)

@@ -79,6 +79,16 @@
                         Click="AddServerButton_Click"
                         Icon="Add"
                         Label="Добавить сервер" />
+                    <AppBarButton
+                        AutomationProperties.Name="Изменить выбранный сервер"
+                        Click="EditServerButton_Click"
+                        Icon="Edit"
+                        Label="Изменить" />
+                    <AppBarButton
+                        AutomationProperties.Name="Удалить выбранный сервер"
+                        Click="DeleteServerButton_Click"
+                        Icon="Delete"
+                        Label="Удалить" />
                 </CommandBar>
             </Grid>
 

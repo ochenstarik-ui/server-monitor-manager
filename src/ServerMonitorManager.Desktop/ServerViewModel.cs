@@ -19,7 +19,9 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     private string _memoryText = "—";
     private string _diskText = "—";
     private string _latencyText = "—";
+    private string _healthText = "—";
     private bool _isOnline;
+    private bool _hasWarning;
 
     public ServerViewModel(ServerProfileData profile) => Profile = profile;
 
@@ -33,7 +35,9 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     public string MemoryText { get => _memoryText; set => Set(ref _memoryText, value); }
     public string DiskText { get => _diskText; set => Set(ref _diskText, value); }
     public string LatencyText { get => _latencyText; set => Set(ref _latencyText, value); }
+    public string HealthText { get => _healthText; set => Set(ref _healthText, value); }
     public bool IsOnline { get => _isOnline; set => Set(ref _isOnline, value); }
+    public bool HasWarning { get => _hasWarning; set => Set(ref _hasWarning, value); }
 
     public event PropertyChangedEventHandler? PropertyChanged;
 

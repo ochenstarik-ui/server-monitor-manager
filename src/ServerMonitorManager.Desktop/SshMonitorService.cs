@@ -12,6 +12,14 @@ public sealed record ServerMetrics(
     long MemoryTotalKb,
     long DiskUsedKb,
     long DiskTotalKb,
+    long SwapUsedKb,
+    long SwapTotalKb,
+    long InodesUsed,
+    long InodesTotal,
+    long NetworkRxBytes,
+    long NetworkTxBytes,
+    string SshState,
+    string WireGuardState,
     TimeSpan Uptime,
     TimeSpan Latency);
 
@@ -61,6 +69,10 @@ public sealed partial class SshMonitorService
         var memoryAvailable = ReadLong(values, "MEM_AVAILABLE_KB");
         var diskTotal = ReadLong(values, "DISK_TOTAL_KB");
         var diskAvailable = ReadLong(values, "DISK_AVAILABLE_KB");
+        var swapTotal = ReadLong(values, "SWAP_TOTAL_KB");
+        var swapFree = ReadLong(values, "SWAP_FREE_KB");
+        var inodesTotal = ReadLong(values, "DISK_INODES_TOTAL");
+        var inodesFree = ReadLong(values, "DISK_INODES_FREE");
 
         return new ServerMetrics(
             values.GetValueOrDefault("HOSTNAME", profile.Name),
@@ -69,6 +81,14 @@ public sealed partial class SshMonitorService
             memoryTotal,
             Math.Max(0, diskTotal - diskAvailable),
             diskTotal,
+            Math.Max(0, swapTotal - swapFree),
+            swapTotal,
+            Math.Max(0, inodesTotal - inodesFree),
+            inodesTotal,
+            ReadLong(values, "NETWORK_RX_BYTES"),
+            ReadLong(values, "NETWORK_TX_BYTES"),
+            values.GetValueOrDefault("SYSTEMD_SSH", "unknown"),
+            values.GetValueOrDefault("SYSTEMD_WIREGUARD", "unknown"),
             TimeSpan.FromSeconds(ReadLong(values, "UPTIME_SECONDS")),
             stopwatch.Elapsed);
     }

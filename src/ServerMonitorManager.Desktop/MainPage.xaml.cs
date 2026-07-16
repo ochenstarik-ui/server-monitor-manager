@@ -11,12 +11,15 @@ public sealed partial class MainPage : Page
 {
     private readonly ServerStorage _storage = new();
     private readonly SshMonitorService _ssh = new();
+    private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private bool _loaded;
 
     public MainPage()
     {
         InitializeComponent();
         Loaded += MainPage_Loaded;
+        _refreshTimer.Tick += async (_, _) => await RefreshAllAsync();
         MainNavigation.SelectedItem = MainNavigation.MenuItems[0];
     }
 
@@ -32,6 +35,7 @@ public sealed partial class MainPage : Page
         }
 
         _loaded = true;
+        _refreshTimer.Start();
         foreach (var profile in await _storage.LoadAsync())
         {
             Servers.Add(new ServerViewModel(profile));
@@ -272,26 +276,37 @@ public sealed partial class MainPage : Page
 
     private async Task RefreshAllAsync()
     {
-        if (Servers.Count == 0)
+        if (!await _refreshLock.WaitAsync(0))
         {
-            ShowInfo("Серверы не добавлены", "Сначала создайте SSH-ключ и установите его на сервере.", InfoBarSeverity.Informational);
             return;
         }
-
-        await Task.WhenAll(Servers.Select(RefreshServerAsync));
-        var online = Servers.Count(server => server.IsOnline);
-        var warnings = Servers.Count - online;
-        AvailabilityValueText.Text = $"{online} / {Servers.Count}";
-        AvailabilityDetailText.Text = warnings == 0 ? "Все серверы доступны" : $"Недоступно: {warnings}";
-        AverageLoadValueText.Text = online == 0
-            ? "—"
-            : $"{Servers.Where(server => server.IsOnline).Average(server => server.CpuPercent):F0}%";
-        WarningValueText.Text = warnings.ToString(CultureInfo.InvariantCulture);
-        WarningDetailText.Text = warnings == 0 ? "Нет предупреждений" : "Проверьте SSH и ключ";
-        HeaderStatusText.Text = $"SSH monitoring · {Servers.Count} сервер(а) · обновлено {DateTime.Now:HH:mm:ss}";
-        if (Servers.Any(server => server.IsHub))
+        try
         {
-            await RefreshMeshAsync(showSuccess: false);
+            if (Servers.Count == 0)
+            {
+                ShowInfo("Серверы не добавлены", "Сначала создайте SSH-ключ и установите его на сервере.", InfoBarSeverity.Informational);
+                return;
+            }
+
+            await Task.WhenAll(Servers.Select(RefreshServerAsync));
+            var online = Servers.Count(server => server.IsOnline);
+            var warnings = Servers.Count(server => !server.IsOnline || server.HasWarning);
+            AvailabilityValueText.Text = $"{online} / {Servers.Count}";
+            AvailabilityDetailText.Text = warnings == 0 ? "Все серверы доступны" : $"Недоступно: {warnings}";
+            AverageLoadValueText.Text = online == 0
+                ? "—"
+                : $"{Servers.Where(server => server.IsOnline).Average(server => server.CpuPercent):F0}%";
+            WarningValueText.Text = warnings.ToString(CultureInfo.InvariantCulture);
+            WarningDetailText.Text = warnings == 0 ? "Нет предупреждений" : "Проверьте доступность и ресурсы";
+            HeaderStatusText.Text = $"SSH monitoring · {Servers.Count} сервер(а) · обновлено {DateTime.Now:HH:mm:ss}";
+            if (Servers.Any(server => server.IsHub))
+            {
+                await RefreshMeshAsync(showSuccess: false);
+            }
+        }
+        finally
+        {
+            _refreshLock.Release();
         }
     }
 
@@ -306,6 +321,11 @@ public sealed partial class MainPage : Page
             server.CpuText = $"{metrics.CpuPercent:F0}% load";
             server.MemoryText = $"{FormatSize(metrics.MemoryUsedKb)} / {FormatSize(metrics.MemoryTotalKb)} RAM";
             server.DiskText = $"{FormatSize(metrics.DiskUsedKb)} / {FormatSize(metrics.DiskTotalKb)} disk";
+            var memoryPercent = Percent(metrics.MemoryUsedKb, metrics.MemoryTotalKb);
+            var diskPercent = Percent(metrics.DiskUsedKb, metrics.DiskTotalKb);
+            var inodePercent = Percent(metrics.InodesUsed, metrics.InodesTotal);
+            server.HasWarning = memoryPercent >= 90 || diskPercent >= 90 || inodePercent >= 90 || metrics.SshState != "active";
+            server.HealthText = $"swap {FormatSize(metrics.SwapUsedKb)}/{FormatSize(metrics.SwapTotalKb)} · inode {inodePercent:F0}% · net ↓{FormatBytes(metrics.NetworkRxBytes)} ↑{FormatBytes(metrics.NetworkTxBytes)} · SSH {metrics.SshState}";
             server.LatencyText = $"{metrics.Latency.TotalMilliseconds:F0} ms";
             server.Status = $"Онлайн · uptime {FormatUptime(metrics.Uptime)}";
             server.IsOnline = true;
@@ -319,6 +339,8 @@ public sealed partial class MainPage : Page
             server.DiskText = "—";
             server.LatencyText = "offline";
             server.IsOnline = false;
+            server.HasWarning = true;
+            server.HealthText = "Нет данных о службах и сети";
         }
     }
 
@@ -350,6 +372,14 @@ public sealed partial class MainPage : Page
         => uptime.TotalDays >= 1
             ? $"{uptime.TotalDays:F0} дн."
             : $"{uptime.TotalHours:F0} ч.";
+
+    private static double Percent(long used, long total)
+        => total <= 0 ? 0 : Math.Clamp(used * 100d / total, 0, 100);
+
+    private static string FormatBytes(long bytes)
+        => bytes >= 1024L * 1024 * 1024
+            ? $"{bytes / 1024d / 1024d / 1024d:F1} GB"
+            : $"{bytes / 1024d / 1024d:F1} MB";
 
     private static string CompactError(Exception exception)
     {

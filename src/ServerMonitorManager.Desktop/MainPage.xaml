@@ -202,6 +202,7 @@
                                         <StackPanel Grid.Column="3" VerticalAlignment="Center">
                                             <TextBlock Text="{Binding MemoryText}" />
                                             <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding DiskText}" />
+                                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding HealthText}" />
                                         </StackPanel>
                                         <TextBlock
                                             Grid.Column="4"

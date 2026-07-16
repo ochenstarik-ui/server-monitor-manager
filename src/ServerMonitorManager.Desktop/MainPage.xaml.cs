@@ -539,10 +539,57 @@ public sealed partial class MainPage : Page
     {
         if (args.IsSettingsSelected)
         {
-            ShowInfo(
+            ShowPlaceholder(
                 "Настройки",
-                "Профили серверов хранятся локально; приватный SSH-ключ не покидает этот ПК.",
-                InfoBarSeverity.Informational);
+                "Профили серверов хранятся локально. Настройки ключей, интервалов обновления и подтверждений будут добавляться здесь.");
+            return;
         }
+
+        var tag = (args.SelectedItem as NavigationViewItem)?.Tag?.ToString() ?? "overview";
+        NavigationPlaceholder.Visibility = Visibility.Collapsed;
+        OverviewSummary.Visibility = Visibility.Visible;
+        WorkspaceScroll.Visibility = Visibility.Visible;
+        ServerWorkspace.Visibility = tag is "overview" or "servers" ? Visibility.Visible : Visibility.Collapsed;
+        LinkInspector.Visibility = tag is "overview" or "links" ? Visibility.Visible : Visibility.Collapsed;
+        InspectorColumn.Width = tag == "overview" && ActualWidth >= 1080
+            ? new GridLength(360)
+            : new GridLength(0);
+
+        if (tag == "links")
+        {
+            Grid.SetRow(LinkInspector, 0);
+            Grid.SetColumn(LinkInspector, 0);
+            Grid.SetColumnSpan(LinkInspector, 2);
+        }
+        else
+        {
+            Grid.SetColumnSpan(LinkInspector, 1);
+            if (ActualWidth >= 1080)
+            {
+                Grid.SetRow(LinkInspector, 0);
+                Grid.SetColumn(LinkInspector, 1);
+            }
+            else
+            {
+                Grid.SetRow(LinkInspector, 1);
+                Grid.SetColumn(LinkInspector, 0);
+            }
+        }
+
+        if (tag == "sessions")
+        {
+            ShowPlaceholder(
+                "SSH-сессии",
+                "Интерактивные терминалы будут использовать отдельную identity и не получат ключ мониторинга или права Mesh Hub.");
+        }
+    }
+
+    private void ShowPlaceholder(string title, string description)
+    {
+        OverviewSummary.Visibility = Visibility.Collapsed;
+        WorkspaceScroll.Visibility = Visibility.Collapsed;
+        PlaceholderTitle.Text = title;
+        PlaceholderDescription.Text = description;
+        NavigationPlaceholder.Visibility = Visibility.Visible;
     }
 }

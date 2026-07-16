@@ -108,6 +108,59 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private async void TerminalButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (ServerList.SelectedItem is not ServerViewModel selected)
+        {
+            ShowInfo("Сервер не выбран", "Выберите сервер, к которому нужно открыть SSH-терминал.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var userBox = new TextBox
+        {
+            Header = "Unix-пользователь",
+            PlaceholderText = "starik",
+            MinWidth = 360
+        };
+        AutomationProperties.SetName(userBox, "Пользователь интерактивного SSH-терминала");
+        var dialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"SSH-терминал: {selected.Name}",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "Терминал использует системный OpenSSH и ваши обычные SSH-ключи. Ключ мониторинга с ограниченной командой здесь не применяется.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    userBox
+                }
+            },
+            PrimaryButtonText = "Открыть",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Primary
+        };
+
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            _ssh.OpenInteractiveTerminal(selected.Profile, userBox.Text.Trim());
+            ShowInfo("SSH-терминал открыт", $"Подключение к {selected.Profile.Host} запущено от имени {userBox.Text.Trim()}.", InfoBarSeverity.Success);
+        }
+        catch (Exception exception)
+        {
+            ShowInfo("Не удалось открыть SSH-терминал", exception.Message, InfoBarSeverity.Error);
+        }
+    }
+
     private async void AddServerButton_Click(object sender, RoutedEventArgs e)
     {
         try

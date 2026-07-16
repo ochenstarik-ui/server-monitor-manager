@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Windows.Storage;
 
@@ -26,6 +27,7 @@ public sealed record ServerMetrics(
 public sealed partial class SshMonitorService
 {
     private const string KeyFileName = "server-monitor-manager-ed25519";
+    private const string ProtectedKeySuffix = ".dpapi";
 
     public async Task<string> EnsureKeyPairAsync(CancellationToken cancellationToken = default)
     {
@@ -34,15 +36,26 @@ public sealed partial class SshMonitorService
             CreationCollisionOption.OpenIfExists);
         var privateKeyPath = Path.Combine(keyFolder.Path, KeyFileName);
         var publicKeyPath = privateKeyPath + ".pub";
+        var protectedKeyPath = privateKeyPath + ProtectedKeySuffix;
 
-        if (!File.Exists(privateKeyPath) || !File.Exists(publicKeyPath))
+        if (!File.Exists(publicKeyPath) || (!File.Exists(privateKeyPath) && !File.Exists(protectedKeyPath)))
         {
+            File.Delete(protectedKeyPath);
             var arguments = new[]
             {
                 "-q", "-t", "ed25519", "-a", "64", "-N", string.Empty,
                 "-C", "server-monitor-manager", "-f", privateKeyPath
             };
             await RunProcessAsync(ResolveOpenSshTool("ssh-keygen.exe"), arguments, cancellationToken);
+        }
+
+        if (File.Exists(privateKeyPath))
+        {
+            var privateKey = await File.ReadAllBytesAsync(privateKeyPath, cancellationToken);
+            var protectedKey = ProtectedData.Protect(privateKey, null, DataProtectionScope.CurrentUser);
+            await File.WriteAllBytesAsync(protectedKeyPath, protectedKey, cancellationToken);
+            CryptographicOperations.ZeroMemory(privateKey);
+            File.Delete(privateKeyPath);
         }
 
         return (await File.ReadAllTextAsync(publicKeyPath, cancellationToken)).Trim();
@@ -106,7 +119,7 @@ public sealed partial class SshMonitorService
 
         await EnsureKeyPairAsync(cancellationToken);
         var localFolder = ApplicationData.Current.LocalFolder.Path;
-        var privateKeyPath = Path.Combine(localFolder, "ssh", KeyFileName);
+        var privateKeyPath = await MaterializePrivateKeyAsync(cancellationToken);
         var knownHostsPath = Path.Combine(localFolder, "ssh", "known_hosts");
         var target = $"{profile.User}@{profile.Host}";
         var arguments = new[]
@@ -121,10 +134,79 @@ public sealed partial class SshMonitorService
             target,
             command
         };
-        return await RunProcessAsync(
-            ResolveOpenSshTool("ssh.exe"),
-            arguments,
-            cancellationToken);
+        try
+        {
+            return await RunProcessAsync(
+                ResolveOpenSshTool("ssh.exe"),
+                arguments,
+                cancellationToken);
+        }
+        finally
+        {
+            File.Delete(privateKeyPath);
+        }
+    }
+
+    public void OpenInteractiveTerminal(ServerProfileData profile, string terminalUser)
+    {
+        ValidateProfile(profile);
+        if (!SafeUserRegex().IsMatch(terminalUser))
+        {
+            throw new InvalidOperationException("Некорректное имя пользователя терминала.");
+        }
+
+        var ssh = ResolveOpenSshTool("ssh.exe");
+        var sshArguments = new[]
+        {
+            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
+            $"{terminalUser}@{profile.Host}"
+        };
+        var windowsTerminal = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "Microsoft",
+            "WindowsApps",
+            "wt.exe");
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = File.Exists(windowsTerminal) ? windowsTerminal : ssh,
+            UseShellExecute = true
+        };
+        if (File.Exists(windowsTerminal))
+        {
+            startInfo.ArgumentList.Add("new-tab");
+            startInfo.ArgumentList.Add(ssh);
+        }
+        foreach (var argument in sshArguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+        _ = Process.Start(startInfo)
+            ?? throw new InvalidOperationException("Не удалось открыть SSH-терминал.");
+    }
+
+    private static async Task<string> MaterializePrivateKeyAsync(CancellationToken cancellationToken)
+    {
+        var localFolder = ApplicationData.Current.LocalFolder.Path;
+        var protectedKeyPath = Path.Combine(localFolder, "ssh", KeyFileName + ProtectedKeySuffix);
+        var protectedKey = await File.ReadAllBytesAsync(protectedKeyPath, cancellationToken);
+        var privateKey = ProtectedData.Unprotect(protectedKey, null, DataProtectionScope.CurrentUser);
+        var temporaryFile = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(
+            $"{KeyFileName}-{Guid.NewGuid():N}",
+            CreationCollisionOption.FailIfExists);
+        try
+        {
+            await File.WriteAllBytesAsync(temporaryFile.Path, privateKey, cancellationToken);
+            return temporaryFile.Path;
+        }
+        catch
+        {
+            File.Delete(temporaryFile.Path);
+            throw;
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(privateKey);
+        }
     }
 
     private static void ValidateProfile(ServerProfileData profile)

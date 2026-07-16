@@ -75,6 +75,11 @@
                         Icon="Permissions"
                         Label="SSH-ключ" />
                     <AppBarButton
+                        AutomationProperties.Name="Открыть прямой SSH-терминал"
+                        Click="TerminalButton_Click"
+                        Icon="OpenFile"
+                        Label="Терминал" />
+                    <AppBarButton
                         AutomationProperties.Name="Добавить сервер"
                         Click="AddServerButton_Click"
                         Icon="Add"

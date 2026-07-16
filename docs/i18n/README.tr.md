@@ -32,7 +32,7 @@ Hub üzerinde UDP `51820` ve TCP `7443` açın, Node kodlarını üretin ve diğ
 
 Ortak root parolası yoktur ve Node'un WireGuard özel anahtarı Node'dan çıkmaz. Monitoring, terminal, Agent, Operator ve AI automation kimlikleri ayrıdır. SSH shell/PTY/forwarding vermeyen forced-command kullanır; mTLS rolleri sınırlar; nftables yalnızca açık Links'e izin verir; SQLite güvenlik duvarı değişmeden önce durum ve audit kaydeder.
 
-`v0.1.0-alpha.2` test sürümüdür. Güncel geliştirme dalında Windows client, Hub/Node installer, Links, mTLS, SQLite, audit, event stream ve downsampling kullanan sınırlı offline buffer hazırdır. Sertifika iptali, yeniden bağlantı uzlaştırması, 50–100 Node yük testi ve imzalı Windows installer sıradadır.
+`v0.1.0-alpha.3` test sürümüdür. Güncel geliştirme dalında Windows client, Hub/Node installer, Links, mTLS, sertifika iptali ve yeniden kayıt, SQLite, audit, event stream ve downsampling kullanan sınırlı offline buffer hazırdır. Yeniden bağlantı uzlaştırması, 50–100 Node yük testi ve imzalı Windows installer sıradadır.
 
 ## Lisans
 

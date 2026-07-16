@@ -233,6 +233,24 @@ public sealed partial class ControlClientService
             cancellationToken) ?? throw new InvalidOperationException("Control Hub вернул пустой Link.");
     }
 
+    public async Task<CertificateReenrollmentTicket> ReenrollAgentAsync(
+        string nodeId,
+        string reason,
+        CancellationToken cancellationToken)
+    {
+        using var session = await RequireAuthenticatedSessionAsync(cancellationToken);
+        using var response = await session.Client.PostAsJsonAsync(
+            $"api/v1/control/agents/{Uri.EscapeDataString(nodeId)}/reenroll",
+            new CertificateReenrollmentRequest(reason, Guid.NewGuid().ToString()),
+            SmmJsonContext.Default.CertificateReenrollmentRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync(
+            SmmJsonContext.Default.CertificateReenrollmentTicket,
+            cancellationToken)
+            ?? throw new InvalidOperationException("Control Hub вернул пустой token перерегистрации.");
+    }
+
     private static HttpClient CreateHttpClient(
         Uri baseAddress,
         byte[] rootBytes,

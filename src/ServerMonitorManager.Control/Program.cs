@@ -43,6 +43,7 @@ builder.Services.AddSingleton<CertificateAuthority>();
 builder.Services.AddSingleton<ControlEventBroker>();
 builder.Services.AddSingleton<ILinkPolicyApplier, LinkPolicyApplier>();
 builder.Services.AddSingleton<LinkService>();
+builder.Services.AddSingleton<CertificateLifecycleService>();
 builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
     .AddCertificate(options =>
     {
@@ -274,6 +275,65 @@ agents.MapPost("/heartbeat", async (
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
+control.MapPost("/agents/{nodeId}/reenroll", async (
+    string nodeId,
+    CertificateReenrollmentRequest request,
+    HttpContext context,
+    CertificateLifecycleService lifecycle,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId) || !CertificateReenrollmentValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["certificate"] = ["Invalid node id, reason, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var ticket = await lifecycle.ReenrollAgentAsync(nodeId, request, actor, cancellationToken);
+        return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+});
+control.MapPost("/devices/{deviceId}/reenroll", async (
+    string deviceId,
+    CertificateReenrollmentRequest request,
+    HttpContext context,
+    CertificateLifecycleService lifecycle,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(deviceId) || !CertificateReenrollmentValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["certificate"] = ["Invalid device id, reason, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        if (string.Equals(actor, deviceId, StringComparison.Ordinal))
+        {
+            return Results.BadRequest(new ProblemDetails
+            {
+                Title = "An Operator cannot revoke its own certificate. Use another Operator or the local Hub CLI."
+            });
+        }
+        var ticket = await lifecycle.ReenrollDeviceAsync(deviceId, request, actor, cancellationToken);
+        return ticket is null ? Results.NotFound() : Results.Ok(ticket);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+});
 control.MapGet("/links", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListLinksAsync(cancellationToken)).ToArray()));
 control.MapPost("/links", async (
@@ -379,5 +439,12 @@ internal static class LinkPolicyValidator
            && request.Port is >= 1 and <= 65535
            && request.TtlMinutes is >= 0 and <= 525600
            && request.Reason.Length <= 256
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+}
+
+internal static class CertificateReenrollmentValidator
+{
+    public static bool IsValid(CertificateReenrollmentRequest request)
+        => request.Reason.Length is >= 1 and <= 200
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 }

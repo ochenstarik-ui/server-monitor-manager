@@ -756,7 +756,7 @@ public sealed partial class MainPage : Page
                 MeshNodes.Add(new MeshNodeViewModel(
                     agent.NodeId,
                     "Control",
-                    age <= 90 ? "online" : "offline",
+                    agent.Status == "Revoked" ? "revoked" : age <= 90 ? "online" : "offline",
                     age));
             }
 
@@ -798,6 +798,94 @@ public sealed partial class MainPage : Page
 
     private async void DisconnectLinkButton_Click(object sender, RoutedEventArgs e)
         => await ChangeLinkAsync(enable: false);
+
+    private async void ReenrollNodeButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (!_control.IsConfigured)
+        {
+            ShowInfo(
+                "Control Hub не подключён",
+                "Перерегистрация доступна после подключения через SMMDEV1.",
+                InfoBarSeverity.Warning);
+            return;
+        }
+
+        if (SourceNodeBox.SelectedItem is not MeshNodeViewModel node)
+        {
+            ShowInfo(
+                "Выберите Node",
+                "Выберите сервер в поле «Источник доступа».",
+                InfoBarSeverity.Warning);
+            return;
+        }
+
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = $"Перерегистрировать {node.Name}?",
+            Content = "Старый mTLS-сертификат будет немедленно отозван. Все связанные Links получат желаемое состояние Disabled. Новый token действует 10 минут.",
+            PrimaryButtonText = "Отозвать и создать token",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+            var ticket = await _control.ReenrollAgentAsync(
+                node.Name,
+                "Windows operator requested certificate rotation",
+                timeout.Token);
+            await RefreshMeshAsync(showSuccess: false);
+            var tokenBox = new TextBox
+            {
+                Header = "Одноразовый enrollment token",
+                Text = ticket.Token,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap
+            };
+            var result = await new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = $"{ticket.EntityId} ожидает перерегистрацию",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"Token действителен до {ticket.ExpiresAt.ToLocalTime():dd.MM.yyyy HH:mm}. Отключено Links: {ticket.DisabledLinks}. Передайте token только администратору этого Node.",
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        tokenBox
+                    }
+                },
+                PrimaryButtonText = "Копировать token",
+                CloseButtonText = "Закрыть",
+                DefaultButton = ContentDialogButton.Close
+            }.ShowAsync();
+            if (result == ContentDialogResult.Primary)
+            {
+                var package = new DataPackage();
+                package.SetText(ticket.Token);
+                Clipboard.SetContent(package);
+                Clipboard.Flush();
+                ShowInfo(
+                    "Token скопирован",
+                    "Он действует 10 минут и предназначен только для выбранного Node.",
+                    InfoBarSeverity.Success);
+            }
+        }
+        catch (Exception exception)
+        {
+            ShowInfo("Перерегистрация не выполнена", CompactError(exception), InfoBarSeverity.Error);
+        }
+    }
 
     private async Task ChangeLinkAsync(bool enable)
     {

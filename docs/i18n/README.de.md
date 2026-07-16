@@ -32,7 +32,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 Es gibt kein gemeinsames Root-Passwort; der private WireGuard-Schlüssel bleibt auf dem Node. Monitoring-, Terminal-, Agent-, Operator- und KI-Automationsidentitäten sind getrennt. SSH nutzt einen forced-command ohne Shell/PTY/Forwarding; mTLS begrenzt Rollen; nftables erlaubt nur explizite Links; SQLite speichert Sollzustand und Audit vor der Firewalländerung.
 
-`v0.1.0-alpha.2` ist eine Testversion. Der aktuelle Entwicklungszweig enthält bereits Windows-Client, Hub/Node-Installer, Links, mTLS, SQLite, Audit, Events und einen begrenzten Offline-Puffer mit Downsampling. Offen sind Zertifikatswiderruf, Reconnect-Abgleich, Lasttest mit 50–100 Nodes und signierter Windows-Installer.
+`v0.1.0-alpha.3` ist eine Testversion. Der aktuelle Entwicklungszweig enthält Windows-Client, Hub/Node-Installer, Links, mTLS, Zertifikatswiderruf und erneute Registrierung, SQLite, Audit, Events und einen begrenzten Offline-Puffer mit Downsampling. Offen sind Reconnect-Abgleich, Lasttest mit 50–100 Nodes und signierter Windows-Installer.
 
 ## Lizenz
 

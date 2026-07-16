@@ -38,6 +38,23 @@ public sealed record AgentSummary(
     string AgentVersion,
     DateTimeOffset? LastSeenAt);
 
+public sealed record CertificateReenrollmentRequest(
+    string Reason,
+    string IdempotencyKey);
+
+public sealed record CertificateReenrollmentTicket(
+    string EntityType,
+    string EntityId,
+    string Token,
+    DateTimeOffset ExpiresAt,
+    int DisabledLinks);
+
+public sealed record CertificateStatusEvent(
+    string EntityType,
+    string EntityId,
+    string Status,
+    int DisabledLinks);
+
 public sealed record DeviceEnrollmentRequest(
     string DeviceId,
     string Token,

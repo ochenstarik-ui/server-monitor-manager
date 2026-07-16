@@ -281,7 +281,11 @@
                         BorderThickness="1"
                         CornerRadius="8">
                         <StackPanel Spacing="18">
-                            <Grid>
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="3">
                                     <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Связи серверов" />
                                     <TextBlock
@@ -289,12 +293,28 @@
                                         Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                         Text="Добавьте главный Mesh Hub" />
                                 </StackPanel>
-                                <Button
-                                    HorizontalAlignment="Right"
-                                    AutomationProperties.Name="Обновить список серверов и связей"
-                                    Click="RefreshMeshButton_Click">
-                                    <FontIcon Glyph="&#xE72C;" />
-                                </Button>
+                                <CommandBar
+                                    Grid.Column="1"
+                                    DefaultLabelPosition="Collapsed"
+                                    IsOpen="False">
+                                    <AppBarButton
+                                        AutomationProperties.Name="Обновить список серверов и связей"
+                                        Click="RefreshMeshButton_Click"
+                                        Label="Обновить">
+                                        <AppBarButton.Icon>
+                                            <FontIcon Glyph="&#xE72C;" />
+                                        </AppBarButton.Icon>
+                                    </AppBarButton>
+                                    <AppBarButton
+                                        AutomationProperties.HelpText="Отозвать сертификат выбранного источника, отключить его связи и создать одноразовый token"
+                                        AutomationProperties.Name="Перерегистрировать выбранный Node"
+                                        Click="ReenrollNodeButton_Click"
+                                        Label="Перерегистрировать Node">
+                                        <AppBarButton.Icon>
+                                            <FontIcon Glyph="&#xE8D7;" />
+                                        </AppBarButton.Icon>
+                                    </AppBarButton>
+                                </CommandBar>
                             </Grid>
 
                             <Rectangle Height="1" Fill="{ThemeResource DividerStrokeColorDefaultBrush}" />

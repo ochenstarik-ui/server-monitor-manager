@@ -176,6 +176,91 @@ public sealed class ControlStoreTests : IAsyncDisposable
             eventTypes);
     }
 
+    [Fact]
+    public async Task AgentReenrollmentRevokesCertificateAndDisablesLinksBeforeIssuingToken()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "ai-agent", "AA22", cancellationToken);
+        await EnrollAgentAsync(store, "home", "BB33", cancellationToken);
+        var broker = new ControlEventBroker();
+        var applier = new CheckingPolicyApplier(store);
+        var links = new LinkService(store, applier, broker);
+        await links.CreateAsync(
+            new LinkPolicyCreateRequest(
+                "ai-agent", "home", "tcp", 22, 60, "development", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+        var lifecycle = new CertificateLifecycleService(store, applier, broker);
+        var request = new CertificateReenrollmentRequest("rotate compromised key", Guid.NewGuid().ToString());
+
+        var ticket = await lifecycle.ReenrollAgentAsync(
+            "ai-agent", request, "windows-pc", cancellationToken);
+        var replay = await lifecycle.ReenrollAgentAsync(
+            "ai-agent", request, "windows-pc", cancellationToken);
+        var disabledLink = Assert.Single(await store.ListLinksAsync(cancellationToken));
+
+        Assert.NotNull(ticket);
+        Assert.Equal(ticket, replay);
+        Assert.Equal("Agent", ticket.EntityType);
+        Assert.Equal("ai-agent", ticket.EntityId);
+        Assert.Equal(1, ticket.DisabledLinks);
+        Assert.True(ticket.ExpiresAt > DateTimeOffset.UtcNow);
+        Assert.False(await store.IsCertificateForNodeAsync("AA22", "ai-agent", cancellationToken));
+        Assert.Equal("Disabled", disabledLink.DesiredState);
+        Assert.Equal("Disabled", disabledLink.ActualState);
+        Assert.Equal(1, applier.DisconnectCalls);
+
+        var issued = new IssuedCertificate(
+            "new-certificate", "ca", "CC44", DateTimeOffset.UtcNow.AddYears(1));
+        var enrolled = await store.EnrollAsync(
+            new EnrollmentRequest(
+                "ai-agent", ticket.Token, "new-csr", Guid.NewGuid().ToString()),
+            () => issued,
+            cancellationToken);
+        Assert.NotNull(enrolled);
+        Assert.True(await store.IsCertificateForNodeAsync("CC44", "ai-agent", cancellationToken));
+        Assert.False(await store.IsCertificateForNodeAsync("AA22", "ai-agent", cancellationToken));
+    }
+
+    [Fact]
+    public async Task DeviceReenrollmentRevokesOldOperatorAndIsIdempotent()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        var initialToken = await store.CreateDeviceEnrollmentTokenAsync(
+            "windows-pc", TimeSpan.FromMinutes(10), cancellationToken);
+        await store.EnrollDeviceAsync(
+            new DeviceEnrollmentRequest(
+                "windows-pc", initialToken, "old-csr", Guid.NewGuid().ToString()),
+            () => new IssuedCertificate(
+                "old-certificate", "ca", "DD55", DateTimeOffset.UtcNow.AddYears(1)),
+            cancellationToken);
+        var request = new CertificateReenrollmentRequest("scheduled rotation", Guid.NewGuid().ToString());
+
+        var ticket = await store.BeginDeviceReenrollmentAsync(
+            "windows-pc", request, "windows-pc", TimeSpan.FromMinutes(10), cancellationToken);
+        var replay = await store.BeginDeviceReenrollmentAsync(
+            "windows-pc", request, "windows-pc", TimeSpan.FromMinutes(10), cancellationToken);
+
+        Assert.NotNull(ticket);
+        Assert.Equal(ticket, replay);
+        Assert.Null(await store.ResolveIdentityAsync("DD55", cancellationToken));
+        var enrolled = await store.EnrollDeviceAsync(
+            new DeviceEnrollmentRequest(
+                "windows-pc", ticket.Token, "new-csr", Guid.NewGuid().ToString()),
+            () => new IssuedCertificate(
+                "new-certificate", "ca", "EE66", DateTimeOffset.UtcNow.AddYears(1)),
+            cancellationToken);
+        Assert.NotNull(enrolled);
+        Assert.Equal(
+            new ControlIdentity("windows-pc", "Operator"),
+            await store.ResolveIdentityAsync("EE66", cancellationToken));
+        Assert.Null(await store.ResolveIdentityAsync("DD55", cancellationToken));
+    }
+
     public ValueTask DisposeAsync()
     {
         SqliteConnection.ClearAllPools();

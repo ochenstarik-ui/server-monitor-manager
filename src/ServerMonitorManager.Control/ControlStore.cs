@@ -425,6 +425,197 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         return result;
     }
 
+    public async Task<AgentReenrollmentMutation?> BeginAgentReenrollmentAsync(
+        string nodeId,
+        CertificateReenrollmentRequest request,
+        string actor,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"agent-reenroll:{actor}:{nodeId}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.CertificateReenrollmentRequest);
+        var cached = await ReadIdempotentAsync<CertificateReenrollmentTicket>(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            SmmJsonContext.Default.CertificateReenrollmentTicket,
+            cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return new AgentReenrollmentMutation(cached, [], true);
+        }
+
+        var exists = connection.CreateCommand();
+        exists.Transaction = transaction;
+        exists.CommandText = "SELECT EXISTS(SELECT 1 FROM agents WHERE node_id = $id);";
+        exists.Parameters.AddWithValue("$id", nodeId);
+        if (Convert.ToInt32(await exists.ExecuteScalarAsync(cancellationToken)) != 1)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var revoke = connection.CreateCommand();
+        revoke.Transaction = transaction;
+        revoke.CommandText = "UPDATE agents SET status = 'Revoked' WHERE node_id = $id;";
+        revoke.Parameters.AddWithValue("$id", nodeId);
+        await revoke.ExecuteNonQueryAsync(cancellationToken);
+
+        var pendingLinks = new List<LinkPolicy>();
+        var links = connection.CreateCommand();
+        links.Transaction = transaction;
+        links.CommandText = """
+            SELECT * FROM links
+            WHERE (source_node_id = $id OR target_node_id = $id)
+              AND desired_state != 'Disabled'
+            ORDER BY created_at;
+            """;
+        links.Parameters.AddWithValue("$id", nodeId);
+        await using (var reader = await links.ExecuteReaderAsync(cancellationToken))
+        {
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                pendingLinks.Add(ReadLink(reader) with
+                {
+                    DesiredState = "Disabled",
+                    ActualState = "Disconnecting",
+                    Version = reader.GetInt64(9) + 1,
+                    UpdatedAt = now,
+                    LastError = null
+                });
+            }
+        }
+
+        foreach (var link in pendingLinks)
+        {
+            var update = connection.CreateCommand();
+            update.Transaction = transaction;
+            update.CommandText = """
+                UPDATE links SET
+                    desired_state = 'Disabled',
+                    actual_state = 'Disconnecting',
+                    version = $version,
+                    updated_at = $updated,
+                    last_error = NULL
+                WHERE id = $id;
+                """;
+            update.Parameters.AddWithValue("$version", link.Version);
+            update.Parameters.AddWithValue("$updated", link.UpdatedAt.ToString("O"));
+            update.Parameters.AddWithValue("$id", link.Id);
+            await update.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var token = CreateSecureToken();
+        var expiresAt = now.Add(lifetime);
+        await ReplaceEnrollmentTokenAsync(
+            connection,
+            transaction,
+            "enrollment_tokens",
+            "node_id",
+            nodeId,
+            token,
+            now,
+            expiresAt,
+            cancellationToken);
+        var ticket = new CertificateReenrollmentTicket(
+            "Agent", nodeId, token, expiresAt, pendingLinks.Count);
+        await WriteIdempotentAsync(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            ticket,
+            SmmJsonContext.Default.CertificateReenrollmentTicket,
+            cancellationToken);
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            actor,
+            "agent.reenrollment.requested",
+            nodeId,
+            JsonSerializer.Serialize(
+                new CertificateStatusEvent("Agent", nodeId, "Revoked", pendingLinks.Count),
+                SmmJsonContext.Default.CertificateStatusEvent),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return new AgentReenrollmentMutation(ticket, pendingLinks, false);
+    }
+
+    public async Task<CertificateReenrollmentTicket?> BeginDeviceReenrollmentAsync(
+        string deviceId,
+        CertificateReenrollmentRequest request,
+        string actor,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"device-reenroll:{actor}:{deviceId}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.CertificateReenrollmentRequest);
+        var cached = await ReadIdempotentAsync<CertificateReenrollmentTicket>(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            SmmJsonContext.Default.CertificateReenrollmentTicket,
+            cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var revoke = connection.CreateCommand();
+        revoke.Transaction = transaction;
+        revoke.CommandText = "UPDATE devices SET status = 'Revoked' WHERE device_id = $id;";
+        revoke.Parameters.AddWithValue("$id", deviceId);
+        if (await revoke.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var token = CreateSecureToken();
+        var expiresAt = now.Add(lifetime);
+        await ReplaceEnrollmentTokenAsync(
+            connection,
+            transaction,
+            "device_tokens",
+            "device_id",
+            deviceId,
+            token,
+            now,
+            expiresAt,
+            cancellationToken);
+        var ticket = new CertificateReenrollmentTicket("Operator", deviceId, token, expiresAt, 0);
+        await WriteIdempotentAsync(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            ticket,
+            SmmJsonContext.Default.CertificateReenrollmentTicket,
+            cancellationToken);
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            actor,
+            "device.reenrollment.requested",
+            deviceId,
+            JsonSerializer.Serialize(
+                new CertificateStatusEvent("Operator", deviceId, "Revoked", 0),
+                SmmJsonContext.Default.CertificateStatusEvent),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return ticket;
+    }
+
     public async Task<LinkMutation> CreateLinkMutationAsync(
         LinkPolicyCreateRequest request,
         string actor,
@@ -688,6 +879,37 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         return connection;
     }
 
+    private static async Task ReplaceEnrollmentTokenAsync(
+        SqliteConnection connection,
+        SqliteTransaction transaction,
+        string table,
+        string idColumn,
+        string id,
+        string token,
+        DateTimeOffset now,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken)
+    {
+        var consume = connection.CreateCommand();
+        consume.Transaction = transaction;
+        consume.CommandText = $"UPDATE {table} SET consumed_at = $now WHERE {idColumn} = $id AND consumed_at IS NULL;";
+        consume.Parameters.AddWithValue("$now", now.ToString("O"));
+        consume.Parameters.AddWithValue("$id", id);
+        await consume.ExecuteNonQueryAsync(cancellationToken);
+
+        var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = $"INSERT INTO {table}(token_hash, {idColumn}, expires_at) VALUES ($hash, $id, $expires);";
+        insert.Parameters.AddWithValue("$hash", Hash(token));
+        insert.Parameters.AddWithValue("$id", id);
+        insert.Parameters.AddWithValue("$expires", expiresAt.ToString("O"));
+        await insert.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    private static string CreateSecureToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+
     private static string Hash(string value)
         => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
 
@@ -775,3 +997,8 @@ public sealed class IdempotencyConflictException : Exception
 public sealed record ControlIdentity(string Id, string Role);
 
 public sealed record LinkMutation(LinkPolicy Link, bool IsReplay);
+
+public sealed record AgentReenrollmentMutation(
+    CertificateReenrollmentTicket Ticket,
+    IReadOnlyList<LinkPolicy> Links,
+    bool IsReplay);

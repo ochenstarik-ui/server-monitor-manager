@@ -32,7 +32,7 @@ Ouvrez UDP `51820` et TCP `7443` sur le Hub, créez les codes et installez les a
 
 Aucun mot de passe root n'est partagé et la clé WireGuard privée reste sur le Node. Les identités monitoring, terminal, Agent, Operator et automatisation IA sont séparées. SSH emploie une forced-command sans shell/PTY/forwarding ; mTLS limite les rôles ; nftables n'autorise que les Links explicites ; SQLite enregistre état et audit avant le changement de pare-feu.
 
-`v0.1.0-alpha.2` est destiné aux tests. La branche de développement actuelle contient déjà le client Windows, l'installateur Hub/Node, les Links, mTLS, SQLite, l'audit, les événements et un tampon hors ligne limité avec downsampling. Restent la révocation des certificats, la réconciliation, le test de 50–100 Nodes et l'installateur Windows signé.
+`v0.1.0-alpha.3` est destiné aux tests. La branche actuelle contient le client Windows, l'installateur Hub/Node, les Links, mTLS, la révocation et le ré-enrôlement des certificats, SQLite, l'audit, les événements et un tampon hors ligne limité avec downsampling. Restent la réconciliation, le test de 50–100 Nodes et l'installateur Windows signé.
 
 ## Licence
 

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ServerMonitorManager.Core;
 
@@ -36,12 +37,6 @@ public sealed record DiagnosticMetricInput(
 
 public static class DiagnosticsExportService
 {
-    private static readonly JsonSerializerOptions JsonOptions = new()
-    {
-        WriteIndented = true,
-        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower
-    };
-
     public static string CreateJson(
         IEnumerable<DiagnosticServerInput> servers,
         IEnumerable<DiagnosticNodeInput> nodes,
@@ -87,7 +82,7 @@ public static class DiagnosticsExportService
             nodeSnapshots,
             linkSnapshots,
             metricSnapshots);
-        return JsonSerializer.Serialize(snapshot, JsonOptions);
+        return JsonSerializer.Serialize(snapshot, DiagnosticsJsonContext.Default.DiagnosticSnapshot);
     }
 
     private static string Fingerprint(string value)
@@ -107,43 +102,50 @@ public static class DiagnosticsExportService
             _ => "unknown"
         };
 
-    private sealed record DiagnosticSnapshot(
-        int FormatVersion,
-        DateTimeOffset GeneratedAt,
-        string AppVersion,
-        string OsVersion,
-        string Architecture,
-        bool ControlConfigured,
-        IReadOnlyList<DiagnosticServer> Servers,
-        IReadOnlyList<DiagnosticNode> Nodes,
-        IReadOnlyList<DiagnosticLink> Links,
-        IReadOnlyList<DiagnosticMetric> Metrics);
-
-    private sealed record DiagnosticServer(
-        string EndpointFingerprint,
-        bool IsHub,
-        bool IsOnline,
-        bool HasWarning,
-        double CpuPercent);
-
-    private sealed record DiagnosticNode(
-        string NodeFingerprint,
-        string State,
-        int HandshakeAgeSeconds);
-
-    private sealed record DiagnosticLink(
-        string SourceFingerprint,
-        string TargetFingerprint,
-        string Protocol,
-        int Port,
-        string State,
-        long Version,
-        long ExpiresUnix);
-
-    private sealed record DiagnosticMetric(
-        string ServerFingerprint,
-        DateTimeOffset Timestamp,
-        double CpuPercent,
-        double MemoryPercent,
-        double DiskPercent);
 }
+
+internal sealed record DiagnosticSnapshot(
+    int FormatVersion,
+    DateTimeOffset GeneratedAt,
+    string AppVersion,
+    string OsVersion,
+    string Architecture,
+    bool ControlConfigured,
+    IReadOnlyList<DiagnosticServer> Servers,
+    IReadOnlyList<DiagnosticNode> Nodes,
+    IReadOnlyList<DiagnosticLink> Links,
+    IReadOnlyList<DiagnosticMetric> Metrics);
+
+internal sealed record DiagnosticServer(
+    string EndpointFingerprint,
+    bool IsHub,
+    bool IsOnline,
+    bool HasWarning,
+    double CpuPercent);
+
+internal sealed record DiagnosticNode(
+    string NodeFingerprint,
+    string State,
+    int HandshakeAgeSeconds);
+
+internal sealed record DiagnosticLink(
+    string SourceFingerprint,
+    string TargetFingerprint,
+    string Protocol,
+    int Port,
+    string State,
+    long Version,
+    long ExpiresUnix);
+
+internal sealed record DiagnosticMetric(
+    string ServerFingerprint,
+    DateTimeOffset Timestamp,
+    double CpuPercent,
+    double MemoryPercent,
+    double DiskPercent);
+
+[JsonSourceGenerationOptions(
+    PropertyNamingPolicy = JsonKnownNamingPolicy.SnakeCaseLower,
+    WriteIndented = true)]
+[JsonSerializable(typeof(DiagnosticSnapshot))]
+internal sealed partial class DiagnosticsJsonContext : JsonSerializerContext;

@@ -34,7 +34,7 @@ Abra UDP `51820` y TCP `7443` en el Hub, cree códigos para los Nodes e instále
 
 No hay contraseña root compartida ni claves WireGuard privadas de Nodes en el Hub. Las identidades de monitorización, terminal, Agent, Operator y automatización IA están separadas. SSH usa un forced-command sin shell, PTY ni forwarding; mTLS limita cada rol; nftables permite únicamente Links explícitos; SQLite conserva estado y auditoría antes de aplicar cambios.
 
-`v0.1.0-alpha.2` es una versión de prueba. Ya incluye cliente Windows, instalador Hub/Node, Links, mTLS, SQLite, auditoría y eventos. Faltan el búfer offline, revocación de certificados, reconciliación tras reconexión, prueba de 50–100 Nodes e instalador Windows firmado.
+`v0.1.0-alpha.2` es una versión de prueba. La rama de desarrollo actual ya incluye cliente Windows, instalador Hub/Node, Links, mTLS, SQLite, auditoría, eventos y un búfer offline limitado con downsampling. Faltan la revocación de certificados, reconciliación tras reconexión, prueba de 50–100 Nodes e instalador Windows firmado.
 
 ## Licencia
 

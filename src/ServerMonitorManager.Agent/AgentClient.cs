@@ -1,3 +1,4 @@
+using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
@@ -48,23 +49,92 @@ internal sealed class AgentClient(AgentOptions options)
             password: null,
             X509KeyStorageFlags.EphemeralKeySet);
         using var client = CreateHttpClient(certificate);
-        var delay = TimeSpan.FromSeconds(options.HeartbeatSeconds);
+        var buffer = new MetricBuffer(options);
+        var collectionDelay = TimeSpan.FromSeconds(options.HeartbeatSeconds);
+        var retryDelay = collectionDelay;
+        var nextUploadAttempt = DateTimeOffset.MinValue;
         while (!cancellationToken.IsCancellationRequested)
         {
-            var heartbeat = LinuxMetrics.Collect(options.NodeId, "0.1.0");
-            using var response = await client.PostAsJsonAsync(
-                "api/v1/agents/heartbeat",
-                heartbeat,
-                SmmJsonContext.Default.AgentHeartbeat,
-                cancellationToken);
-            response.EnsureSuccessStatusCode();
-            var accepted = await response.Content.ReadFromJsonAsync(
-                SmmJsonContext.Default.AgentHeartbeatResponse,
-                cancellationToken)
-                ?? throw new InvalidOperationException("Control service returned an empty heartbeat response.");
-            delay = TimeSpan.FromSeconds(Math.Clamp(accepted.NextHeartbeatSeconds, 10, 300));
-            await Task.Delay(delay, cancellationToken);
+            var iterationStartedAt = DateTimeOffset.UtcNow;
+            try
+            {
+                await buffer.EnqueueAsync(
+                    LinuxMetrics.Collect(options.NodeId, "0.1.0"),
+                    cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Console.Error.WriteLine($"Metric collection failed: {exception.Message}");
+            }
+
+            if (DateTimeOffset.UtcNow >= nextUploadAttempt)
+            {
+                try
+                {
+                    var pending = await buffer.PeekAsync(options.UploadBatchSize, cancellationToken);
+                    foreach (var heartbeat in pending)
+                    {
+                        try
+                        {
+                            var accepted = await SendHeartbeatAsync(client, heartbeat, cancellationToken);
+                            collectionDelay = TimeSpan.FromSeconds(
+                                Math.Clamp(accepted.NextHeartbeatSeconds, 10, 300));
+                        }
+                        catch (PermanentHeartbeatException exception)
+                        {
+                            Console.Error.WriteLine(
+                                $"Dropping rejected metric {heartbeat.SentAt:O}: {exception.Message}");
+                        }
+
+                        await buffer.AcknowledgeAsync(heartbeat.IdempotencyKey, cancellationToken);
+                    }
+
+                    retryDelay = collectionDelay;
+                    nextUploadAttempt = DateTimeOffset.MinValue;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    var jitter = TimeSpan.FromSeconds(Random.Shared.Next(0, 6));
+                    nextUploadAttempt = DateTimeOffset.UtcNow + retryDelay + jitter;
+                    retryDelay = TimeSpan.FromSeconds(Math.Min(
+                        options.MaxRetrySeconds,
+                        Math.Max(10, retryDelay.TotalSeconds * 2)));
+                    Console.Error.WriteLine(
+                        $"Control Hub unavailable; metrics remain buffered until {nextUploadAttempt:O}: "
+                        + exception.Message);
+                }
+            }
+
+            var elapsed = DateTimeOffset.UtcNow - iterationStartedAt;
+            var remaining = collectionDelay - elapsed;
+            await Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.FromSeconds(1), cancellationToken);
         }
+    }
+
+    private static async Task<AgentHeartbeatResponse> SendHeartbeatAsync(
+        HttpClient client,
+        AgentHeartbeat heartbeat,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.PostAsJsonAsync(
+            "api/v1/agents/heartbeat",
+            heartbeat,
+            SmmJsonContext.Default.AgentHeartbeat,
+            cancellationToken);
+        if (response.StatusCode is HttpStatusCode.BadRequest or HttpStatusCode.Conflict)
+        {
+            var details = await response.Content.ReadAsStringAsync(cancellationToken);
+            throw new PermanentHeartbeatException(
+                string.IsNullOrWhiteSpace(details)
+                    ? $"Control service returned {(int)response.StatusCode}."
+                    : details);
+        }
+
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync(
+            SmmJsonContext.Default.AgentHeartbeatResponse,
+            cancellationToken)
+            ?? throw new InvalidOperationException("Control service returned an empty heartbeat response.");
     }
 
     private HttpClient CreateHttpClient(X509Certificate2? clientCertificate)
@@ -103,3 +173,5 @@ internal sealed class AgentClient(AgentOptions options)
         }
     }
 }
+
+internal sealed class PermanentHeartbeatException(string message) : Exception(message);

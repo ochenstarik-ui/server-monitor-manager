@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\src\ServerMonitorManager.Agent\ServerMonitorManager.Agent.csproj" />
     <ProjectReference Include="..\..\src\ServerMonitorManager.Control\ServerMonitorManager.Control.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />

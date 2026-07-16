@@ -56,6 +56,14 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
         Assert.Equal(first, retry);
         Assert.Equal(1, first.Sequence);
+        await using (var connection = new SqliteConnection(
+            $"Data Source={Path.Combine(_directory, "control.db")}"))
+        {
+            await connection.OpenAsync(cancellationToken);
+            var command = connection.CreateCommand();
+            command.CommandText = "SELECT recorded_at FROM metric_samples LIMIT 1;";
+            Assert.Equal(heartbeat.SentAt.ToString("O"), await command.ExecuteScalarAsync(cancellationToken));
+        }
         await Assert.ThrowsAsync<IdempotencyConflictException>(() => store.RecordHeartbeatAsync(
             heartbeat with { LoadOne = 0.9 },
             30,

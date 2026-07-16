@@ -74,7 +74,7 @@
 - [x] SQLite inventory, policies, history и audit;
 - [x] исходящие mTLS agent sessions;
 - [x] защищённый Hub event stream для desktop client;
-- [ ] ограниченный локальный буфер и downsampling;
+- [x] ограниченный локальный буфер и downsampling;
 - [x] idempotency key и защита от replay;
 - [ ] тест нагрузки 50–100 Node на одном Hub.
 

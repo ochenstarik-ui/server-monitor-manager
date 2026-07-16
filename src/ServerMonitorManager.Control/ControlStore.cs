@@ -385,7 +385,7 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             SELECT last_insert_rowid();
             """;
         insert.Parameters.AddWithValue("$node", heartbeat.NodeId);
-        insert.Parameters.AddWithValue("$now", now.ToString("O"));
+        insert.Parameters.AddWithValue("$now", heartbeat.SentAt.ToString("O"));
         insert.Parameters.AddWithValue(
             "$payload",
             JsonSerializer.Serialize(heartbeat, SmmJsonContext.Default.AgentHeartbeat));

@@ -12,5 +12,7 @@ public sealed class ControlOptions
 
     public int HeartbeatSeconds { get; init; } = 30;
 
+    public int MaxBufferedMetricAgeHours { get; init; } = 24;
+
     public string HubHelperPath { get; init; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
 }

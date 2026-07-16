@@ -32,7 +32,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
 
 لا توجد كلمة مرور root مشتركة ولا يغادر مفتاح WireGuard الخاص عقدته. هويات monitoring وterminal وAgent وOperator وأتمتة AI منفصلة. يستخدم SSH أمراً إجبارياً بلا shell أو PTY أو forwarding؛ يقيّد mTLS الصلاحيات؛ تسمح nftables بالروابط الصريحة فقط؛ ويحفظ SQLite الحالة المطلوبة والتدقيق قبل تعديل الجدار الناري.
 
-الإصدار `v0.1.0-alpha.2` للاختبار. يتضمن عميل Windows ومثبت Hub/Node وLinks وmTLS وSQLite والتدقيق والأحداث. المتبقي: التخزين دون اتصال، إلغاء الشهادات، مصالحة إعادة الاتصال، اختبار 50–100 Node ومثبت Windows موقّع.
+الإصدار `v0.1.0-alpha.2` للاختبار. يتضمن فرع التطوير الحالي عميل Windows ومثبت Hub/Node وLinks وmTLS وSQLite والتدقيق والأحداث ومخزناً محدوداً دون اتصال مع downsampling. المتبقي: إلغاء الشهادات، مصالحة إعادة الاتصال، اختبار 50–100 Node ومثبت Windows موقّع.
 
 ## الترخيص
 

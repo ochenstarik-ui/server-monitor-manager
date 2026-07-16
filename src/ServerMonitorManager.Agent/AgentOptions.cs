@@ -7,4 +7,9 @@ public sealed class AgentOptions
     public string StateDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/agent";
     public string CertificateAuthorityPath { get; init; } = "/etc/ochenstarik-server-monitor-manager/control-ca.crt";
     public int HeartbeatSeconds { get; init; } = 30;
+    public int BufferMaxSamples { get; init; } = 720;
+    public int BufferRecentSamples { get; init; } = 120;
+    public int BufferDownsampleFactor { get; init; } = 4;
+    public int UploadBatchSize { get; init; } = 20;
+    public int MaxRetrySeconds { get; init; } = 300;
 }

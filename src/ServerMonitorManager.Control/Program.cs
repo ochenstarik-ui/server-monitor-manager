@@ -34,8 +34,9 @@ builder.Services.AddOptions<ControlOptions>()
     .Validate(options =>
             !string.IsNullOrWhiteSpace(options.DatabasePath)
             && !string.IsNullOrWhiteSpace(options.CertificateAuthorityPath)
-            && options.HeartbeatSeconds is >= 10 and <= 300,
-        "Control paths are required and HeartbeatSeconds must be between 10 and 300.")
+            && options.HeartbeatSeconds is >= 10 and <= 300
+            && options.MaxBufferedMetricAgeHours is >= 1 and <= 168,
+        "Control paths are required, HeartbeatSeconds must be 10-300, and buffered metrics 1-168 hours.")
     .ValidateOnStart();
 builder.Services.AddSingleton<ControlStore>();
 builder.Services.AddSingleton<CertificateAuthority>();
@@ -224,7 +225,7 @@ agents.MapPost("/heartbeat", async (
 {
     if (!NodeIdValidator.IsValid(heartbeat.NodeId)
         || !IdempotencyKeyValidator.IsValid(heartbeat.IdempotencyKey)
-        || heartbeat.SentAt < DateTimeOffset.UtcNow.AddMinutes(-5)
+        || heartbeat.SentAt < DateTimeOffset.UtcNow.AddHours(-options.Value.MaxBufferedMetricAgeHours)
         || heartbeat.SentAt > DateTimeOffset.UtcNow.AddMinutes(1))
     {
         return Results.ValidationProblem(new Dictionary<string, string[]>

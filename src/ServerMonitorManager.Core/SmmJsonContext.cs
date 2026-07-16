@@ -5,6 +5,7 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(EnrollmentRequest))]
 [JsonSerializable(typeof(EnrollmentResponse))]
 [JsonSerializable(typeof(AgentHeartbeat))]
+[JsonSerializable(typeof(AgentHeartbeat[]))]
 [JsonSerializable(typeof(AgentHeartbeatResponse))]
 [JsonSerializable(typeof(AgentSummary[]))]
 [JsonSerializable(typeof(DeviceEnrollmentRequest))]

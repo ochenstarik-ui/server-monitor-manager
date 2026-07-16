@@ -201,6 +201,6 @@ public sealed partial class SshMonitorService
     [GeneratedRegex("^[a-z_][a-z0-9_-]{0,31}$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeUserRegex();
 
-    [GeneratedRegex("^(metrics|mesh (nodes|links|status|connect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31}|disconnect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31}))$", RegexOptions.CultureInvariant)]
+    [GeneratedRegex("^(metrics|mesh (nodes|links|status|connect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31} (tcp|udp) [0-9]{1,5} [0-9]{1,6}|disconnect [a-z0-9][a-z0-9-]{0,31} [a-z0-9][a-z0-9-]{0,31} (tcp|udp) [0-9]{1,5}))$", RegexOptions.CultureInvariant)]
     private static partial Regex SafeRestrictedCommandRegex();
 }

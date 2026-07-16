@@ -19,13 +19,30 @@ public sealed class MeshNodeViewModel
 
 public sealed class MeshLinkViewModel
 {
-    public MeshLinkViewModel(string source, string target)
+    public MeshLinkViewModel(
+        string source,
+        string target,
+        string cidr,
+        string protocol,
+        int port,
+        long expiresUnix)
     {
         Source = source;
         Target = target;
+        Cidr = cidr;
+        Protocol = protocol;
+        Port = port;
+        ExpiresUnix = expiresUnix;
     }
 
     public string Source { get; set; }
     public string Target { get; set; }
-    public string Label => $"{Source} → {Target}";
+    public string Cidr { get; set; }
+    public string Protocol { get; set; }
+    public int Port { get; set; }
+    public long ExpiresUnix { get; set; }
+    public string ExpirationText => ExpiresUnix == 0
+        ? "вручную"
+        : $"до {DateTimeOffset.FromUnixTimeSeconds(ExpiresUnix).ToLocalTime():dd.MM HH:mm}";
+    public string Label => $"{Source} → {Target} · {Protocol.ToUpperInvariant()}/{Port} · {Cidr} · {ExpirationText}";
 }

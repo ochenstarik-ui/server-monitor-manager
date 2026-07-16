@@ -249,6 +249,36 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
+                                <ComboBox
+                                    x:Name="LinkProtocolBox"
+                                    Header="Протокол"
+                                    SelectedIndex="0">
+                                    <ComboBoxItem Content="TCP" Tag="tcp" />
+                                    <ComboBoxItem Content="UDP" Tag="udp" />
+                                </ComboBox>
+                                <NumberBox
+                                    x:Name="LinkPortBox"
+                                    Grid.Column="1"
+                                    Header="Порт"
+                                    Maximum="65535"
+                                    Minimum="1"
+                                    SpinButtonPlacementMode="Compact"
+                                    Value="22" />
+                            </Grid>
+
+                            <NumberBox
+                                x:Name="LinkTtlBox"
+                                Header="TTL, минут (0 — до ручного отключения)"
+                                Maximum="525600"
+                                Minimum="0"
+                                SpinButtonPlacementMode="Compact"
+                                Value="120" />
+
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
                                 <Button
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Center"
@@ -265,9 +295,10 @@
 
                             <TextBlock FontWeight="SemiBold" Text="Разрешённые направления" />
                             <ListView
+                                x:Name="MeshLinksList"
                                 MaxHeight="220"
                                 ItemsSource="{x:Bind MeshLinks}"
-                                SelectionMode="None">
+                                SelectionMode="Single">
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="local:MeshLinkViewModel">
                                         <TextBlock Margin="4,8" Text="{x:Bind Label}" />

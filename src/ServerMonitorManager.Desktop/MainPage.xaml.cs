@@ -306,9 +306,17 @@ public sealed partial class MainPage : Page
                     continue;
                 }
                 var fields = line[5..].Split('|');
-                if (fields.Length >= 2)
+                if (fields.Length >= 7
+                    && int.TryParse(fields[4], CultureInfo.InvariantCulture, out var port)
+                    && long.TryParse(fields[5], CultureInfo.InvariantCulture, out var expiresUnix))
                 {
-                    MeshLinks.Add(new MeshLinkViewModel(fields[0], fields[1]));
+                    MeshLinks.Add(new MeshLinkViewModel(
+                        fields[0],
+                        fields[1],
+                        fields[2],
+                        fields[3],
+                        port,
+                        expiresUnix));
                 }
             }
 
@@ -343,12 +351,53 @@ public sealed partial class MainPage : Page
             ShowInfo("Mesh Hub не выбран", "Сначала добавьте главный сервер с отметкой Mesh Hub.", InfoBarSeverity.Warning);
             return;
         }
-        if (SourceNodeBox.SelectedItem is not MeshNodeViewModel source
-            || TargetNodeBox.SelectedItem is not MeshNodeViewModel target)
+        MeshNodeViewModel? source = null;
+        MeshNodeViewModel? target = null;
+        string protocol;
+        int port;
+        int ttlMinutes;
+
+        if (enable)
         {
-            ShowInfo("Выберите серверы", "Укажите источник и сервер назначения.", InfoBarSeverity.Warning);
-            return;
+            if (SourceNodeBox.SelectedItem is not MeshNodeViewModel selectedSource
+                || TargetNodeBox.SelectedItem is not MeshNodeViewModel selectedTarget)
+            {
+                ShowInfo("Выберите серверы", "Укажите источник и сервер назначения.", InfoBarSeverity.Warning);
+                return;
+            }
+            source = selectedSource;
+            target = selectedTarget;
+            protocol = (LinkProtocolBox.SelectedItem as ComboBoxItem)?.Tag?.ToString() ?? "tcp";
+            if (double.IsNaN(LinkPortBox.Value)
+                || double.IsNaN(LinkTtlBox.Value)
+                || LinkPortBox.Value is < 1 or > 65535
+                || LinkTtlBox.Value is < 0 or > 525600)
+            {
+                ShowInfo("Некорректная политика", "Проверьте порт и TTL.", InfoBarSeverity.Warning);
+                return;
+            }
+            port = checked((int)LinkPortBox.Value);
+            ttlMinutes = checked((int)LinkTtlBox.Value);
         }
+        else
+        {
+            if (MeshLinksList.SelectedItem is not MeshLinkViewModel selectedLink)
+            {
+                ShowInfo("Выберите связь", "Для отключения выберите правило в списке.", InfoBarSeverity.Warning);
+                return;
+            }
+            source = MeshNodes.FirstOrDefault(node => node.Name == selectedLink.Source);
+            target = MeshNodes.FirstOrDefault(node => node.Name == selectedLink.Target);
+            if (source is null || target is null)
+            {
+                ShowInfo("Узел не найден", "Обновите список Mesh и повторите попытку.", InfoBarSeverity.Warning);
+                return;
+            }
+            protocol = selectedLink.Protocol;
+            port = selectedLink.Port;
+            ttlMinutes = 0;
+        }
+
         if (source.Name == target.Name)
         {
             ShowInfo("Некорректная связь", "Источник и назначение должны отличаться.", InfoBarSeverity.Warning);
@@ -358,15 +407,18 @@ public sealed partial class MainPage : Page
         try
         {
             var action = enable ? "connect" : "disconnect";
+            var policyArguments = enable
+                ? $"{protocol} {port} {ttlMinutes}"
+                : $"{protocol} {port}";
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             await _ssh.RunRestrictedCommandAsync(
                 hub.Profile,
-                $"mesh {action} {source.Name} {target.Name}",
+                $"mesh {action} {source.Name} {target.Name} {policyArguments}",
                 timeout.Token);
             await RefreshMeshAsync(showSuccess: false);
             ShowInfo(
                 enable ? "Связь включена" : "Связь отключена",
-                $"{source.Name} → {target.Name}",
+                $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port}",
                 enable ? InfoBarSeverity.Success : InfoBarSeverity.Warning);
         }
         catch (Exception exception)

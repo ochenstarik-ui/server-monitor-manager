@@ -41,7 +41,7 @@
 - [x] срок действия не более 10 минут;
 - [x] атомарное погашение token;
 - [ ] отзыв и повторная регистрация Node;
-- [ ] подтверждение fingerprint Hub;
+- [x] подтверждение SHA-256 fingerprint Control CA Hub;
 - [x] защита desktop SSH-ключа через DPAPI.
 
 ## Этап 4 — управляемые Links
@@ -71,9 +71,9 @@
 ## Этап 6 — постоянный control layer
 
 - [x] самодостаточный single-file Linux agent для amd64/arm64;
-- [ ] SQLite inventory, policies, history и audit;
+- [x] SQLite inventory, policies, history и audit;
 - [x] исходящие mTLS agent sessions;
-- [ ] WebSocket/stream событий для desktop client;
+- [x] защищённый Hub event stream для desktop client;
 - [ ] ограниченный локальный буфер и downsampling;
 - [x] idempotency key и защита от replay;
 - [ ] тест нагрузки 50–100 Node на одном Hub.

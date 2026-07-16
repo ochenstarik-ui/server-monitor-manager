@@ -53,6 +53,7 @@
     <PropertyGroup> above to opt out.
   -->
   <ItemGroup>
+    <ProjectReference Include="..\ServerMonitorManager.Core\ServerMonitorManager.Core.csproj" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2270" />
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.2.0" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools.WinApp" Version="0.4.0" />

@@ -98,7 +98,9 @@ Hub остаётся маршрутизатором Mesh первого поко
 
 Первый реализованный срез control layer использует ASP.NET Core 10 и SQLite. Hub выдаёт агенту сертификат по CSR только после атомарного погашения десятиминутного token. После регистрации Agent выполняет только исходящие HTTPS-запросы с mTLS, а Hub связывает thumbprint сертификата с конкретным `node_id`. Heartbeat содержит idempotency key и отклоняется при попытке повторить тот же ключ с другим телом запроса.
 
-Сейчас этот срез сохраняет inventory, heartbeat-метрики, idempotency и аудит регистрации. Перенос политик Links из файлов в SQLite, постоянный event stream и локальный буфер Agent выполняются следующими частями этапа.
+Control Hub сохраняет inventory, heartbeat-метрики, направленные Links, idempotency и аудит в SQLite. Желаемое состояние отключения Link фиксируется до вызова ограниченного nftables wrapper; при ошибке фактическое состояние становится `Partial`. Отдельная mTLS identity `Operator` читает inventory, управляет Links и получает NDJSON event stream, а сертификат `Agent` ограничен heartbeat собственного `node_id`.
+
+Локальный буфер Agent, downsampling и подключение event stream к WinUI выполняются следующими частями этапа.
 
 ## 7. Целевые ограничения MVP
 

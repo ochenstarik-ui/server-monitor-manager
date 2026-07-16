@@ -29,6 +29,12 @@ Windows-клиент использует отдельный Ed25519-ключ т
 
 До появления mTLS enrollment выполняется через отдельную ограниченную SSH-команду. Token не должен содержать приватный WireGuard-ключ.
 
+## Operator identity Windows-клиента
+
+Windows-клиент получает отдельный код `SMMDEV1`, показывает URL и SHA-256 fingerprint Control CA и продолжает регистрацию только после явного подтверждения пользователя. Приватный operator key создаётся локально, хранится в DPAPI current-user scope и не используется как SSH monitoring, terminal или Agent identity.
+
+Сертификат `Agent` разрешает только heartbeat собственного `node_id`. Только сертификат с ролью `Operator` может читать общий inventory, изменять Links и подписываться на event stream. Control service вызывает от root только отдельный wrapper с командами `link-connect` и `link-disconnect`; другие Hub-команды через него запрещены.
+
 ## Авторизация Links
 
 - мониторинг read-only отделён от управления;

@@ -7,4 +7,12 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(AgentHeartbeat))]
 [JsonSerializable(typeof(AgentHeartbeatResponse))]
 [JsonSerializable(typeof(AgentSummary[]))]
+[JsonSerializable(typeof(DeviceEnrollmentRequest))]
+[JsonSerializable(typeof(DeviceEnrollmentResponse))]
+[JsonSerializable(typeof(LinkPolicyCreateRequest))]
+[JsonSerializable(typeof(LinkPolicyDisableRequest))]
+[JsonSerializable(typeof(LinkPolicy))]
+[JsonSerializable(typeof(LinkPolicy[]))]
+[JsonSerializable(typeof(ControlEvent))]
+[JsonSerializable(typeof(ControlError))]
 public sealed partial class SmmJsonContext : JsonSerializerContext;

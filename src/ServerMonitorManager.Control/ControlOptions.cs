@@ -11,4 +11,6 @@ public sealed class ControlOptions
     public string? CertificateAuthorityPassword { get; init; }
 
     public int HeartbeatSeconds { get; init; } = 30;
+
+    public string HubHelperPath { get; init; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
 }

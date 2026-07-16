@@ -27,7 +27,8 @@ public sealed class MeshLinkViewModel
         int port,
         long expiresUnix,
         string state,
-        long version)
+        long version,
+        string? id = null)
     {
         Source = source;
         Target = target;
@@ -37,6 +38,7 @@ public sealed class MeshLinkViewModel
         ExpiresUnix = expiresUnix;
         State = state;
         Version = version;
+        Id = id;
     }
 
     public string Source { get; set; }
@@ -47,6 +49,7 @@ public sealed class MeshLinkViewModel
     public long ExpiresUnix { get; set; }
     public string State { get; set; }
     public long Version { get; set; }
+    public string? Id { get; set; }
     public string ExpirationText => ExpiresUnix == 0
         ? "вручную"
         : $"до {DateTimeOffset.FromUnixTimeSeconds(ExpiresUnix).ToLocalTime():dd.MM HH:mm}";

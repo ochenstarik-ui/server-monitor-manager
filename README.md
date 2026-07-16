@@ -53,12 +53,17 @@ Alpha-установка постоянного слоя после обычны
 # Hub
 sudo ./ochenstarik-server-monitor-manager.sh install-control-hub
 sudo ./ochenstarik-server-monitor-manager.sh control-code home
+sudo ./ochenstarik-server-monitor-manager.sh control-device-code windows-pc
 
 # соответствующий Node — вставить полученный SMMCTL1
 sudo ./ochenstarik-server-monitor-manager.sh install-control-agent
 ```
 
 Архив выбирается автоматически для amd64 или arm64 и проверяется по SHA-256. Для Control Hub требуется входящий TCP-порт `7443`; Agent открытых входящих портов не создаёт.
+
+Код `SMMDEV1` предназначен только для Windows-клиента: приложение локально создаёт operator key и получает отдельный mTLS-сертификат. Agent identities не могут читать весь inventory, изменять Links или подключаться к потоку операторских событий.
+
+После регистрации кнопка `Control Hub` сохраняет operator certificate через DPAPI. Панель Mesh автоматически переключается с переходного SSH-протокола на SQLite Control API, а изменения Links и heartbeat поступают через защищённый поток событий без ручного опроса интерфейса.
 
 Проверка control layer для разработчиков:
 

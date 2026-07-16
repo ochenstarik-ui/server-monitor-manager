@@ -4,6 +4,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
+using ServerMonitorManager.Core;
 using Windows.ApplicationModel.DataTransfer;
 using Windows.Foundation;
 
@@ -14,15 +15,19 @@ public sealed partial class MainPage : Page
     private readonly ServerStorage _storage = new();
     private readonly SshMonitorService _ssh = new();
     private readonly MetricsHistoryStorage _historyStorage = new();
+    private readonly ControlClientService _control = new();
     private readonly List<MetricSampleData> _history = [];
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
+    private readonly CancellationTokenSource _controlCancellation = new();
     private bool _loaded;
+    private bool _controlListening;
 
     public MainPage()
     {
         InitializeComponent();
         Loaded += MainPage_Loaded;
+        Unloaded += (_, _) => _controlCancellation.Cancel();
         _refreshTimer.Tick += async (_, _) => await RefreshAllAsync();
         MainNavigation.SelectedItem = MainNavigation.MenuItems[0];
     }
@@ -56,6 +61,7 @@ public sealed partial class MainPage : Page
         {
             await RefreshAllAsync();
         }
+        StartControlEvents();
     }
 
     private async void SshKeyButton_Click(object sender, RoutedEventArgs e)
@@ -159,6 +165,137 @@ public sealed partial class MainPage : Page
         {
             ShowInfo("Не удалось открыть SSH-терминал", exception.Message, InfoBarSeverity.Error);
         }
+    }
+
+    private async void ControlHubButton_Click(object sender, RoutedEventArgs e)
+    {
+        var codeBox = new TextBox
+        {
+            Header = "Код устройства SMMDEV1",
+            PlaceholderText = "SMMDEV1-...",
+            AcceptsReturn = true,
+            TextWrapping = TextWrapping.Wrap,
+            MinWidth = 360
+        };
+        AutomationProperties.SetName(codeBox, "Одноразовый код Control Hub для Windows-устройства");
+        var codeDialog = new ContentDialog
+        {
+            XamlRoot = XamlRoot,
+            Title = "Подключение Control Hub",
+            Content = new StackPanel
+            {
+                Spacing = 12,
+                Children =
+                {
+                    new TextBlock
+                    {
+                        Text = "На Hub выполните: sudo ochenstarik-server-monitor-manager.sh control-device-code windows-pc. Вставьте полученный одноразовый код.",
+                        TextWrapping = TextWrapping.Wrap
+                    },
+                    codeBox
+                }
+            },
+            PrimaryButtonText = "Проверить",
+            CloseButtonText = "Отмена",
+            DefaultButton = ContentDialogButton.Primary
+        };
+        if (await codeDialog.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var preview = _control.ParseEnrollmentCode(codeBox.Text);
+            var fingerprintBox = new TextBox
+            {
+                Header = "SHA-256 fingerprint Control CA",
+                Text = preview.Fingerprint,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap
+            };
+            AutomationProperties.SetName(fingerprintBox, "SHA-256 fingerprint Control CA");
+            var confirmDialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = "Подтвердите Control Hub",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"Устройство: {preview.DeviceId}\nHub: {preview.ControlUrl}",
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        fingerprintBox,
+                        new TextBlock
+                        {
+                            Text = "Сравните fingerprint с показанным на Hub. После подтверждения приложение локально создаст отдельный operator key и защитит его через Windows DPAPI.",
+                            TextWrapping = TextWrapping.Wrap
+                        }
+                    }
+                },
+                PrimaryButtonText = "Fingerprint совпадает",
+                CloseButtonText = "Отмена",
+                DefaultButton = ContentDialogButton.Close
+            };
+            if (await confirmDialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+            await _control.EnrollAsync(preview, timeout.Token);
+            ShowInfo(
+                "Control Hub подключён",
+                $"Operator identity {preview.DeviceId} сохранена через DPAPI. Поток событий запускается.",
+                InfoBarSeverity.Success);
+            StartControlEvents();
+        }
+        catch (Exception exception)
+        {
+            ShowInfo("Не удалось подключить Control Hub", CompactError(exception), InfoBarSeverity.Error);
+        }
+    }
+
+    private void StartControlEvents()
+    {
+        if (_controlListening || _controlCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        _controlListening = true;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await _control.ListenAsync(HandleControlEventAsync, _controlCancellation.Token);
+            }
+            finally
+            {
+                _controlListening = false;
+            }
+        });
+    }
+
+    private Task HandleControlEventAsync(ControlEvent controlEvent)
+    {
+        DispatcherQueue.TryEnqueue(() =>
+        {
+            if (controlEvent.Type.StartsWith("link.", StringComparison.Ordinal))
+            {
+                ShowInfo(
+                    "Событие Control Hub",
+                    $"{controlEvent.Subject}: {controlEvent.Type}",
+                    controlEvent.Type is "link.failed" or "link.partial"
+                        ? InfoBarSeverity.Warning
+                        : InfoBarSeverity.Informational);
+                _ = RefreshMeshAsync(showSuccess: false);
+            }
+        });
+        return Task.CompletedTask;
     }
 
     private async void AddServerButton_Click(object sender, RoutedEventArgs e)
@@ -365,7 +502,7 @@ public sealed partial class MainPage : Page
             WarningValueText.Text = warnings.ToString(CultureInfo.InvariantCulture);
             WarningDetailText.Text = warnings == 0 ? "Нет предупреждений" : "Проверьте доступность и ресурсы";
             HeaderStatusText.Text = $"SSH monitoring · {Servers.Count} сервер(а) · обновлено {DateTime.Now:HH:mm:ss}";
-            if (Servers.Any(server => server.IsHub))
+            if (Servers.Any(server => server.IsHub) || _control.IsConfigured)
             {
                 await RefreshMeshAsync(showSuccess: false);
             }
@@ -531,6 +668,12 @@ public sealed partial class MainPage : Page
 
     private async Task RefreshMeshAsync(bool showSuccess = true)
     {
+        if (_control.IsConfigured)
+        {
+            await RefreshControlMeshAsync(showSuccess);
+            return;
+        }
+
         var hub = FindHub();
         if (hub is null)
         {
@@ -596,6 +739,57 @@ public sealed partial class MainPage : Page
         }
     }
 
+    private async Task RefreshControlMeshAsync(bool showSuccess)
+    {
+        try
+        {
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var agents = await _control.GetAgentsAsync(timeout.Token);
+            var links = await _control.GetLinksAsync(timeout.Token);
+            var now = DateTimeOffset.UtcNow;
+            MeshNodes.Clear();
+            foreach (var agent in agents)
+            {
+                var age = agent.LastSeenAt is null
+                    ? int.MaxValue
+                    : (int)Math.Clamp((now - agent.LastSeenAt.Value).TotalSeconds, 0, int.MaxValue);
+                MeshNodes.Add(new MeshNodeViewModel(
+                    agent.NodeId,
+                    "Control",
+                    age <= 90 ? "online" : "offline",
+                    age));
+            }
+
+            MeshLinks.Clear();
+            foreach (var link in links.Where(link =>
+                         link.DesiredState != "Disabled" || link.ActualState == "Partial"))
+            {
+                MeshLinks.Add(new MeshLinkViewModel(
+                    link.SourceNodeId,
+                    link.TargetNodeId,
+                    link.TargetNodeId,
+                    link.Protocol,
+                    link.Port,
+                    link.ExpiresAt?.ToUnixTimeSeconds() ?? 0,
+                    link.ActualState,
+                    link.Version,
+                    link.Id));
+            }
+
+            ActiveLinksValueText.Text = MeshLinks.Count.ToString(CultureInfo.InvariantCulture);
+            MeshStatusText.Text = $"Control · {MeshNodes.Count} узлов · {MeshLinks.Count} активных связей";
+            if (showSuccess)
+            {
+                ShowInfo("Control Hub обновлён", MeshStatusText.Text, InfoBarSeverity.Success);
+            }
+        }
+        catch (Exception exception)
+        {
+            MeshStatusText.Text = "Control Hub недоступен";
+            ShowInfo("Не удалось получить Control-состояние", CompactError(exception), InfoBarSeverity.Error);
+        }
+    }
+
     private async void RefreshMeshButton_Click(object sender, RoutedEventArgs e)
         => await RefreshMeshAsync();
 
@@ -607,8 +801,9 @@ public sealed partial class MainPage : Page
 
     private async Task ChangeLinkAsync(bool enable)
     {
+        var useControl = _control.IsConfigured;
         var hub = FindHub();
-        if (hub is null)
+        if (!useControl && hub is null)
         {
             ShowInfo("Mesh Hub не выбран", "Сначала добавьте главный сервер с отметкой Mesh Hub.", InfoBarSeverity.Warning);
             return;
@@ -668,13 +863,49 @@ public sealed partial class MainPage : Page
 
         try
         {
+            if (useControl)
+            {
+                using var controlTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
+                LinkPolicy link;
+                if (enable)
+                {
+                    link = await _control.CreateLinkAsync(
+                        new LinkPolicyCreateRequest(
+                            source.Name,
+                            target.Name,
+                            protocol,
+                            port,
+                            ttlMinutes,
+                            "Windows client",
+                            Guid.NewGuid().ToString()),
+                        controlTimeout.Token);
+                }
+                else
+                {
+                    var selectedLink = (MeshLinkViewModel)MeshLinksList.SelectedItem;
+                    if (string.IsNullOrWhiteSpace(selectedLink.Id))
+                    {
+                        throw new InvalidOperationException("У выбранного Link отсутствует Control id.");
+                    }
+                    link = await _control.DisableLinkAsync(selectedLink.Id, controlTimeout.Token);
+                }
+                await RefreshMeshAsync(showSuccess: false);
+                ShowInfo(
+                    enable ? "Control Link создан" : "Control Link отключён",
+                    $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port} · {link.ActualState} v{link.Version}",
+                    link.ActualState is "Failed" or "Partial"
+                        ? InfoBarSeverity.Warning
+                        : InfoBarSeverity.Success);
+                return;
+            }
+
             var action = enable ? "connect" : "disconnect";
             var policyArguments = enable
                 ? $"{protocol} {port} {ttlMinutes}"
                 : $"{protocol} {port}";
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             var commandOutput = await _ssh.RunRestrictedCommandAsync(
-                hub.Profile,
+                hub!.Profile,
                 $"mesh {action} {source.Name} {target.Name} {policyArguments}",
                 timeout.Token);
             var confirmation = commandOutput

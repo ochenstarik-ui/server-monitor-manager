@@ -44,9 +44,12 @@
 
 - `install-control-hub` скачивает release-архив под amd64/arm64, проверяет SHA-256, создаёт локальный CA, HTTPS-сертификат Hub, SQLite-каталог и изолированный systemd service;
 - `control-code NAME` создаёт десятиминутный token и код `SMMCTL1`, содержащий URL Hub и только публичный CA;
+- `control-device-code DEVICE` создаёт отдельный код `SMMDEV1` для operator identity Windows-клиента;
 - `install-control-agent` проверяет CA, локально создаёт ключ и CSR, регистрирует сертификат и запускает исходящий mTLS Agent через systemd.
 
 Приватный ключ Control CA не включается в `SMMCTL1`, а приватный ключ Agent не покидает Node. По умолчанию Control Hub слушает TCP `7443`.
+
+Control service не получает общий доступ к root helper. Отдельный root-owned wrapper принимает только проверенные `link-connect` и `link-disconnect`; команды регистрации, удаления Node и произвольные аргументы ему недоступны.
 
 ## Команды жизненного цикла
 
@@ -59,6 +62,7 @@ install-node
 install-control-hub
 install-control-agent
 control-code NAME
+control-device-code DEVICE
 status
 update
 rollback

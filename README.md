@@ -124,7 +124,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 The current development branch implements Windows SSH monitoring, the Hub/Node WireGuard installer, directional Links, one-time enrollment, separate mTLS Agent, Operator, and source-scoped Automation identities, certificate revocation/re-enrollment, SQLite control state, audit, authenticated event streaming, Windows Control API integration, and a bounded durable Agent buffer with downsampling.
 
-Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Linux CI exercises the real Control-to-helper process boundary, including a helper failure and Control process reconstruction over the same SQLite database. Still planned: end-to-end nftables and host-reboot tests with the installer, a 50–100 Node load test, signed Windows installer, and desktop/mobile clients for additional platforms.
+Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Linux CI exercises the real Control-to-helper process boundary, including a helper failure and Control process reconstruction over the same SQLite database. CI also runs a 100-Node concurrent heartbeat and replay scenario against one Hub store. Still planned: end-to-end nftables and host-reboot tests with the installer, a signed Windows installer, and desktop/mobile clients for additional platforms.
 
 ## License and project policy
 

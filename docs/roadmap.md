@@ -77,7 +77,7 @@
 - [x] защищённый Hub event stream для desktop client;
 - [x] ограниченный локальный буфер и downsampling;
 - [x] idempotency key и защита от replay;
-- [ ] тест нагрузки 50–100 Node на одном Hub.
+- [x] тест нагрузки 100 Node на одном Hub (конкурентные heartbeat, inventory и replay в CI).
 
 ## Этап 7 — релиз и другие платформы
 

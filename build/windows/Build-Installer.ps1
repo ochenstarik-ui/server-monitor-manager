@@ -35,7 +35,7 @@ try {
         throw "The certificate subject must match Package.appxmanifest Publisher=CN=AppPublisher; actual: $($signingCertificate.Subject)"
     }
 
-    dotnet restore $project -r win-x64 -p:Platform=x64
+    dotnet restore $project -r win-x64 -p:Platform=x64 -p:PublishReadyToRun=false
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed' }
 
     dotnet publish $project `
@@ -43,6 +43,7 @@ try {
         --runtime win-x64 `
         --no-restore `
         -p:Platform=x64 `
+        -p:PublishReadyToRun=false `
         -p:GenerateAppxPackageOnBuild=true `
         -p:AppxPackageSigningEnabled=true `
         -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint) `

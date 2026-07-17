@@ -31,6 +31,7 @@ jobs:
           $directory = Join-Path $env:RUNNER_TEMP 'smm-signing'
           New-Item -ItemType Directory -Path $directory -Force | Out-Null
           if ($env:SIGNING_CERTIFICATE_BASE64 -and $env:SIGNING_CERTIFICATE_PASSWORD) {
+            Write-Output "::add-mask::$env:SIGNING_CERTIFICATE_PASSWORD"
             $pfx = Join-Path $directory 'trusted-signing.pfx'
             [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
             "certificate=$pfx" >> $env:GITHUB_OUTPUT
@@ -38,6 +39,7 @@ jobs:
             "test_certificate=false" >> $env:GITHUB_OUTPUT
           } else {
             $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+            Write-Output "::add-mask::$password"
             ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
             "certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.pfx')" >> $env:GITHUB_OUTPUT
             "public_certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.cer')" >> $env:GITHUB_OUTPUT

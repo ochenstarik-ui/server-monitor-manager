@@ -32,9 +32,10 @@ jobs:
       - name: Build test-signed MSIX installer
         shell: pwsh
         run: |
-          $directory = Join-Path $env:RUNNER_TEMP 'smm-test-signing'
-          $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
-          ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
+            $directory = Join-Path $env:RUNNER_TEMP 'smm-test-signing'
+            $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+            Write-Output "::add-mask::$password"
+            ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
           ./build/windows/Build-Installer.ps1 `
             -CertificatePath (Join-Path $directory 'server-monitor-manager-test-signing.pfx') `
             -CertificatePassword $password

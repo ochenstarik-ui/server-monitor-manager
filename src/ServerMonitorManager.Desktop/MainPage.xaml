@@ -61,6 +61,7 @@
                         Text="SSH monitoring · серверы ещё не добавлены" />
                 </StackPanel>
                 <CommandBar
+                    x:Name="OverviewCommandBar"
                     Grid.Column="1"
                     Background="Transparent"
                     DefaultLabelPosition="Right">
@@ -425,22 +426,11 @@
                 </Grid>
             </ScrollViewer>
 
-            <StackPanel
-                x:Name="NavigationPlaceholder"
+            <ContentPresenter
+                x:Name="NavigationPageHost"
                 Grid.Row="3"
-                Margin="0,36,0,0"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Top"
-                MaxWidth="560"
-                Spacing="12"
-                Visibility="Collapsed">
-                <TextBlock x:Name="PlaceholderTitle" HorizontalAlignment="Center" Style="{StaticResource TitleTextBlockStyle}" />
-                <TextBlock
-                    x:Name="PlaceholderDescription"
-                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                    TextAlignment="Center"
-                    TextWrapping="Wrap" />
-            </StackPanel>
+                Margin="0,20,0,0"
+                Visibility="Collapsed" />
         </Grid>
     </NavigationView>
 </Page>

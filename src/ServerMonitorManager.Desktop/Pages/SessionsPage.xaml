@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<Page
+    x:Class="ServerMonitorManager_Desktop.SessionsPage"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:ServerMonitorManager_Desktop">
+
+    <Grid RowSpacing="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Spacing="3">
+                <TextBlock Style="{StaticResource TitleTextBlockStyle}" Text="SSH-сессии" />
+                <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Прямые интерактивные подключения через системный OpenSSH" />
+            </StackPanel>
+            <CommandBar Grid.Column="1" Background="Transparent" DefaultLabelPosition="Right">
+                <AppBarButton AutomationProperties.Name="Открыть SSH-терминал для выбранного сервера" Click="OpenTerminalButton_Click" Icon="OpenFile" Label="Открыть терминал" />
+            </CommandBar>
+        </Grid>
+        <InfoBar
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="True"
+            Message="Интерактивный терминал использует ваши обычные SSH-ключи. Ограниченный ключ мониторинга, Operator-сертификат и Automation identity в терминал не передаются."
+            Severity="Informational"
+            Title="Разделение полномочий" />
+        <ListView
+            x:Name="SessionTargetsList"
+            Grid.Row="2"
+            AutomationProperties.Name="Серверы для SSH-сессии"
+            ItemsSource="{x:Bind Servers}"
+            SelectionMode="Single">
+            <ListView.ItemTemplate>
+                <DataTemplate x:DataType="local:ServerViewModel">
+                    <Grid MinHeight="68" ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="2*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock FontWeight="SemiBold" Text="{x:Bind Name}" />
+                            <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Endpoint}" />
+                        </StackPanel>
+                        <TextBlock Grid.Column="1" VerticalAlignment="Center" Text="{x:Bind Status, Mode=OneWay}" />
+                        <FontIcon Grid.Column="2" VerticalAlignment="Center" Glyph="&#xE756;" />
+                    </Grid>
+                </DataTemplate>
+            </ListView.ItemTemplate>
+        </ListView>
+    </Grid>
+</Page>

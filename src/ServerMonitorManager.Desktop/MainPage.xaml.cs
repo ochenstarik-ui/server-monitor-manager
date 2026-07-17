@@ -22,6 +22,10 @@ public sealed partial class MainPage : Page
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
     private readonly CancellationTokenSource _controlCancellation = new();
+    private ServersPage? _serversPage;
+    private LinksPage? _linksPage;
+    private SessionsPage? _sessionsPage;
+    private SettingsPage? _settingsPage;
     private bool _loaded;
     private bool _controlListening;
 
@@ -37,6 +41,62 @@ public sealed partial class MainPage : Page
     public ObservableCollection<ServerViewModel> Servers { get; } = [];
     public ObservableCollection<MeshNodeViewModel> MeshNodes { get; } = [];
     public ObservableCollection<MeshLinkViewModel> MeshLinks { get; } = [];
+
+    internal bool IsControlConfigured => _control.IsConfigured;
+
+    internal void AddServerFromPage() => AddServerButton_Click(this, new RoutedEventArgs());
+
+    internal void EditServerFromPage(ServerViewModel? server)
+    {
+        ServerList.SelectedItem = server;
+        EditServerButton_Click(this, new RoutedEventArgs());
+    }
+
+    internal void DeleteServerFromPage(ServerViewModel? server)
+    {
+        ServerList.SelectedItem = server;
+        DeleteServerButton_Click(this, new RoutedEventArgs());
+    }
+
+    internal void OpenTerminalFromPage(ServerViewModel? server)
+    {
+        ServerList.SelectedItem = server;
+        TerminalButton_Click(this, new RoutedEventArgs());
+    }
+
+    internal async Task RefreshServersFromPageAsync()
+        => await RefreshAllAsync();
+
+    internal async Task RefreshLinksFromPageAsync()
+        => await RefreshMeshAsync();
+
+    internal async Task ChangeLinkFromPageAsync(
+        MeshNodeViewModel? source,
+        MeshNodeViewModel? target,
+        string protocol,
+        int port,
+        int ttlMinutes,
+        bool enable)
+    {
+        SourceNodeBox.SelectedItem = source;
+        TargetNodeBox.SelectedItem = target;
+        LinkProtocolBox.SelectedIndex = string.Equals(protocol, "udp", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
+        LinkPortBox.Value = port;
+        LinkTtlBox.Value = ttlMinutes;
+        await ChangeLinkAsync(enable);
+    }
+
+    internal void ReenrollNodeFromPage(MeshNodeViewModel? source)
+    {
+        SourceNodeBox.SelectedItem = source;
+        ReenrollNodeButton_Click(this, new RoutedEventArgs());
+    }
+
+    internal void ShowSshKeyFromPage() => SshKeyButton_Click(this, new RoutedEventArgs());
+
+    internal void ConnectControlHubFromPage() => ControlHubButton_Click(this, new RoutedEventArgs());
+
+    internal void ExportDiagnosticsFromPage() => ExportDiagnosticsButton_Click(this, new RoutedEventArgs());
 
     private async void MainPage_Loaded(object sender, RoutedEventArgs e)
     {
@@ -1083,57 +1143,62 @@ public sealed partial class MainPage : Page
     {
         if (args.IsSettingsSelected)
         {
-            ShowPlaceholder(
-                "Настройки",
-                "Профили серверов хранятся локально. Настройки ключей, интервалов обновления и подтверждений будут добавляться здесь.");
+            _settingsPage ??= new SettingsPage(this);
+            ShowNavigationPage(_settingsPage);
             return;
         }
 
         var tag = (args.SelectedItem as NavigationViewItem)?.Tag?.ToString() ?? "overview";
-        NavigationPlaceholder.Visibility = Visibility.Collapsed;
-        OverviewSummary.Visibility = Visibility.Visible;
-        WorkspaceScroll.Visibility = Visibility.Visible;
-        ServerWorkspace.Visibility = tag is "overview" or "servers" ? Visibility.Visible : Visibility.Collapsed;
-        LinkInspector.Visibility = tag is "overview" or "links" ? Visibility.Visible : Visibility.Collapsed;
-        InspectorColumn.Width = tag == "overview" && ActualWidth >= 1080
-            ? new GridLength(360)
-            : new GridLength(0);
-
-        if (tag == "links")
+        switch (tag)
         {
-            Grid.SetRow(LinkInspector, 0);
-            Grid.SetColumn(LinkInspector, 0);
-            Grid.SetColumnSpan(LinkInspector, 2);
-        }
-        else
-        {
-            Grid.SetColumnSpan(LinkInspector, 1);
-            if (ActualWidth >= 1080)
-            {
-                Grid.SetRow(LinkInspector, 0);
-                Grid.SetColumn(LinkInspector, 1);
-            }
-            else
-            {
-                Grid.SetRow(LinkInspector, 1);
-                Grid.SetColumn(LinkInspector, 0);
-            }
-        }
-
-        if (tag == "sessions")
-        {
-            ShowPlaceholder(
-                "SSH-сессии",
-                "Интерактивные терминалы будут использовать отдельную identity и не получат ключ мониторинга или права Mesh Hub.");
+            case "servers":
+                _serversPage ??= new ServersPage(this);
+                ShowNavigationPage(_serversPage);
+                break;
+            case "links":
+                _linksPage ??= new LinksPage(this);
+                ShowNavigationPage(_linksPage);
+                break;
+            case "sessions":
+                _sessionsPage ??= new SessionsPage(this);
+                ShowNavigationPage(_sessionsPage);
+                break;
+            default:
+                ShowOverview();
+                break;
         }
     }
 
-    private void ShowPlaceholder(string title, string description)
+    private void ShowOverview()
     {
+        NavigationPageHost.Visibility = Visibility.Collapsed;
+        NavigationPageHost.Content = null;
+        OverviewCommandBar.Visibility = Visibility.Visible;
+        OverviewSummary.Visibility = Visibility.Visible;
+        WorkspaceScroll.Visibility = Visibility.Visible;
+        ServerWorkspace.Visibility = Visibility.Visible;
+        LinkInspector.Visibility = Visibility.Visible;
+        Grid.SetColumnSpan(LinkInspector, 1);
+        if (ActualWidth >= 1080)
+        {
+            Grid.SetRow(LinkInspector, 0);
+            Grid.SetColumn(LinkInspector, 1);
+            InspectorColumn.Width = new GridLength(360);
+        }
+        else
+        {
+            Grid.SetRow(LinkInspector, 1);
+            Grid.SetColumn(LinkInspector, 0);
+            InspectorColumn.Width = new GridLength(0);
+        }
+    }
+
+    private void ShowNavigationPage(Page page)
+    {
+        OverviewCommandBar.Visibility = Visibility.Collapsed;
         OverviewSummary.Visibility = Visibility.Collapsed;
         WorkspaceScroll.Visibility = Visibility.Collapsed;
-        PlaceholderTitle.Text = title;
-        PlaceholderDescription.Text = description;
-        NavigationPlaceholder.Visibility = Visibility.Visible;
+        NavigationPageHost.Content = page;
+        NavigationPageHost.Visibility = Visibility.Visible;
     }
 }

@@ -32,7 +32,7 @@
 - [x] явные зависимости `sudo`, `visudo` и `ping` для минимального Debian;
 - [x] безопасные `update` и `rollback` с root-only backup;
 - [x] полный `uninstall-monitor`, `uninstall-node` и `uninstall-hub`;
-- [ ] интеграционный тест повторной установки и reboot.
+- [x] интеграционный тест повторной установки и reboot.
 
 ## Этап 3 — безопасная регистрация
 
@@ -55,7 +55,7 @@
 - [x] обязательное отключение после reconnect;
 - [x] локальный append-only JSONL-аудит операций Link;
 - [x] интеграционные тесты Control kill switch, перезапуска процесса и частичного отказа helper;
-- [ ] end-to-end тесты nftables и реального reboot вместе с Linux-установщиком.
+- [x] end-to-end тесты nftables и реального reboot вместе с Linux-установщиком.
 
 ## Этап 5 — мониторинг и терминал
 
@@ -81,8 +81,8 @@
 
 ## Этап 7 — релиз и другие платформы
 
-- [ ] подписанный Windows installer и GitHub Release;
-- [ ] checksum Linux-установщика и бинарников;
+- [x] подписанный Windows installer и GitHub Release;
+- [x] checksum Linux-установщика и бинарников;
 - [ ] macOS и Linux desktop после стабилизации Core/API;
 - [ ] Android/iOS companion clients;
 - [ ] push-уведомления без административных секретов у push-провайдера.

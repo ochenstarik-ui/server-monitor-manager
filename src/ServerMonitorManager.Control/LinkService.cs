@@ -121,6 +121,72 @@ public sealed class LinkService(
         return new LinkReconciliationResult(reconciled, failed);
     }
 
+    public async Task<LinkExpirationResult> ExpireDueLinksAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken)
+    {
+        var disabled = 0;
+        var failed = 0;
+        var links = await store.ListExpiredLinksAsync(now, cancellationToken);
+        foreach (var candidate in links)
+        {
+            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
+            await gate.WaitAsync(cancellationToken);
+            try
+            {
+                var current = (await store.ListExpiredLinksAsync(now, cancellationToken))
+                    .SingleOrDefault(link => link.Id == candidate.Id);
+                if (current is null)
+                {
+                    continue;
+                }
+
+                if (current.DesiredState == "Active")
+                {
+                    var result = await DisableAsync(
+                        current.Id,
+                        new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+                        "system:ttl",
+                        cancellationToken);
+                    if (result?.ActualState == "Disabled")
+                    {
+                        disabled++;
+                    }
+                    else
+                    {
+                        failed++;
+                    }
+                    continue;
+                }
+
+                var retrying = await store.SetLinkActualStateAsync(
+                    current.Id, "Disconnecting", null, "system:ttl-retry", cancellationToken) ?? current;
+                Publish("link.disconnecting", retrying);
+                try
+                {
+                    await applier.ApplyDisconnectAsync(retrying, cancellationToken);
+                    var completed = await store.SetLinkActualStateAsync(
+                        retrying.Id, "Disabled", null, "system:ttl-retry", cancellationToken) ?? retrying;
+                    Publish("link.disabled", completed);
+                    disabled++;
+                }
+                catch (Exception exception) when (exception is not OperationCanceledException)
+                {
+                    var partial = await store.SetLinkActualStateAsync(
+                        retrying.Id, "Partial", CompactError(exception), "system:ttl-retry", cancellationToken)
+                        ?? retrying;
+                    Publish("link.partial", partial);
+                    failed++;
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+        return new LinkExpirationResult(disabled, failed);
+    }
+
     private void Publish(string type, LinkPolicy link)
         => events.Publish(
             type,
@@ -131,3 +197,5 @@ public sealed class LinkService(
         => exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "Policy application failed.";
 }
+
+public sealed record LinkExpirationResult(int Disabled, int Failed);

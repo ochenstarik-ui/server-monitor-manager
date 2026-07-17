@@ -38,16 +38,28 @@ builder.Services.AddOptions<ControlOptions>()
             && !string.IsNullOrWhiteSpace(options.CertificateAuthorityPath)
             && !string.IsNullOrWhiteSpace(options.HubHelperPath)
             && !string.IsNullOrWhiteSpace(options.PrivilegeEscalationPath)
+            && !string.IsNullOrWhiteSpace(options.BackupDirectory)
             && options.HeartbeatSeconds is >= 10 and <= 300
-            && options.MaxBufferedMetricAgeHours is >= 1 and <= 168,
-        "Control, helper, and privilege escalation paths are required; HeartbeatSeconds must be 10-300, and buffered metrics 1-168 hours.")
+            && options.MaxBufferedMetricAgeHours is >= 1 and <= 168
+            && options.MetricRetentionHours is >= 24 and <= 8760
+            && options.IdempotencyRetentionHours is >= 1 and <= 720
+            && options.AuditRetentionDays is >= 1 and <= 3650
+            && options.MaintenanceIntervalMinutes is >= 1 and <= 1440
+            && options.LinkExpirationPollSeconds is >= 1 and <= 300
+            && options.BackupIntervalHours is >= 1 and <= 720
+            && options.BackupRetentionCount is >= 1 and <= 100,
+        "Invalid Control paths, heartbeat, retention, maintenance, expiration, or backup settings.")
     .ValidateOnStart();
+builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ControlStore>();
 builder.Services.AddSingleton<CertificateAuthority>();
 builder.Services.AddSingleton<ControlEventBroker>();
 builder.Services.AddSingleton<ILinkPolicyApplier, LinkPolicyApplier>();
 builder.Services.AddSingleton<LinkService>();
 builder.Services.AddSingleton<CertificateLifecycleService>();
+builder.Services.AddSingleton<ControlBackupService>();
+builder.Services.AddHostedService<LinkExpirationBackgroundService>();
+builder.Services.AddHostedService<ControlMaintenanceBackgroundService>();
 builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
     .AddCertificate(options =>
     {
@@ -109,7 +121,21 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 var store = app.Services.GetRequiredService<ControlStore>();
+var backupService = app.Services.GetRequiredService<ControlBackupService>();
+if (args is ["backup-restore", var backupPath])
+{
+    await backupService.RestoreAsync(backupPath);
+    Console.WriteLine("Control backup restored. Start the service and verify /healthz.");
+    return 0;
+}
 await store.InitializeAsync();
+
+if (args is ["backup-create"])
+{
+    var createdBackupPath = await backupService.CreateAsync(DateTimeOffset.UtcNow);
+    Console.WriteLine(createdBackupPath);
+    return 0;
+}
 
 if (args is ["token-create", var nodeId])
 {

@@ -29,6 +29,10 @@ jobs:
       - name: Verify formatting
         run: dotnet format src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore
 
+      - name: Verify Windows desktop contracts
+        shell: pwsh
+        run: ./tests/windows/Test-DesktopContracts.ps1
+
       - name: Build test-signed MSIX installer
         shell: pwsh
         run: |

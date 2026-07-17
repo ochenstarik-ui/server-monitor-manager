@@ -26,21 +26,36 @@ internal static class LinuxMetrics
 
     private static double ReadLoadOne()
     {
-        var value = File.ReadAllText("/proc/loadavg").Split(' ', 2)[0];
-        return double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+        return ParseLoadOne(File.ReadAllText("/proc/loadavg"));
     }
 
     private static long ReadUptimeSeconds()
     {
-        var value = File.ReadAllText("/proc/uptime").Split(' ', 2)[0];
-        return (long)double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+        return ParseUptimeSeconds(File.ReadAllText("/proc/uptime"));
     }
 
     private static (long Total, long Available) ReadMemory()
     {
+        return ParseMemory(File.ReadLines("/proc/meminfo"));
+    }
+
+    internal static double ParseLoadOne(string contents)
+    {
+        var value = contents.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+        return double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    internal static long ParseUptimeSeconds(string contents)
+    {
+        var value = contents.Split(' ', 2, StringSplitOptions.RemoveEmptyEntries)[0];
+        return (long)double.Parse(value, System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    internal static (long Total, long Available) ParseMemory(IEnumerable<string> lines)
+    {
         long total = 0;
         long available = 0;
-        foreach (var line in File.ReadLines("/proc/meminfo"))
+        foreach (var line in lines)
         {
             var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 2)
@@ -56,14 +71,23 @@ internal static class LinuxMetrics
                 available = long.Parse(parts[1]) * 1024;
             }
         }
+        if (total <= 0 || available < 0 || available > total)
+        {
+            throw new InvalidDataException("/proc/meminfo does not contain valid memory totals.");
+        }
         return (total, available);
     }
 
     private static (long Receive, long Transmit) ReadNetwork()
     {
+        return ParseNetwork(File.ReadLines("/proc/net/dev"));
+    }
+
+    internal static (long Receive, long Transmit) ParseNetwork(IEnumerable<string> lines)
+    {
         long receive = 0;
         long transmit = 0;
-        foreach (var line in File.ReadLines("/proc/net/dev").Skip(2))
+        foreach (var line in lines.Skip(2))
         {
             var parts = line.Split([':', ' '], StringSplitOptions.RemoveEmptyEntries);
             if (parts.Length < 10 || parts[0] == "lo")

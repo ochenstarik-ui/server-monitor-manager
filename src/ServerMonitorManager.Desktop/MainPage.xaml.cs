@@ -73,6 +73,7 @@ public sealed partial class MainPage : Page
     internal async Task ChangeLinkFromPageAsync(
         MeshNodeViewModel? source,
         MeshNodeViewModel? target,
+        MeshLinkViewModel? selectedLink,
         string protocol,
         int port,
         int ttlMinutes,
@@ -83,6 +84,7 @@ public sealed partial class MainPage : Page
         LinkProtocolBox.SelectedIndex = string.Equals(protocol, "udp", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         LinkPortBox.Value = port;
         LinkTtlBox.Value = ttlMinutes;
+        MeshLinksList.SelectedItem = selectedLink;
         await ChangeLinkAsync(enable);
     }
 

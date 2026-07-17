@@ -103,6 +103,8 @@ dotnet build ServerMonitorManager.slnx --configuration Release
 dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release
 ```
 
+Windows CI also produces a test-signed x64 MSIX with a public test certificate and `SHA256SUMS`. See [Windows installer documentation](docs/windows-installer.md). Public releases use a trusted PFX when the signing secrets are configured; otherwise the artifact is explicitly test-signed.
+
 In the application, generate or copy the monitoring SSH key, add the Hub profile, mark it as the Mesh Hub, and use **Control Hub** to paste the `SMMDEV1` code. The Mesh view then reads inventory and Links from the authenticated Control API and receives live Link/heartbeat events.
 
 ## Security model

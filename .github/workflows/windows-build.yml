@@ -28,3 +28,26 @@ jobs:
 
       - name: Verify formatting
         run: dotnet format src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore
+
+      - name: Build test-signed MSIX installer
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'smm-test-signing'
+          $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+          ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
+          ./build/windows/Build-Installer.ps1 `
+            -CertificatePath (Join-Path $directory 'server-monitor-manager-test-signing.pfx') `
+            -CertificatePassword $password
+          Copy-Item `
+            -LiteralPath (Join-Path $directory 'server-monitor-manager-test-signing.cer') `
+            -Destination artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+
+      - name: Upload test installer
+        uses: actions/upload-artifact@v6
+        with:
+          name: ServerMonitorManager-win-x64-test
+          path: |
+            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
+            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+            artifacts/windows-installer/SHA256SUMS
+          if-no-files-found: error

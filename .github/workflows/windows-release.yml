@@ -1,0 +1,83 @@
+name: Windows installer release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+      SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Prepare signing certificate
+        id: signing
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'smm-signing'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          if ($env:SIGNING_CERTIFICATE_BASE64 -and $env:SIGNING_CERTIFICATE_PASSWORD) {
+            $pfx = Join-Path $directory 'trusted-signing.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
+            "certificate=$pfx" >> $env:GITHUB_OUTPUT
+            "password=$env:SIGNING_CERTIFICATE_PASSWORD" >> $env:GITHUB_OUTPUT
+            "test_certificate=false" >> $env:GITHUB_OUTPUT
+          } else {
+            $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+            ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
+            "certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.pfx')" >> $env:GITHUB_OUTPUT
+            "public_certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.cer')" >> $env:GITHUB_OUTPUT
+            "password=$password" >> $env:GITHUB_OUTPUT
+            "test_certificate=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build signed MSIX
+        shell: pwsh
+        run: ./build/windows/Build-Installer.ps1 -CertificatePath '${{ steps.signing.outputs.certificate }}' -CertificatePassword '${{ steps.signing.outputs.password }}'
+
+      - name: Include test certificate
+        if: steps.signing.outputs.test_certificate == 'true'
+        shell: pwsh
+        run: Copy-Item -LiteralPath '${{ steps.signing.outputs.public_certificate }}' -Destination artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+
+      - name: Verify checksum
+        shell: pwsh
+        run: |
+          $line = Get-Content artifacts/windows-installer/SHA256SUMS
+          $expected = ($line -split ' ')[0]
+          $actual = (Get-FileHash artifacts/windows-installer/ServerMonitorManager-win-x64.msix -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Windows installer checksum mismatch.' }
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: ServerMonitorManager-win-x64
+          path: |
+            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
+            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+            artifacts/windows-installer/SHA256SUMS
+          if-no-files-found: error
+
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
+            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+            artifacts/windows-installer/SHA256SUMS

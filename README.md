@@ -87,6 +87,8 @@ sudo ./ochenstarik-server-monitor-manager.sh install-control-agent
 
 The installer selects the `amd64` or `arm64` archive and verifies its SHA-256 checksum. The `SMMDEV1` code enrolls the Windows application: the app creates its operator key locally, confirms the Hub CA fingerprint, obtains a separate certificate, and protects it with Windows DPAPI.
 
+An Operator can issue a ten-minute Automation enrollment token for exactly one source Node through `POST /api/v1/control/automations/token` or the local `automation-token-create AUTOMATION_ID SOURCE_NODE_ID` command. The automation process creates its private key and CSR locally, enrolls through `/api/v1/automation-enroll`, and can then read only `/api/v1/automation/links`. Link mutations remain Operator-only.
+
 ## Windows client
 
 Requirements for building from source:
@@ -110,6 +112,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 - SSH monitoring uses a root-owned forced command without shell, PTY, or forwarding;
 - Agent certificates can only submit heartbeat data for their own Node;
 - Operator certificates are required for inventory, Links, and event streaming;
+- Automation certificates are bound to one source Node and can only read that source's effective Link grants; they cannot create, disable, or enumerate unrelated Links;
 - Link traffic is denied by default and allowed only by explicit nftables rules;
 - disabling a Link persists the desired state before the firewall rule is removed;
 - idempotency keys prevent a retry from repeating a policy side effect;
@@ -119,7 +122,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 `v0.1.0-alpha.4` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, Bash syntax checks, self-contained `linux-x64`/`linux-arm64` artifacts, and checksums are automated in GitHub Actions.
 
-The current development branch implements Windows SSH monitoring, the Hub/Node WireGuard installer, directional Links, one-time enrollment, mTLS Agent and Operator identities, certificate revocation/re-enrollment, SQLite control state, audit, authenticated event streaming, Windows Control API integration, and a bounded durable Agent buffer with downsampling.
+The current development branch implements Windows SSH monitoring, the Hub/Node WireGuard installer, directional Links, one-time enrollment, separate mTLS Agent, Operator, and source-scoped Automation identities, certificate revocation/re-enrollment, SQLite control state, audit, authenticated event streaming, Windows Control API integration, and a bounded durable Agent buffer with downsampling.
 
 Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Linux CI exercises the real Control-to-helper process boundary, including a helper failure and Control process reconstruction over the same SQLite database. Still planned: end-to-end nftables and host-reboot tests with the installer, a 50–100 Node load test, signed Windows installer, and desktop/mobile clients for additional platforms.
 

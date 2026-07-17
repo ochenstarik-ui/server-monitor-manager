@@ -67,6 +67,44 @@ public sealed record DeviceEnrollmentResponse(
     string CertificateAuthorityPem,
     DateTimeOffset ExpiresAt);
 
+public sealed record AutomationTokenCreateRequest(
+    string AutomationId,
+    string SourceNodeId,
+    string IdempotencyKey);
+
+public sealed record AutomationTokenResponse(
+    string AutomationId,
+    string SourceNodeId,
+    string Token,
+    DateTimeOffset ExpiresAt);
+
+public sealed record AutomationEnrollmentRequest(
+    string AutomationId,
+    string Token,
+    string CertificateSigningRequestPem,
+    string IdempotencyKey);
+
+public sealed record AutomationEnrollmentResponse(
+    string AutomationId,
+    string SourceNodeId,
+    string CertificatePem,
+    string CertificateAuthorityPem,
+    DateTimeOffset ExpiresAt);
+
+public sealed record AutomationScope(
+    string AutomationId,
+    string SourceNodeId,
+    DateTimeOffset ExpiresAt);
+
+public sealed record AutomationLinkGrant(
+    string TargetNodeId,
+    string Protocol,
+    int Port,
+    string DesiredState,
+    string ActualState,
+    long Version,
+    DateTimeOffset? ExpiresAt);
+
 public sealed record LinkPolicyCreateRequest(
     string SourceNodeId,
     string TargetNodeId,

@@ -241,6 +241,67 @@ public sealed class ControlStoreTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task AutomationCertificateIsScopedToOneSourceAndTokenIsNotAudited()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "ai-agent", "AC11", cancellationToken);
+        await EnrollAgentAsync(store, "home", "AC22", cancellationToken);
+        var tokenRequest = new AutomationTokenCreateRequest(
+            "coding-agent", "ai-agent", Guid.NewGuid().ToString());
+
+        var token = await store.CreateAutomationTokenAsync(
+            tokenRequest, "windows-pc", TimeSpan.FromMinutes(10), cancellationToken);
+        var tokenReplay = await store.CreateAutomationTokenAsync(
+            tokenRequest, "windows-pc", TimeSpan.FromMinutes(10), cancellationToken);
+        Assert.Equal(token, tokenReplay);
+        Assert.Equal("ai-agent", token.SourceNodeId);
+
+        var enrollRequest = new AutomationEnrollmentRequest(
+            "coding-agent", token.Token, "csr", Guid.NewGuid().ToString());
+        var issued = new IssuedCertificate(
+            "automation-certificate", "ca", "AC33", DateTimeOffset.UtcNow.AddYears(1));
+        var enrolled = await store.EnrollAutomationAsync(
+            enrollRequest, () => issued, cancellationToken);
+        var enrollmentReplay = await store.EnrollAutomationAsync(
+            enrollRequest,
+            () => throw new InvalidOperationException("must use cache"),
+            cancellationToken);
+        var reusedToken = await store.EnrollAutomationAsync(
+            enrollRequest with { IdempotencyKey = Guid.NewGuid().ToString() },
+            () => issued,
+            cancellationToken);
+
+        Assert.NotNull(enrolled);
+        Assert.Equal(enrolled, enrollmentReplay);
+        Assert.Null(reusedToken);
+        Assert.Equal("ai-agent", enrolled.SourceNodeId);
+        Assert.Equal(
+            new ControlIdentity("coding-agent", "Automation", "ai-agent"),
+            await store.ResolveIdentityAsync("AC33", cancellationToken));
+        Assert.False(await store.IsCertificateForNodeAsync("AC33", "ai-agent", cancellationToken));
+
+        await using var connection = new SqliteConnection(
+            $"Data Source={Path.Combine(_directory, "control.db")}");
+        await connection.OpenAsync(cancellationToken);
+        var audit = connection.CreateCommand();
+        audit.CommandText = """
+            SELECT details_json FROM audit
+            WHERE action LIKE 'automation.%'
+            ORDER BY sequence;
+            """;
+        await using var reader = await audit.ExecuteReaderAsync(cancellationToken);
+        var automationAuditRecords = 0;
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            automationAuditRecords++;
+            Assert.DoesNotContain(token.Token, reader.GetString(0), StringComparison.Ordinal);
+        }
+        Assert.Equal(2, automationAuditRecords);
+    }
+
+    [Fact]
     public async Task LinkDesiredStateIsPersistedBeforeActualStateChanges()
     {
         var cancellationToken = TestContext.Current.CancellationToken;

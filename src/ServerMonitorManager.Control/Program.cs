@@ -11,6 +11,8 @@ using Microsoft.Extensions.Options;
 using ServerMonitorManager.Control;
 using ServerMonitorManager.Core;
 
+const string AutomationSourceClaim = "smm:source_node_id";
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddProblemDetails();
 builder.Services.AddHealthChecks();
@@ -65,12 +67,16 @@ builder.Services.AddAuthentication(CertificateAuthenticationDefaults.Authenticat
                     return;
                 }
 
-                context.Principal = new ClaimsPrincipal(new ClaimsIdentity(
-                    [
-                        new Claim(ClaimTypes.NameIdentifier, identity.Id),
-                        new Claim(ClaimTypes.Role, identity.Role)
-                    ],
-                    context.Scheme.Name));
+                var claims = new List<Claim>
+                {
+                    new(ClaimTypes.NameIdentifier, identity.Id),
+                    new(ClaimTypes.Role, identity.Role)
+                };
+                if (identity.SourceNodeId is not null)
+                {
+                    claims.Add(new Claim(AutomationSourceClaim, identity.SourceNodeId));
+                }
+                context.Principal = new ClaimsPrincipal(new ClaimsIdentity(claims, context.Scheme.Name));
                 context.Success();
             }
         };
@@ -86,6 +92,7 @@ builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("Agent", policy => policy.RequireRole("Agent"));
     options.AddPolicy("Operator", policy => policy.RequireRole("Operator"));
+    options.AddPolicy("Automation", policy => policy.RequireRole("Automation"));
 });
 builder.WebHost.ConfigureKestrel(options =>
 {
@@ -125,6 +132,23 @@ if (args is ["device-token-create", var deviceId])
     }
 
     Console.WriteLine(await store.CreateDeviceEnrollmentTokenAsync(deviceId, TimeSpan.FromMinutes(10)));
+    return 0;
+}
+
+if (args is ["automation-token-create", var automationId, var sourceNodeId])
+{
+    if (!NodeIdValidator.IsValid(automationId) || !NodeIdValidator.IsValid(sourceNodeId))
+    {
+        Console.Error.WriteLine("Automation and source Node ids must contain 1-63 lowercase letters, digits, or hyphens.");
+        return 2;
+    }
+
+    var response = await store.CreateAutomationTokenAsync(
+        new AutomationTokenCreateRequest(
+            automationId, sourceNodeId, Guid.NewGuid().ToString()),
+        "hub-cli",
+        TimeSpan.FromMinutes(10));
+    Console.WriteLine(JsonSerializer.Serialize(response, SmmJsonContext.Default.AutomationTokenResponse));
     return 0;
 }
 
@@ -218,6 +242,49 @@ app.MapPost("/api/v1/device-enroll", async (
     }
 }).AllowAnonymous().RequireRateLimiting("enrollment");
 
+app.MapPost("/api/v1/automation-enroll", async (
+    AutomationEnrollmentRequest request,
+    ControlStore controlStore,
+    CertificateAuthority authority,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(request.AutomationId)
+        || string.IsNullOrWhiteSpace(request.Token)
+        || string.IsNullOrWhiteSpace(request.CertificateSigningRequestPem)
+        || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["request"] = ["Invalid automation enrollment request."]
+        });
+    }
+
+    try
+    {
+        var response = await controlStore.EnrollAutomationAsync(
+            request,
+            () => authority.IssueClientCertificate(
+                request.AutomationId, request.CertificateSigningRequestPem),
+            cancellationToken);
+        return response is null ? Results.Unauthorized() : Results.Ok(response);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails
+        {
+            Title = "Idempotency key conflict",
+            Status = StatusCodes.Status409Conflict
+        });
+    }
+    catch (Exception exception) when (exception is CryptographicException or InvalidOperationException)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["certificateSigningRequestPem"] = ["Invalid certificate signing request."]
+        });
+    }
+}).AllowAnonymous().RequireRateLimiting("enrollment");
+
 var agents = app.MapGroup("/api/v1/agents").RequireAuthorization("Agent");
 agents.MapPost("/heartbeat", async (
     AgentHeartbeat heartbeat,
@@ -288,6 +355,37 @@ agents.MapPost("/heartbeat", async (
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
+control.MapPost("/automations/token", async (
+    AutomationTokenCreateRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(request.AutomationId)
+        || !NodeIdValidator.IsValid(request.SourceNodeId)
+        || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["automation"] = ["Invalid automation id, source Node id, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        return Results.Ok(await controlStore.CreateAutomationTokenAsync(
+            request, actor, TimeSpan.FromMinutes(10), cancellationToken));
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.BadRequest(new ProblemDetails { Title = exception.Message });
+    }
+});
 control.MapPost("/agents/{nodeId}/reenroll", async (
     string nodeId,
     CertificateReenrollmentRequest request,
@@ -422,6 +520,32 @@ control.MapGet("/events", async (HttpContext context, ControlEventBroker broker)
         await context.Response.WriteAsync("\n", context.RequestAborted);
         await context.Response.Body.FlushAsync(context.RequestAborted);
     }
+});
+
+var automation = app.MapGroup("/api/v1/automation").RequireAuthorization("Automation");
+automation.MapGet("/links", async (
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var sourceNodeId = context.User.FindFirstValue(AutomationSourceClaim);
+    if (string.IsNullOrWhiteSpace(sourceNodeId))
+    {
+        return Results.Forbid();
+    }
+
+    var grants = (await controlStore.ListEffectiveLinksForNodeAsync(sourceNodeId, cancellationToken))
+        .Where(link => string.Equals(link.SourceNodeId, sourceNodeId, StringComparison.Ordinal))
+        .Select(link => new AutomationLinkGrant(
+            link.TargetNodeId,
+            link.Protocol,
+            link.Port,
+            link.DesiredState,
+            link.ActualState,
+            link.Version,
+            link.ExpiresAt))
+        .ToArray();
+    return Results.Ok(grants);
 });
 
 await app.RunAsync();

@@ -54,6 +54,20 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
                 status TEXT NOT NULL,
                 last_seen_at TEXT NULL
             );
+            CREATE TABLE IF NOT EXISTS automation_tokens (
+                token_hash TEXT PRIMARY KEY,
+                automation_id TEXT NOT NULL,
+                source_node_id TEXT NOT NULL REFERENCES agents(node_id),
+                expires_at TEXT NOT NULL,
+                consumed_at TEXT NULL
+            );
+            CREATE TABLE IF NOT EXISTS automations (
+                automation_id TEXT PRIMARY KEY,
+                source_node_id TEXT NOT NULL REFERENCES agents(node_id),
+                certificate_thumbprint TEXT NOT NULL UNIQUE,
+                certificate_expires_at TEXT NOT NULL,
+                status TEXT NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS metric_samples (
                 sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                 node_id TEXT NOT NULL REFERENCES agents(node_id) ON DELETE CASCADE,
@@ -144,6 +158,81 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         return token;
     }
 
+    public async Task<AutomationTokenResponse> CreateAutomationTokenAsync(
+        AutomationTokenCreateRequest request,
+        string actor,
+        TimeSpan lifetime,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"automation-token:{actor}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.AutomationTokenCreateRequest);
+        var cached = await ReadIdempotentAsync<AutomationTokenResponse>(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            SmmJsonContext.Default.AutomationTokenResponse,
+            cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var source = connection.CreateCommand();
+        source.Transaction = transaction;
+        source.CommandText = """
+            SELECT EXISTS(
+                SELECT 1 FROM agents
+                WHERE node_id = $source AND status != 'Revoked');
+            """;
+        source.Parameters.AddWithValue("$source", request.SourceNodeId);
+        if (Convert.ToInt32(await source.ExecuteScalarAsync(cancellationToken)) != 1)
+        {
+            throw new InvalidOperationException("Automation source Node is not registered.");
+        }
+
+        var token = Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .TrimEnd('=').Replace('+', '-').Replace('/', '_');
+        var expiresAt = DateTimeOffset.UtcNow.Add(lifetime);
+        var insert = connection.CreateCommand();
+        insert.Transaction = transaction;
+        insert.CommandText = """
+            INSERT INTO automation_tokens(
+                token_hash, automation_id, source_node_id, expires_at)
+            VALUES ($hash, $automation, $source, $expires);
+            """;
+        insert.Parameters.AddWithValue("$hash", Hash(token));
+        insert.Parameters.AddWithValue("$automation", request.AutomationId);
+        insert.Parameters.AddWithValue("$source", request.SourceNodeId);
+        insert.Parameters.AddWithValue("$expires", expiresAt.ToString("O"));
+        await insert.ExecuteNonQueryAsync(cancellationToken);
+        var response = new AutomationTokenResponse(
+            request.AutomationId, request.SourceNodeId, token, expiresAt);
+        await WriteIdempotentAsync(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            response,
+            SmmJsonContext.Default.AutomationTokenResponse,
+            cancellationToken);
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            actor,
+            "automation.enrollment.requested",
+            request.AutomationId,
+            JsonSerializer.Serialize(
+                new AutomationScope(request.AutomationId, request.SourceNodeId, expiresAt),
+                SmmJsonContext.Default.AutomationScope),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return response;
+    }
+
     public async Task<DeviceEnrollmentResponse?> EnrollDeviceAsync(
         DeviceEnrollmentRequest request,
         Func<IssuedCertificate> issueCertificate,
@@ -214,6 +303,96 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             cancellationToken);
         await WriteAuditAsync(
             connection, transaction, request.DeviceId, "device.enroll", request.DeviceId, "{}", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return response;
+    }
+
+    public async Task<AutomationEnrollmentResponse?> EnrollAutomationAsync(
+        AutomationEnrollmentRequest request,
+        Func<IssuedCertificate> issueCertificate,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"automation-enroll:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.AutomationEnrollmentRequest);
+        var cached = await ReadIdempotentAsync<AutomationEnrollmentResponse>(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            SmmJsonContext.Default.AutomationEnrollmentResponse,
+            cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var now = DateTimeOffset.UtcNow.ToString("O");
+        var consume = connection.CreateCommand();
+        consume.Transaction = transaction;
+        consume.CommandText = """
+            UPDATE automation_tokens
+            SET consumed_at = $now
+            WHERE token_hash = $hash
+              AND automation_id = $automation
+              AND consumed_at IS NULL
+              AND expires_at >= $now
+            RETURNING source_node_id;
+            """;
+        consume.Parameters.AddWithValue("$now", now);
+        consume.Parameters.AddWithValue("$hash", Hash(request.Token));
+        consume.Parameters.AddWithValue("$automation", request.AutomationId);
+        var sourceNodeId = await consume.ExecuteScalarAsync(cancellationToken) as string;
+        if (sourceNodeId is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+
+        var issued = issueCertificate();
+        var response = new AutomationEnrollmentResponse(
+            request.AutomationId,
+            sourceNodeId,
+            issued.CertificatePem,
+            issued.CertificateAuthorityPem,
+            issued.ExpiresAt);
+        var upsert = connection.CreateCommand();
+        upsert.Transaction = transaction;
+        upsert.CommandText = """
+            INSERT INTO automations(
+                automation_id, source_node_id, certificate_thumbprint, certificate_expires_at, status)
+            VALUES ($automation, $source, $thumbprint, $expires, 'Active')
+            ON CONFLICT(automation_id) DO UPDATE SET
+                source_node_id = excluded.source_node_id,
+                certificate_thumbprint = excluded.certificate_thumbprint,
+                certificate_expires_at = excluded.certificate_expires_at,
+                status = 'Active';
+            """;
+        upsert.Parameters.AddWithValue("$automation", request.AutomationId);
+        upsert.Parameters.AddWithValue("$source", sourceNodeId);
+        upsert.Parameters.AddWithValue("$thumbprint", issued.Thumbprint);
+        upsert.Parameters.AddWithValue("$expires", issued.ExpiresAt.ToString("O"));
+        await upsert.ExecuteNonQueryAsync(cancellationToken);
+        await WriteIdempotentAsync(
+            connection,
+            transaction,
+            operationKey,
+            requestHash,
+            response,
+            SmmJsonContext.Default.AutomationEnrollmentResponse,
+            cancellationToken);
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            request.AutomationId,
+            "automation.enroll",
+            request.AutomationId,
+            JsonSerializer.Serialize(
+                new AutomationScope(request.AutomationId, sourceNodeId, issued.ExpiresAt),
+                SmmJsonContext.Default.AutomationScope),
+            cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return response;
     }
@@ -306,12 +485,17 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         await using var connection = await OpenAsync(cancellationToken);
         var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT node_id, 'Agent' FROM agents
+            SELECT node_id, 'Agent', NULL FROM agents
             WHERE certificate_thumbprint = $thumbprint
               AND certificate_expires_at > $now
               AND status != 'Revoked'
             UNION ALL
-            SELECT device_id, 'Operator' FROM devices
+            SELECT device_id, 'Operator', NULL FROM devices
+            WHERE certificate_thumbprint = $thumbprint
+              AND certificate_expires_at > $now
+              AND status != 'Revoked'
+            UNION ALL
+            SELECT automation_id, 'Automation', source_node_id FROM automations
             WHERE certificate_thumbprint = $thumbprint
               AND certificate_expires_at > $now
               AND status != 'Revoked'
@@ -321,7 +505,10 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue("$now", DateTimeOffset.UtcNow.ToString("O"));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         return await reader.ReadAsync(cancellationToken)
-            ? new ControlIdentity(reader.GetString(0), reader.GetString(1))
+            ? new ControlIdentity(
+                reader.GetString(0),
+                reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2))
             : null;
     }
 
@@ -1138,7 +1325,7 @@ public sealed class IdempotencyConflictException : Exception
     }
 }
 
-public sealed record ControlIdentity(string Id, string Role);
+public sealed record ControlIdentity(string Id, string Role, string? SourceNodeId = null);
 
 public sealed record LinkMutation(LinkPolicy Link, bool IsReplay);
 

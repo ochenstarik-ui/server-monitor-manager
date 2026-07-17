@@ -33,7 +33,7 @@ Windows-клиент использует отдельный Ed25519-ключ т
 
 Windows-клиент получает отдельный код `SMMDEV1`, показывает URL и SHA-256 fingerprint Control CA и продолжает регистрацию только после явного подтверждения пользователя. Приватный operator key создаётся локально, хранится в DPAPI current-user scope и не используется как SSH monitoring, terminal или Agent identity.
 
-Сертификат `Agent` разрешает только heartbeat собственного `node_id`. Только сертификат с ролью `Operator` может читать общий inventory, изменять Links и подписываться на event stream. Control service вызывает от root только отдельный wrapper с командами `link-connect` и `link-disconnect`; другие Hub-команды через него запрещены.
+Сертификат `Agent` разрешает только heartbeat собственного `node_id`. Только сертификат с ролью `Operator` может читать общий inventory, изменять Links и подписываться на event stream. Сертификат `Automation` выдаётся по отдельному одноразовому token, привязан к одному source Node и разрешает только чтение его эффективных Link-grants без `reason`, общего inventory и чужих Links. Control service вызывает от root только отдельный wrapper с командами `link-connect` и `link-disconnect`; другие Hub-команды через него запрещены.
 
 При перерегистрации Node Control Hub в одной SQLite-транзакции помечает старый сертификат `Revoked`, погашает ранее выданные enrollment tokens и переводит все связанные Links в желаемое состояние `Disabled`. Только после этого ограниченный firewall wrapper удаляет фактические правила. Новый token живёт 10 минут, а повтор запроса с тем же idempotency key не создаёт второй token и не повторяет firewall-операции. Windows-клиент требует отдельного подтверждения и не публикует token в event stream или аудит.
 

@@ -133,6 +133,56 @@ public sealed class ControlApiTests : IAsyncDisposable
             cancellationToken);
         Assert.NotNull(job);
         Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, job.State);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/confirm",
+            new { reason = "Too early", idempotencyKey = Guid.NewGuid().ToString() },
+            cancellationToken)).StatusCode);
+
+        using var agent = _factory.CreateClient();
+        agent.DefaultRequestHeaders.Add("X-Test-Identity", "home");
+        agent.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        var claimed = await agent.GetFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken);
+        Assert.Equal(job.Id, claimed!.Id);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Preflight, claimed.State);
+        var expectedPackages = ServerMonitorManager.Core.SystemBaseInstallCatalogDefinition
+            .ExpandGroups(["core", "development"]);
+        Assert.Equal(HttpStatusCode.OK, (await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/base-install-plan",
+            new
+            {
+                plan = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packages = expectedPackages,
+                    swapMode = "automatic",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = true,
+                    rebootPolicy = "never",
+                    warnings = Array.Empty<string>()
+                },
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken)).StatusCode);
+        var storedPlan = await client.GetFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningBaseInstallPlanRecord>(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/plan", cancellationToken);
+        Assert.Equal(expectedPackages, storedPlan!.Plan.Packages);
+        var confirmResponse = await client.PostAsJsonAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/confirm",
+            new { reason = "Reviewed generated plan", idempotencyKey = Guid.NewGuid().ToString() },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        var confirmed = await confirmResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningJob>(cancellationToken);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, confirmed!.State);
+        Assert.Equal("confirmed-queued", confirmed.CurrentStep);
+        Assert.Equal(HttpStatusCode.NoContent, (await agent.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
             "/api/v1/control/agents/home/provisioning/jobs",
             new

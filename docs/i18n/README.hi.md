@@ -20,7 +20,7 @@ Server Monitor Manager एक हल्का, Windows-first अनुप्र�
 Windows client mTLS/HTTPS से ASP.NET Core 10 और SQLite Control Hub से जुड़ता है। Linux Agent केवल outbound session बनाता है। WireGuard data ले जाता है और Hub का nftables default रूप से transit रोकता है। Link केवल एक दिशा खोलता है; NAT के पीछे Home server को public IP नहीं चाहिए।
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# पहले release files से ochenstarik-server-monitor-manager.sh डाउनलोड करें।
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

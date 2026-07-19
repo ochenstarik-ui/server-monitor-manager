@@ -23,10 +23,10 @@ Control plane хранит inventory, метрики, политики, исто
 
 ## Быстрая установка
 
-Установщик находится в [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server):
+Установщик публикуется в [релизах Server Monitor Manager](https://github.com/ochenstarik-ui/server-monitor-manager/releases):
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# Сначала скачайте ochenstarik-server-monitor-manager.sh из файлов релиза.
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

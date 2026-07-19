@@ -1,6 +1,6 @@
 # Контракт Linux-установщика
 
-Единственный исходный файл `ochenstarik-server-monitor-manager.sh` хранится в `ochenstarik-ui/lightweight-server`. В репозитории desktop client не должна находиться устаревающая копия.
+Этот документ определяет контракт Linux-установщика `ochenstarik-server-monitor-manager.sh`. Публикуемая версия установщика должна соответствовать релизу Server Monitor Manager и этому контракту.
 
 ## Поддерживаемые роли
 

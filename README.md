@@ -55,14 +55,14 @@ tests/                              Control-plane tests
 docs/                               Architecture, security, roadmap, translations
 ```
 
-The Linux installer is maintained in [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server) as `ochenstarik-server-monitor-manager.sh`. Release binaries are attached to [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases).
+Linux installation artifacts and release binaries are published with [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases).
 
 ## Quick start: Hub and two Nodes
 
 Use a fresh Debian or Ubuntu server with a public IP as the Hub. Download and inspect the installer before running it:
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# Download ochenstarik-server-monitor-manager.sh from the release assets first.
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

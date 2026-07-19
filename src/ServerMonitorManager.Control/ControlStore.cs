@@ -10,7 +10,7 @@ namespace ServerMonitorManager.Control;
 
 public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 7;
+    private const int CurrentSchemaVersion = 8;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -271,6 +271,25 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
                 PRAGMA user_version = 7;
                 """;
             await addPreflightDesiredState.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 8)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addBaseInstallPlans = connection.CreateCommand();
+            addBaseInstallPlans.Transaction = migration;
+            addBaseInstallPlans.CommandText = """
+                CREATE TABLE IF NOT EXISTS provisioning_base_install_plans (
+                    job_id TEXT PRIMARY KEY REFERENCES provisioning_jobs(id) ON DELETE CASCADE,
+                    schema_version INTEGER NOT NULL,
+                    plan_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                PRAGMA user_version = 8;
+                """;
+            await addBaseInstallPlans.ExecuteNonQueryAsync(cancellationToken);
             await migration.CommitAsync(cancellationToken);
         }
     }

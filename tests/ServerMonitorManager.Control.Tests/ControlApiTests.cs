@@ -132,7 +132,7 @@ public sealed class ControlApiTests : IAsyncDisposable
         var job = await response.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
             cancellationToken);
         Assert.NotNull(job);
-        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.AwaitingConfirmation, job.State);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, job.State);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
             "/api/v1/control/agents/home/provisioning/jobs",
             new

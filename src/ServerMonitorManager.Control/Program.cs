@@ -460,6 +460,44 @@ agents.MapPost("/provisioning/jobs/{id}/preflight-facts", async (
         return Results.Conflict(new ProblemDetails { Title = exception.Message });
     }
 });
+agents.MapPost("/provisioning/jobs/{id}/base-install-plan", async (
+    string id,
+    SystemBaseInstallPlanReportRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["baseInstallPlan"] = ["Invalid job id, plan, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var plan = await controlStore.RecordBaseInstallPlanAsync(
+            nodeId, id, request, cancellationToken);
+        return plan is null ? Results.NotFound() : Results.Ok(plan);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+    catch (ProvisioningPlanValidationException exception)
+    {
+        return Results.BadRequest(new ProblemDetails { Title = exception.Message });
+    }
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
@@ -580,6 +618,21 @@ control.MapGet("/provisioning/jobs/{id}", async (
     }
     var job = await controlStore.GetProvisioningJobAsync(id, cancellationToken);
     return job is null ? Results.NotFound() : Results.Ok(job);
+});
+control.MapGet("/provisioning/jobs/{id}/plan", async (
+    string id,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["baseInstallPlan"] = ["Invalid provisioning job id."]
+        });
+    }
+    var plan = await controlStore.GetBaseInstallPlanAsync(id, cancellationToken);
+    return plan is null ? Results.NotFound() : Results.Ok(plan);
 });
 control.MapGet("/provisioning/jobs/{id}/events", async (
     string id,
@@ -995,6 +1048,12 @@ internal static class ProvisioningJobValidator
            && IsSafeFact(request.Facts.OperatingSystem, 32)
            && IsSafeFact(request.Facts.OperatingSystemVersion, 64)
            && request.Facts.Architecture is "x64" or "x86" or "arm" or "arm64"
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(SystemBaseInstallPlanReportRequest request)
+        => request.Plan is not null
+           && request.Plan.Packages is { Length: <= 64 }
+           && request.Plan.Warnings is { Length: <= 2 }
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 
     public static bool IsValidId(string id)

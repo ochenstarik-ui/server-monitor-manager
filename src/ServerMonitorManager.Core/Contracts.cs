@@ -272,6 +272,18 @@ public sealed record SystemBaseInstallPlan(
     string RebootPolicy,
     string[] Warnings);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SystemBaseInstallPlanReportRequest(
+    SystemBaseInstallPlan Plan,
+    string IdempotencyKey);
+
+public sealed record ProvisioningBaseInstallPlanRecord(
+    string JobId,
+    string NodeId,
+    int SchemaVersion,
+    SystemBaseInstallPlan Plan,
+    DateTimeOffset CreatedAt);
+
 public static class PreflightDriftStatuses
 {
     public const string NotConfigured = "NotConfigured";
@@ -374,6 +386,9 @@ public static class SystemBaseInstallCatalogDefinition
 
 public static class SystemBaseInstallSchema
 {
+    private static readonly HashSet<string> AllowedPlanWarnings =
+        new(["apt.missing", "timezone.missing"], StringComparer.Ordinal);
+
     public static bool TryParse(JsonElement json, out SystemBaseInstallParameters? parameters)
     {
         try
@@ -404,6 +419,27 @@ public static class SystemBaseInstallSchema
                : parameters.SwapSizeMiB is null)
            && parameters.VmSwappiness is >= 0 and <= 200
            && parameters.RebootPolicy == "never";
+
+    public static bool IsValidPlan(
+        SystemBaseInstallParameters parameters,
+        SystemBaseInstallPlan plan)
+        => plan is not null
+           && string.Equals(plan.Timezone, parameters.Timezone, StringComparison.Ordinal)
+           && string.Equals(plan.Locale, parameters.Locale, StringComparison.Ordinal)
+           && plan.AptUpdate == parameters.AptUpdate
+           && plan.AptUpgrade == parameters.AptUpgrade
+           && plan.Packages is not null
+           && plan.Packages.SequenceEqual(
+               SystemBaseInstallCatalogDefinition.ExpandGroups(parameters.PackageGroupIds),
+               StringComparer.Ordinal)
+           && string.Equals(plan.SwapMode, parameters.SwapMode, StringComparison.Ordinal)
+           && plan.SwapSizeMiB == parameters.SwapSizeMiB
+           && plan.VmSwappiness == parameters.VmSwappiness
+           && plan.EnableUnattendedUpgrades == parameters.EnableUnattendedUpgrades
+           && string.Equals(plan.RebootPolicy, parameters.RebootPolicy, StringComparison.Ordinal)
+           && plan.Warnings is { Length: <= 2 }
+           && plan.Warnings.Distinct(StringComparer.Ordinal).Count() == plan.Warnings.Length
+           && plan.Warnings.All(AllowedPlanWarnings.Contains);
 
     private static bool IsSafeTimezone(string? value)
         => value is { Length: >= 1 and <= 64 }

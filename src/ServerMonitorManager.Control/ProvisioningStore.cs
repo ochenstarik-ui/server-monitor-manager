@@ -42,9 +42,7 @@ public sealed partial class ControlStore
             request.ActionType,
             request.SchemaVersion,
             request.Parameters.Clone(),
-            confirmationRequired
-                ? ProvisioningJobStates.AwaitingConfirmation
-                : ProvisioningJobStates.Queued,
+            ProvisioningJobStates.Queued,
             confirmationRequired,
             request.AuditReason,
             actor,
@@ -119,12 +117,14 @@ public sealed partial class ControlStore
             WHERE id = (
                 SELECT id FROM provisioning_jobs
                 WHERE node_id = $node
-                  AND (state = $queued
+                  AND ((state = $queued
+                        AND (confirmation_required = 0 OR confirmed_at IS NULL))
                        OR (state = $rolling_back AND current_step = 'rollback-queued'))
                   AND expires_at > $now
                 ORDER BY CASE WHEN state = $rolling_back THEN 0 ELSE 1 END, created_at, id
                 LIMIT 1)
-              AND (state = $queued
+              AND ((state = $queued
+                    AND (confirmation_required = 0 OR confirmed_at IS NULL))
                    OR (state = $rolling_back AND current_step = 'rollback-queued'))
             RETURNING *;
             """;
@@ -512,6 +512,7 @@ public sealed partial class ControlStore
         var updated = current with
         {
             State = targetState,
+            CurrentStep = setConfirmedAt ? "confirmed-queued" : current.CurrentStep,
             UpdatedAt = now,
             ConfirmedAt = setConfirmedAt ? now : current.ConfirmedAt,
             CancelledAt = targetState == ProvisioningJobStates.Cancelled ? now : current.CancelledAt,
@@ -521,11 +522,12 @@ public sealed partial class ControlStore
         update.Transaction = transaction;
         update.CommandText = """
             UPDATE provisioning_jobs SET
-                state = $state, updated_at = $updated, confirmed_at = $confirmed,
+                state = $state, current_step = $step, updated_at = $updated, confirmed_at = $confirmed,
                 cancelled_at = $cancelled, version = $version
             WHERE id = $id AND version = $previous_version;
             """;
         AddProvisioningJobParameters(update, updated);
+        update.Parameters.AddWithValue("$step", updated.CurrentStep);
         update.Parameters.AddWithValue("$previous_version", current.Version);
         if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
         {

@@ -278,6 +278,7 @@ GET    /api/v1/nodes/{nodeId}/configuration
 POST   /api/v1/nodes/{nodeId}/provisioning/preflight
 POST   /api/v1/nodes/{nodeId}/provisioning/jobs
 GET    /api/v1/provisioning/jobs/{jobId}
+GET    /api/v1/provisioning/jobs/{jobId}/plan
 POST   /api/v1/provisioning/jobs/{jobId}/confirm
 POST   /api/v1/provisioning/jobs/{jobId}/cancel
 POST   /api/v1/provisioning/jobs/{jobId}/rollback

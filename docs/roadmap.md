@@ -90,12 +90,15 @@
 
 ## Этап 7 — собственный bootstrap Server Monitor Manager
 
-- [ ] добавить bootstrap source в этот репозиторий;
-- [ ] публиковать bootstrap, checksum и signed compatibility manifest в release;
-- [ ] поддержать Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
-- [ ] добавить non-interactive install/update/rollback/uninstall;
-- [ ] устанавливать Agent, restricted helper и systemd units;
-- [ ] локально создавать Node keys/CSR и погашать bootstrap enrollment;
+- [x] добавить bootstrap source в этот репозиторий;
+- [x] упаковывать bootstrap, checksum и compatibility manifest в release workflow;
+- [ ] добавить криптографическую подпись compatibility manifest для production release;
+- [x] проверять Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
+- [x] добавить non-interactive install/update/rollback/uninstall;
+- [x] устанавливать Control/Agent, restricted helper и systemd units;
+- [x] локально создавать Agent key/CSR, выполнять mTLS enrollment и не сохранять token;
+- [ ] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
+- [ ] реализовать nftables policy helper вместо временного deny-by-default helper;
 - [ ] добавить VM CI matrix, повторную установку и reboot;
 - [ ] добавить локальную emergency recovery command.
 

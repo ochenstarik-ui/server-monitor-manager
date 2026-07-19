@@ -204,6 +204,57 @@ public sealed record NodePreflightFacts(
     string SourceJobId,
     DateTimeOffset UpdatedAt);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PreflightDesiredRequirements(
+    bool RequireSystemd,
+    bool RequireSshd,
+    bool RequireNftables,
+    bool RequireWireGuard,
+    bool RequireApt,
+    string[] AllowedArchitectures);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record PreflightDesiredStateUpdateRequest(
+    int SchemaVersion,
+    PreflightDesiredRequirements Desired,
+    string AuditReason,
+    string IdempotencyKey);
+
+public sealed record NodePreflightDesiredState(
+    string NodeId,
+    int SchemaVersion,
+    PreflightDesiredRequirements Desired,
+    long Version,
+    string UpdatedBy,
+    string AuditReason,
+    DateTimeOffset UpdatedAt);
+
+public sealed record PreflightDriftAssessment(
+    string NodeId,
+    string Status,
+    string[] DriftCodes,
+    NodePreflightDesiredState? Desired,
+    NodePreflightFacts? Facts);
+
+public static class PreflightDriftStatuses
+{
+    public const string NotConfigured = "NotConfigured";
+    public const string Unknown = "Unknown";
+    public const string InSync = "InSync";
+    public const string Drifted = "Drifted";
+}
+
+public static class PreflightDriftCodes
+{
+    public const string FactsMissing = "facts.missing";
+    public const string SystemdMissing = "systemd.missing";
+    public const string SshdMissing = "sshd.missing";
+    public const string NftablesMissing = "nftables.missing";
+    public const string WireGuardMissing = "wireguard.missing";
+    public const string AptMissing = "apt.missing";
+    public const string ArchitectureUnsupported = "architecture.unsupported";
+}
+
 public sealed record ProvisioningJob(
     string Id,
     string NodeId,

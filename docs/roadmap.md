@@ -119,7 +119,7 @@
 - [x] restricted root helper через Unix socket (первый allowlisted action `preflight`);
 - [x] structured redacted events, bounded Operator history и progress;
 - [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
-- [ ] desired/factual configuration и drift (типизированные factual preflight facts уже сохраняются);
+- [ ] desired/factual configuration и drift (`preflight` завершён; остальные action type ещё не подключены);
 - [x] запрет параллельных активных заданий на одном Node (безопасный первый вариант).
 
 ## Этап 9 — базовая настройка и пользователи

@@ -479,6 +479,52 @@ control.MapGet("/agents/{nodeId}/facts/preflight", async (
     var facts = await controlStore.GetPreflightFactsAsync(nodeId, cancellationToken);
     return facts is null ? Results.NotFound() : Results.Ok(facts);
 });
+control.MapPut("/agents/{nodeId}/desired/preflight", async (
+    string nodeId,
+    PreflightDesiredStateUpdateRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId) || !PreflightDesiredStateValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["preflightDesiredState"] =
+                ["Invalid schema, requirements, architectures, audit reason, or idempotency key."]
+        });
+    }
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var desired = await controlStore.SetPreflightDesiredStateAsync(
+            nodeId, request, actor, cancellationToken);
+        return Results.Ok(desired);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningNodeNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+control.MapGet("/agents/{nodeId}/drift/preflight", async (
+    string nodeId,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["nodeId"] = ["Invalid node id."]
+        });
+    }
+    var assessment = await controlStore.AssessPreflightDriftAsync(nodeId, cancellationToken);
+    return assessment is null ? Results.NotFound() : Results.Ok(assessment);
+});
 control.MapPost("/agents/{nodeId}/provisioning/jobs", async (
     string nodeId,
     ProvisioningJobCreateRequest request,
@@ -954,4 +1000,20 @@ internal static class ProvisioningJobValidator
            && value.Length is >= 1 && value.Length <= maximumLength
            && value.All(character => char.IsAsciiLetterOrDigit(character)
                || character is '_' or '-' or '.');
+}
+
+internal static class PreflightDesiredStateValidator
+{
+    private static readonly HashSet<string> SupportedArchitectures =
+        new(["x64", "x86", "arm", "arm64"], StringComparer.Ordinal);
+
+    public static bool IsValid(PreflightDesiredStateUpdateRequest request)
+        => request.SchemaVersion == 1
+           && request.Desired is not null
+           && request.Desired.AllowedArchitectures is { Length: >= 1 and <= 4 }
+           && request.Desired.AllowedArchitectures.Distinct(StringComparer.Ordinal).Count()
+               == request.Desired.AllowedArchitectures.Length
+           && request.Desired.AllowedArchitectures.All(SupportedArchitectures.Contains)
+           && request.AuditReason is { Length: >= 1 and <= 256 }
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 }

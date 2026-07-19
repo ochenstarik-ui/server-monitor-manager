@@ -31,7 +31,7 @@ public sealed class ControlStoreTests : IAsyncDisposable
         await migrated.OpenAsync(TestContext.Current.CancellationToken);
         var version = migrated.CreateCommand();
         version.CommandText = "PRAGMA user_version;";
-        Assert.Equal(6L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        Assert.Equal(7L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
         var table = migrated.CreateCommand();
         table.CommandText = "SELECT COUNT(*) FROM pragma_table_info('provisioning_jobs');";
         Assert.Equal(18L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));

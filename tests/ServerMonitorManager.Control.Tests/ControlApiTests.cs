@@ -216,6 +216,77 @@ public sealed class ControlApiTests : IAsyncDisposable
             .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(cancellationToken);
         Assert.Equal(created.Id, stored!.SourceJobId);
 
+        var desiredRequest = new
+        {
+            schemaVersion = 1,
+            desired = new
+            {
+                requireSystemd = true,
+                requireSshd = true,
+                requireNftables = true,
+                requireWireGuard = true,
+                requireApt = true,
+                allowedArchitectures = new[] { "x64", "arm64" }
+            },
+            auditReason = "Detect missing host capabilities",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        using var desiredResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            desiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, desiredResponse.StatusCode);
+        var desired = await desiredResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(1, desired!.Version);
+        using var desiredReplayResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            desiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, desiredReplayResponse.StatusCode);
+        var desiredReplay = await desiredReplayResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(desired.UpdatedAt, desiredReplay!.UpdatedAt);
+
+        using var driftResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/drift/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, driftResponse.StatusCode);
+        var drift = await driftResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.PreflightDriftAssessment>(cancellationToken);
+        Assert.Equal("Drifted", drift!.Status);
+        Assert.Equal(["wireguard.missing"], drift.DriftCodes);
+
+        var synchronizedDesiredRequest = new
+        {
+            schemaVersion = 1,
+            desired = new
+            {
+                requireSystemd = true,
+                requireSshd = true,
+                requireNftables = true,
+                requireWireGuard = false,
+                requireApt = true,
+                allowedArchitectures = new[] { "x64", "arm64" }
+            },
+            auditReason = "Accept host without WireGuard tooling",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        using var synchronizedDesiredResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            synchronizedDesiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, synchronizedDesiredResponse.StatusCode);
+        var synchronizedDesired = await synchronizedDesiredResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(2, synchronizedDesired!.Version);
+        using var synchronizedDriftResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/drift/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, synchronizedDriftResponse.StatusCode);
+        var synchronizedDrift = await synchronizedDriftResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.PreflightDriftAssessment>(cancellationToken);
+        Assert.Equal("InSync", synchronizedDrift!.Status);
+        Assert.Empty(synchronizedDrift.DriftCodes);
+
         var progress = new
         {
             state = "Running",

@@ -2,6 +2,8 @@
 
 Подробные требования к собственному bootstrap, управляемой настройке Linux и Xray находятся в [ТЗ Provisioning и Xray VPN](provisioning-vpn-requirements.md). Все компоненты Server Monitor Manager разрабатываются, версионируются и выпускаются только в этом репозитории.
 
+Текущее автоматическое покрытие поддерживаемых Linux-платформ описано в [Linux platform matrix](linux-platform-matrix.md).
+
 ## Этап 0 — граница и базовая архитектура
 
 - [x] переименовать проект в Server Monitor Manager;
@@ -99,7 +101,9 @@
 - [x] локально создавать Agent key/CSR, выполнять mTLS enrollment и не сохранять token;
 - [x] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
 - [x] реализовать nftables policy helper вместо временного deny-by-default helper;
-- [ ] добавить VM CI matrix, повторную установку и reboot;
+- [x] добавить native Ubuntu 22.04/24.04 x64/arm64 VM CI и повторную установку;
+- [x] добавить Debian 12/13 x64/arm64 systemd-container restart matrix;
+- [ ] добавить полный reboot настоящих Debian VM;
 - [x] добавить локальную emergency recovery command для текущих Mesh/firewall-компонентов.
 
 ## Этап 8 — Provisioning control plane

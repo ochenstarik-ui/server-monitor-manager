@@ -21,9 +21,13 @@ jobs:
           bash -n deploy/ochenstarik-server-monitor-manager.sh
           bash -n deploy/ochenstarik-smm-policy-apply
           bash -n deploy/ochenstarik-smm-emergency
+          bash -n tests/bootstrap/run-native-systemd-smoke.sh
+          bash -n tests/bootstrap/run-systemd-container-smoke.sh
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
           shellcheck --severity=error deploy/ochenstarik-smm-emergency
+          shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
+          shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
           bash tests/bootstrap/test-bootstrap-contract.sh
 
       - name: Package bootstrap

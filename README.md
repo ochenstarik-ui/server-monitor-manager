@@ -42,6 +42,8 @@ The control plane and data plane are separated:
 
 See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), and [installer contract](docs/installer-contract.md).
 
+Operational procedures are documented in [Control backup and recovery](docs/control-backup.md) and the [three-server acceptance test](docs/three-server-acceptance.md).
+
 ## Repository layout
 
 ```text
@@ -126,7 +128,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; the Hub/Node WireGuard installer; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
 
-Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Linux CI exercises the real Control-to-helper process boundary, repeated installation and a systemd reboot, a real WireGuard data path with directional nftables policies, and a 100-Node concurrent heartbeat and replay scenario. The Windows release pipeline produces a signed MSIX and publishes its SHA-256 checksum. Still planned: trusted public code signing and desktop/mobile clients for additional platforms.
+Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Control also expires TTL Links through the firewall helper, prunes bounded operational data, versions its SQLite schema, and creates verified backups of SQLite state and the Control CA. Linux CI exercises the real Control-to-helper process boundary, repeated installation and a systemd reboot, a real WireGuard data path with directional nftables policies, HTTP authorization boundaries, and a 100-Node concurrent heartbeat and replay scenario. The Windows release pipeline produces a signed MSIX and publishes its SHA-256 checksum. Still planned: trusted public code signing and desktop/mobile clients for additional platforms.
 
 ## License and project policy
 

@@ -36,6 +36,7 @@ public sealed partial class LinksPage : Page
         await _host.ChangeLinkFromPageAsync(
             SourceNodeBox.SelectedItem as MeshNodeViewModel,
             TargetNodeBox.SelectedItem as MeshNodeViewModel,
+            LinksList.SelectedItem as MeshLinkViewModel,
             protocol,
             double.IsNaN(PortBox.Value) ? 0 : checked((int)PortBox.Value),
             double.IsNaN(TtlBox.Value) ? 0 : checked((int)TtlBox.Value),

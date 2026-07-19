@@ -10,6 +10,8 @@ namespace ServerMonitorManager.Control;
 
 public sealed class ControlStore(IOptions<ControlOptions> options)
 {
+    private const int CurrentSchemaVersion = 1;
+    private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
         DataSource = options.Value.DatabasePath,
@@ -22,6 +24,14 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         var path = new SqliteConnectionStringBuilder(_connectionString).DataSource;
         Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(path))!);
         await using var connection = await OpenAsync(cancellationToken);
+        var versionCommand = connection.CreateCommand();
+        versionCommand.CommandText = "PRAGMA user_version;";
+        var schemaVersion = Convert.ToInt32(await versionCommand.ExecuteScalarAsync(cancellationToken));
+        if (schemaVersion > CurrentSchemaVersion)
+        {
+            throw new InvalidOperationException(
+                $"Control database schema {schemaVersion} is newer than supported schema {CurrentSchemaVersion}.");
+        }
         var command = connection.CreateCommand();
         command.CommandText = """
             PRAGMA journal_mode = WAL;
@@ -114,8 +124,72 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             CREATE UNIQUE INDEX IF NOT EXISTS ux_links_active_policy
                 ON links(source_node_id, target_node_id, protocol, port)
                 WHERE desired_state = 'Active';
+            PRAGMA user_version = 1;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task<ControlMaintenanceResult> MaintainAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            DELETE FROM metric_samples WHERE recorded_at < $metric_cutoff;
+            SELECT changes();
+            DELETE FROM idempotency WHERE created_at < $idempotency_cutoff;
+            SELECT changes();
+            DELETE FROM audit WHERE recorded_at < $audit_cutoff;
+            SELECT changes();
+            DELETE FROM enrollment_tokens WHERE consumed_at IS NOT NULL OR expires_at < $now;
+            SELECT changes();
+            DELETE FROM device_tokens WHERE consumed_at IS NOT NULL OR expires_at < $now;
+            SELECT changes();
+            DELETE FROM automation_tokens WHERE consumed_at IS NOT NULL OR expires_at < $now;
+            SELECT changes();
+            """;
+        command.Parameters.AddWithValue(
+            "$metric_cutoff", now.AddHours(-_options.MetricRetentionHours).ToString("O"));
+        command.Parameters.AddWithValue(
+            "$idempotency_cutoff", now.AddHours(-_options.IdempotencyRetentionHours).ToString("O"));
+        command.Parameters.AddWithValue(
+            "$audit_cutoff", now.AddDays(-_options.AuditRetentionDays).ToString("O"));
+        command.Parameters.AddWithValue("$now", now.ToString("O"));
+        var deleted = new int[6];
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            for (var index = 0; index < deleted.Length; index++)
+            {
+                if (await reader.ReadAsync(cancellationToken))
+                {
+                    deleted[index] = reader.GetInt32(0);
+                }
+                await reader.NextResultAsync(cancellationToken);
+            }
+        }
+
+        var optimize = connection.CreateCommand();
+        optimize.CommandText = "PRAGMA optimize; PRAGMA wal_checkpoint(PASSIVE);";
+        await optimize.ExecuteNonQueryAsync(cancellationToken);
+        return new ControlMaintenanceResult(
+            deleted[0], deleted[1], deleted[2], deleted[3] + deleted[4] + deleted[5]);
+    }
+
+    public async Task BackupDatabaseAsync(string destinationPath, CancellationToken cancellationToken = default)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        Directory.CreateDirectory(Path.GetDirectoryName(Path.GetFullPath(destinationPath))!);
+        await using var source = await OpenAsync(cancellationToken);
+        await using var destination = new SqliteConnection(new SqliteConnectionStringBuilder
+        {
+            DataSource = destinationPath,
+            Mode = SqliteOpenMode.ReadWriteCreate,
+            Pooling = false
+        }.ToString());
+        await destination.OpenAsync(cancellationToken);
+        source.BackupDatabase(destination);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public async Task<string> CreateEnrollmentTokenAsync(
@@ -1073,6 +1147,30 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         await using var connection = await OpenAsync(cancellationToken);
         var command = connection.CreateCommand();
         command.CommandText = "SELECT * FROM links ORDER BY created_at DESC;";
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(ReadLink(reader));
+        }
+        return result;
+    }
+
+    public async Task<IReadOnlyList<LinkPolicy>> ListExpiredLinksAsync(
+        DateTimeOffset now,
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<LinkPolicy>();
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT * FROM links
+            WHERE expires_at IS NOT NULL
+              AND expires_at <= $now
+              AND (desired_state = 'Active'
+                   OR (desired_state = 'Disabled' AND actual_state IN ('Disconnecting', 'Partial')))
+            ORDER BY expires_at, version;
+            """;
+        command.Parameters.AddWithValue("$now", now.ToString("O"));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         while (await reader.ReadAsync(cancellationToken))
         {

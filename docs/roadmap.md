@@ -78,6 +78,10 @@
 - [x] ограниченный локальный буфер и downsampling;
 - [x] idempotency key и защита от replay;
 - [x] тест нагрузки 100 Node на одном Hub (конкурентные heartbeat, inventory и replay в CI).
+- [x] фоновое истечение TTL с подтверждением удаления firewall policy;
+- [x] retention метрик, replay и audit, версия SQLite schema, backup/restore Control DB и CA;
+- [x] HTTP integration tests, Linux Agent parser tests и Windows desktop contract tests;
+- [ ] выполнить acceptance test на физическом Hub и двух Node по `docs/three-server-acceptance.md`.
 
 ## Этап 7 — релиз и другие платформы
 

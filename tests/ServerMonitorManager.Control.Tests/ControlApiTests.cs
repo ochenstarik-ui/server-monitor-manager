@@ -160,6 +160,29 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Preflight, claimed.State);
         Assert.Equal(HttpStatusCode.NoContent, (await assigned.GetAsync(
             "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+
+        var progress = new
+        {
+            state = "Running",
+            progressPercent = 25,
+            step = "apply",
+            eventCode = "apply.started",
+            message = "Applying the approved plan.",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/progress",
+            progress,
+            cancellationToken)).StatusCode);
+        using var progressResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/progress",
+            progress,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, progressResponse.StatusCode);
+        var updated = await progressResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.Equal(25, updated!.ProgressPercent);
+        Assert.Equal("apply", updated.CurrentStep);
     }
 
     public async ValueTask DisposeAsync() => await _factory.DisposeAsync();

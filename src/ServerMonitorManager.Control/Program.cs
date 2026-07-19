@@ -391,6 +391,41 @@ agents.MapGet("/provisioning/jobs/next", async (
     var job = await controlStore.ClaimNextProvisioningJobAsync(nodeId, cancellationToken);
     return job is null ? Results.NoContent() : Results.Ok(job);
 });
+agents.MapPost("/provisioning/jobs/{id}/progress", async (
+    string id,
+    ProvisioningJobProgressRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningProgress"] =
+                ["Invalid job id, state, progress, step, event code, message, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var job = await controlStore.ReportProvisioningProgressAsync(
+            nodeId, id, request, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
@@ -749,9 +784,28 @@ internal static class ProvisioningJobValidator
         => request.Reason.Length is >= 1 and <= 256
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 
+    public static bool IsValid(ProvisioningJobProgressRequest request)
+        => request.State is ProvisioningJobStates.Preflight
+            or ProvisioningJobStates.Running
+            or ProvisioningJobStates.Verifying
+            or ProvisioningJobStates.Completed
+            or ProvisioningJobStates.Failed
+            or ProvisioningJobStates.NeedsReconciliation
+           && request.ProgressPercent is >= 0 and <= 100
+           && IsSafeCode(request.Step, 64)
+           && IsSafeCode(request.EventCode, 64)
+           && request.Message.Length <= 512
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
     public static bool IsValidId(string id)
         => id.Length == 32 && Guid.TryParseExact(id, "N", out _);
 
     public static bool RequiresConfirmation(string actionType)
         => actionType == "system.base-install";
+
+    private static bool IsSafeCode(string value, int maximumLength)
+        => value.Length is >= 1 && value.Length <= maximumLength
+           && value.All(character => character is >= 'a' and <= 'z'
+               or >= '0' and <= '9'
+               or '.' or '-' or '_');
 }

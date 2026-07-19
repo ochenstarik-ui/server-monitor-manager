@@ -155,6 +155,14 @@ public sealed record ProvisioningJobCommandRequest(
     string Reason,
     string IdempotencyKey);
 
+public sealed record ProvisioningJobProgressRequest(
+    string State,
+    int ProgressPercent,
+    string Step,
+    string EventCode,
+    string Message,
+    string IdempotencyKey);
+
 public sealed record ProvisioningJob(
     string Id,
     string NodeId,
@@ -171,6 +179,8 @@ public sealed record ProvisioningJob(
     DateTimeOffset? ConfirmedAt,
     DateTimeOffset? CancelledAt,
     long Version,
+    int ProgressPercent,
+    string CurrentStep,
     string? LastError);
 
 public static class ProvisioningJobStates
@@ -178,5 +188,10 @@ public static class ProvisioningJobStates
     public const string Queued = "Queued";
     public const string Preflight = "Preflight";
     public const string AwaitingConfirmation = "AwaitingConfirmation";
+    public const string Running = "Running";
+    public const string Verifying = "Verifying";
+    public const string Completed = "Completed";
+    public const string Failed = "Failed";
+    public const string NeedsReconciliation = "NeedsReconciliation";
     public const string Cancelled = "Cancelled";
 }

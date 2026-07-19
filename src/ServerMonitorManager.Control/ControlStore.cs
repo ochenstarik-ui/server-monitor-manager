@@ -10,7 +10,7 @@ namespace ServerMonitorManager.Control;
 
 public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 2;
+    private const int CurrentSchemaVersion = 3;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -177,6 +177,23 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
                 PRAGMA user_version = 2;
                 """;
             await migrateProvisioning.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 3)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var migrateProgress = connection.CreateCommand();
+            migrateProgress.Transaction = migration;
+            migrateProgress.CommandText = """
+                ALTER TABLE provisioning_jobs
+                    ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE provisioning_jobs
+                    ADD COLUMN current_step TEXT NOT NULL DEFAULT '';
+                PRAGMA user_version = 3;
+                """;
+            await migrateProgress.ExecuteNonQueryAsync(cancellationToken);
             await migration.CommitAsync(cancellationToken);
         }
     }

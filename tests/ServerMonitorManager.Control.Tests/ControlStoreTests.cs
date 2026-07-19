@@ -31,10 +31,10 @@ public sealed class ControlStoreTests : IAsyncDisposable
         await migrated.OpenAsync(TestContext.Current.CancellationToken);
         var version = migrated.CreateCommand();
         version.CommandText = "PRAGMA user_version;";
-        Assert.Equal(2L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        Assert.Equal(3L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
         var table = migrated.CreateCommand();
         table.CommandText = "SELECT COUNT(*) FROM pragma_table_info('provisioning_jobs');";
-        Assert.Equal(16L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        Assert.Equal(18L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
     }
 
     [Fact]
@@ -110,6 +110,66 @@ public sealed class ControlStoreTests : IAsyncDisposable
         Assert.Equal("home", claimed.NodeId);
         Assert.Equal(ProvisioningJobStates.Preflight, claimed.State);
         Assert.Null(Assert.Single(claims, job => job is null));
+
+        var preflight = new ProvisioningJobProgressRequest(
+            ProvisioningJobStates.Preflight, 10, "inspect-os", "preflight.progress",
+            "Operating system detected.", Guid.NewGuid().ToString());
+        Assert.Null(await store.ReportProvisioningProgressAsync(
+            "other", created.Id, preflight, cancellationToken));
+        var firstProgress = await store.ReportProvisioningProgressAsync(
+            "home", created.Id, preflight, cancellationToken);
+        var replay = await store.ReportProvisioningProgressAsync(
+            "home", created.Id, preflight, cancellationToken);
+        Assert.Equal(firstProgress!.Id, replay!.Id);
+        Assert.Equal(10, replay.ProgressPercent);
+        Assert.Equal("inspect-os", replay.CurrentStep);
+        await Assert.ThrowsAsync<ProvisioningTransitionException>(() =>
+            store.ReportProvisioningProgressAsync(
+                "home", created.Id,
+                preflight with
+                {
+                    State = ProvisioningJobStates.Completed,
+                    ProgressPercent = 100,
+                    IdempotencyKey = Guid.NewGuid().ToString()
+                },
+                cancellationToken));
+
+        var running = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Running,
+                ProgressPercent = 40,
+                Step = "apply",
+                EventCode = "apply.started",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        var verifying = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Verifying,
+                ProgressPercent = 90,
+                Step = "verify",
+                EventCode = "verify.started",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        var completed = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Completed,
+                ProgressPercent = 100,
+                Step = "complete",
+                EventCode = "job.completed",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Running, running!.State);
+        Assert.Equal(ProvisioningJobStates.Verifying, verifying!.State);
+        Assert.Equal(ProvisioningJobStates.Completed, completed!.State);
     }
 
     [Fact]

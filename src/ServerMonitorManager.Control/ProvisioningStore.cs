@@ -54,6 +54,8 @@ public sealed partial class ControlStore
             null,
             null,
             1,
+            0,
+            "queued",
             null);
 
         var insert = connection.CreateCommand();
@@ -166,6 +168,96 @@ public sealed partial class ControlStore
             "job.cancelled", "provisioning.job.cancelled",
             setConfirmedAt: false, cancellationToken);
 
+    public async Task<ProvisioningJob?> ReportProvisioningProgressAsync(
+        string nodeId,
+        string id,
+        ProvisioningJobProgressRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"provisioning-progress:{nodeId}:{id}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.ProvisioningJobProgressRequest);
+        var cached = await ReadIdempotentAsync(
+            connection, transaction, operationKey, requestHash,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var current = await ReadProvisioningJobAsync(connection, transaction, id, cancellationToken);
+        if (current is null || !string.Equals(current.NodeId, nodeId, StringComparison.Ordinal))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+        if (!ProvisioningStateMachine.CanReport(
+                current.State, request.State, current.ProgressPercent, request.ProgressPercent))
+        {
+            throw new ProvisioningTransitionException(current.State, request.State);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var updated = current with
+        {
+            State = request.State,
+            ProgressPercent = request.ProgressPercent,
+            CurrentStep = request.Step,
+            UpdatedAt = now,
+            Version = current.Version + 1,
+            LastError = request.State is ProvisioningJobStates.Failed
+                or ProvisioningJobStates.NeedsReconciliation
+                ? request.EventCode
+                : null
+        };
+        var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE provisioning_jobs SET
+                state = $state,
+                progress_percent = $progress,
+                current_step = $step,
+                updated_at = $updated,
+                version = $version,
+                last_error = $error
+            WHERE id = $id AND node_id = $node AND version = $previous_version;
+            """;
+        update.Parameters.AddWithValue("$state", updated.State);
+        update.Parameters.AddWithValue("$progress", updated.ProgressPercent);
+        update.Parameters.AddWithValue("$step", updated.CurrentStep);
+        update.Parameters.AddWithValue("$updated", updated.UpdatedAt.ToString("O"));
+        update.Parameters.AddWithValue("$version", updated.Version);
+        update.Parameters.AddWithValue("$error", (object?)updated.LastError ?? DBNull.Value);
+        update.Parameters.AddWithValue("$id", updated.Id);
+        update.Parameters.AddWithValue("$node", nodeId);
+        update.Parameters.AddWithValue("$previous_version", current.Version);
+        if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            throw new ProvisioningTransitionException(current.State, request.State);
+        }
+
+        await WriteProvisioningEventAsync(
+            connection, transaction, id, request.EventCode, request.State,
+            request.Message, now, cancellationToken);
+        await WriteIdempotentAsync(
+            connection, transaction, operationKey, requestHash, updated,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        await WriteAuditAsync(
+            connection, transaction, nodeId, "provisioning.job.progress", id,
+            JsonSerializer.Serialize(new
+            {
+                request.State,
+                request.ProgressPercent,
+                request.Step,
+                request.EventCode
+            }),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return updated;
+    }
+
     private async Task<ProvisioningJob?> TransitionProvisioningJobAsync(
         string id,
         ProvisioningJobCommandRequest request,
@@ -265,7 +357,8 @@ public sealed partial class ControlStore
             DateTimeOffset.Parse(reader.GetString(11)),
             reader.IsDBNull(12) ? null : DateTimeOffset.Parse(reader.GetString(12)),
             reader.IsDBNull(13) ? null : DateTimeOffset.Parse(reader.GetString(13)),
-            reader.GetInt64(14), reader.IsDBNull(15) ? null : reader.GetString(15));
+            reader.GetInt64(14), reader.GetInt32(16), reader.GetString(17),
+            reader.IsDBNull(15) ? null : reader.GetString(15));
 
     private static JsonElement ParseParameters(string json)
     {
@@ -321,3 +414,30 @@ public sealed class ProvisioningNodeNotFoundException(string nodeId) : Exception
 
 public sealed class ProvisioningTransitionException(string state, string targetState)
     : Exception($"Provisioning job cannot transition from '{state}' to '{targetState}'.");
+
+internal static class ProvisioningStateMachine
+{
+    public static bool CanReport(string current, string target, int currentProgress, int targetProgress)
+    {
+        if (targetProgress < currentProgress || targetProgress is < 0 or > 100)
+        {
+            return false;
+        }
+        if (target is ProvisioningJobStates.Failed or ProvisioningJobStates.NeedsReconciliation)
+        {
+            return current is ProvisioningJobStates.Preflight
+                or ProvisioningJobStates.Running
+                or ProvisioningJobStates.Verifying;
+        }
+        return (current, target) switch
+        {
+            (ProvisioningJobStates.Preflight, ProvisioningJobStates.Preflight) => true,
+            (ProvisioningJobStates.Preflight, ProvisioningJobStates.Running) => true,
+            (ProvisioningJobStates.Running, ProvisioningJobStates.Running) => true,
+            (ProvisioningJobStates.Running, ProvisioningJobStates.Verifying) => true,
+            (ProvisioningJobStates.Verifying, ProvisioningJobStates.Verifying) => true,
+            (ProvisioningJobStates.Verifying, ProvisioningJobStates.Completed) => targetProgress == 100,
+            _ => false
+        };
+    }
+}

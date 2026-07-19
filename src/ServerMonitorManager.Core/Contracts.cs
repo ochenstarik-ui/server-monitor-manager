@@ -236,6 +236,28 @@ public sealed record PreflightDriftAssessment(
     NodePreflightDesiredState? Desired,
     NodePreflightFacts? Facts);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record SystemBaseInstallParameters(
+    string Timezone,
+    string Locale,
+    bool AptUpdate,
+    bool AptUpgrade,
+    int PackageCatalogVersion,
+    string[] PackageGroupIds,
+    string SwapMode,
+    int? SwapSizeMiB,
+    int VmSwappiness,
+    bool EnableUnattendedUpgrades,
+    string RebootPolicy);
+
+public sealed record SystemPackageGroup(
+    string Id,
+    string[] Packages);
+
+public sealed record SystemBaseInstallCatalog(
+    int Version,
+    SystemPackageGroup[] Groups);
+
 public static class PreflightDriftStatuses
 {
     public const string NotConfigured = "NotConfigured";
@@ -305,4 +327,21 @@ public static class ProvisioningActionCatalog
 {
     public const string PreflightModuleHash =
         "2dc48fb4528a291221954fc2dd3478d431b66fe34228f29684ce1648dbe2f32b";
+}
+
+public static class SystemBaseInstallCatalogDefinition
+{
+    public const int Version = 1;
+
+    public static SystemBaseInstallCatalog Create()
+        => new(Version,
+        [
+            new("core", ["ca-certificates", "curl", "jq"]),
+            new("development", ["build-essential", "git"]),
+            new("diagnostics", ["htop", "iotop"]),
+            new("container-host", ["dbus-user-session", "uidmap"])
+        ]);
+
+    public static bool ContainsGroup(string id)
+        => id is "core" or "development" or "diagnostics" or "container-host";
 }

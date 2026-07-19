@@ -96,13 +96,32 @@ public sealed class ControlApiTests : IAsyncDisposable
         using var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Test-Identity", "windows-pc");
         client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        var catalog = await client.GetFromJsonAsync<ServerMonitorManager.Core.SystemBaseInstallCatalog>(
+            "/api/v1/control/provisioning/catalogs/system-base-install/1",
+            cancellationToken);
+        Assert.Equal(1, catalog!.Version);
+        Assert.Contains(catalog.Groups, group => group.Id == "development"
+            && group.Packages.Contains("git"));
         using var response = await client.PostAsJsonAsync(
             "/api/v1/control/agents/home/provisioning/jobs",
             new
             {
                 actionType = "system.base-install",
                 schemaVersion = 1,
-                parameters = new { },
+                parameters = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packageCatalogVersion = 1,
+                    packageGroupIds = new[] { "core", "development" },
+                    swapMode = "automatic",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = true,
+                    rebootPolicy = "never"
+                },
                 ttlMinutes = 60,
                 auditReason = "API integration test",
                 idempotencyKey = Guid.NewGuid().ToString()
@@ -114,6 +133,31 @@ public sealed class ControlApiTests : IAsyncDisposable
             cancellationToken);
         Assert.NotNull(job);
         Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.AwaitingConfirmation, job.State);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            "/api/v1/control/agents/home/provisioning/jobs",
+            new
+            {
+                actionType = "system.base-install",
+                schemaVersion = 1,
+                parameters = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packageCatalogVersion = 1,
+                    packageGroupIds = new[] { "curl" },
+                    swapMode = "disabled",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = false,
+                    rebootPolicy = "never"
+                },
+                ttlMinutes = 60,
+                auditReason = "Reject arbitrary package input",
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(
             $"/api/v1/control/provisioning/jobs/{job.Id}", cancellationToken)).StatusCode);
         using var eventsResponse = await client.GetAsync(

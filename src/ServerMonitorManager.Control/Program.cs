@@ -464,6 +464,8 @@ agents.MapPost("/provisioning/jobs/{id}/preflight-facts", async (
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
+control.MapGet("/provisioning/catalogs/system-base-install/1", () =>
+    Results.Ok(SystemBaseInstallCatalogDefinition.Create()));
 control.MapGet("/agents/{nodeId}/facts/preflight", async (
     string nodeId,
     ControlStore controlStore,
@@ -945,14 +947,35 @@ internal static class ProvisioningJobValidator
     private const int MaximumParametersBytes = 16 * 1024;
 
     public static bool IsValid(ProvisioningJobCreateRequest request)
-        => request.SchemaVersion == 1
-           && request.ActionType is "preflight" or "system.base-install"
-           && request.Parameters.ValueKind == JsonValueKind.Object
-           && !request.Parameters.EnumerateObject().Any()
-           && request.Parameters.GetRawText().Length <= MaximumParametersBytes
-           && request.TtlMinutes is >= 5 and <= 1440
-           && request.AuditReason.Length is >= 1 and <= 256
-           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+    {
+        if (request.SchemaVersion != 1
+            || request.Parameters.ValueKind != JsonValueKind.Object
+            || request.Parameters.GetRawText().Length > MaximumParametersBytes
+            || request.TtlMinutes is < 5 or > 1440
+            || request.AuditReason is not { Length: >= 1 and <= 256 }
+            || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+        {
+            return false;
+        }
+        if (request.ActionType == "preflight")
+        {
+            return !request.Parameters.EnumerateObject().Any();
+        }
+        if (request.ActionType != "system.base-install")
+        {
+            return false;
+        }
+        try
+        {
+            var parameters = JsonSerializer.Deserialize(
+                request.Parameters, SmmJsonContext.Default.SystemBaseInstallParameters);
+            return parameters is not null && IsValid(parameters);
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     public static bool IsValid(ProvisioningJobCommandRequest request)
         => request.Reason.Length is >= 1 and <= 256
@@ -989,6 +1012,22 @@ internal static class ProvisioningJobValidator
     public static bool RequiresConfirmation(string actionType)
         => actionType == "system.base-install";
 
+    private static bool IsValid(SystemBaseInstallParameters parameters)
+        => IsSafeTimezone(parameters.Timezone)
+           && IsSafeLocale(parameters.Locale)
+           && (!parameters.AptUpgrade || parameters.AptUpdate)
+           && parameters.PackageCatalogVersion == SystemBaseInstallCatalogDefinition.Version
+           && parameters.PackageGroupIds is { Length: <= 4 }
+           && parameters.PackageGroupIds.Distinct(StringComparer.Ordinal).Count()
+               == parameters.PackageGroupIds.Length
+           && parameters.PackageGroupIds.All(SystemBaseInstallCatalogDefinition.ContainsGroup)
+           && parameters.SwapMode is "disabled" or "automatic" or "explicit"
+           && (parameters.SwapMode == "explicit"
+               ? parameters.SwapSizeMiB is >= 128 and <= 1_048_576
+               : parameters.SwapSizeMiB is null)
+           && parameters.VmSwappiness is >= 0 and <= 200
+           && parameters.RebootPolicy == "never";
+
     private static bool IsSafeCode(string value, int maximumLength)
         => value.Length is >= 1 && value.Length <= maximumLength
            && value.All(character => character is >= 'a' and <= 'z'
@@ -1000,6 +1039,18 @@ internal static class ProvisioningJobValidator
            && value.Length is >= 1 && value.Length <= maximumLength
            && value.All(character => char.IsAsciiLetterOrDigit(character)
                || character is '_' or '-' or '.');
+
+    private static bool IsSafeTimezone(string? value)
+        => value is { Length: >= 1 and <= 64 }
+           && value[0] is not '/' and not '.'
+           && !value.Contains("..", StringComparison.Ordinal)
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '/' or '_' or '-' or '+');
+
+    private static bool IsSafeLocale(string? value)
+        => value is { Length: >= 1 and <= 32 }
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '_' or '-' or '.' or '@');
 }
 
 internal static class PreflightDesiredStateValidator

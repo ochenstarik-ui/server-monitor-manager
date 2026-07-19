@@ -126,7 +126,7 @@
 
 - [ ] preflight ОС, архитектуры, SSH, firewall, APT и capabilities;
 - [ ] Desktop wizard timezone/locale/packages/swap/unattended upgrades;
-- [ ] versioned package allowlist;
+- [x] versioned package allowlist (catalog v1 с фиксированными package groups);
 - [ ] root-only backups и symlink protection;
 - [ ] user lifecycle без sudo по умолчанию;
 - [ ] SSH public keys, fingerprints и permissions;

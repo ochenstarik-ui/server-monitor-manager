@@ -53,4 +53,18 @@ public sealed class ProvisioningHelperTests
         Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize(json, SmmJsonContext.Default.ProvisioningHelperRequest));
     }
+
+    [Fact]
+    public void BaseInstallSchemaRejectsCommandText()
+    {
+        const string json = """
+            {"timezone":"UTC","locale":"en_US.UTF-8","aptUpdate":true,"aptUpgrade":false,
+             "packageCatalogVersion":1,"packageGroupIds":["core"],"swapMode":"disabled",
+             "swapSizeMiB":null,"vmSwappiness":60,"enableUnattendedUpgrades":true,
+             "rebootPolicy":"never","command":"id"}
+            """;
+
+        Assert.Throws<JsonException>(() =>
+            JsonSerializer.Deserialize(json, SmmJsonContext.Default.SystemBaseInstallParameters));
+    }
 }

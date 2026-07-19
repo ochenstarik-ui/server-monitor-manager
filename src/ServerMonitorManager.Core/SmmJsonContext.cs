@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace ServerMonitorManager.Core;
 
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
 [JsonSerializable(typeof(EnrollmentRequest))]
 [JsonSerializable(typeof(EnrollmentResponse))]
 [JsonSerializable(typeof(AgentHeartbeat))]
@@ -37,6 +38,10 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(PreflightDesiredStateUpdateRequest))]
 [JsonSerializable(typeof(NodePreflightDesiredState))]
 [JsonSerializable(typeof(PreflightDriftAssessment))]
+[JsonSerializable(typeof(SystemBaseInstallParameters))]
+[JsonSerializable(typeof(SystemPackageGroup))]
+[JsonSerializable(typeof(SystemPackageGroup[]))]
+[JsonSerializable(typeof(SystemBaseInstallCatalog))]
 [JsonSerializable(typeof(ProvisioningJob))]
 [JsonSerializable(typeof(ProvisioningJob[]))]
 [JsonSerializable(typeof(ProvisioningEvent))]

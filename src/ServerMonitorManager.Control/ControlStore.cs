@@ -8,9 +8,9 @@ using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Control;
 
-public sealed class ControlStore(IOptions<ControlOptions> options)
+public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 2;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -124,9 +124,61 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             CREATE UNIQUE INDEX IF NOT EXISTS ux_links_active_policy
                 ON links(source_node_id, target_node_id, protocol, port)
                 WHERE desired_state = 'Active';
-            PRAGMA user_version = 1;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        if (schemaVersion < 1)
+        {
+            var markVersionOne = connection.CreateCommand();
+            markVersionOne.CommandText = "PRAGMA user_version = 1;";
+            await markVersionOne.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 2)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var migrateProvisioning = connection.CreateCommand();
+            migrateProvisioning.Transaction = migration;
+            migrateProvisioning.CommandText = """
+                CREATE TABLE IF NOT EXISTS provisioning_jobs (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL REFERENCES agents(node_id) ON DELETE CASCADE,
+                    action_type TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    parameters_json TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    confirmation_required INTEGER NOT NULL,
+                    audit_reason TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    confirmed_at TEXT NULL,
+                    cancelled_at TEXT NULL,
+                    version INTEGER NOT NULL,
+                    last_error TEXT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_provisioning_jobs_node_created
+                    ON provisioning_jobs(node_id, created_at DESC);
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_provisioning_jobs_active_node
+                    ON provisioning_jobs(node_id)
+                    WHERE state NOT IN ('Completed', 'Cancelled', 'Failed', 'RolledBack', 'RollbackFailed');
+                CREATE TABLE IF NOT EXISTS provisioning_events (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES provisioning_jobs(id) ON DELETE CASCADE,
+                    recorded_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    message TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_provisioning_events_job_sequence
+                    ON provisioning_events(job_id, sequence);
+                PRAGMA user_version = 2;
+                """;
+            await migrateProvisioning.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
     }
 
     public async Task<ControlMaintenanceResult> MaintainAsync(

@@ -1,3 +1,5 @@
+using System.Text.Json;
+
 namespace ServerMonitorManager.Core;
 
 public sealed record EnrollmentRequest(
@@ -140,3 +142,40 @@ public sealed record ControlEvent(
     string PayloadJson);
 
 public sealed record ControlError(string Error);
+
+public sealed record ProvisioningJobCreateRequest(
+    string ActionType,
+    int SchemaVersion,
+    JsonElement Parameters,
+    int TtlMinutes,
+    string AuditReason,
+    string IdempotencyKey);
+
+public sealed record ProvisioningJobCommandRequest(
+    string Reason,
+    string IdempotencyKey);
+
+public sealed record ProvisioningJob(
+    string Id,
+    string NodeId,
+    string ActionType,
+    int SchemaVersion,
+    JsonElement Parameters,
+    string State,
+    bool ConfirmationRequired,
+    string AuditReason,
+    string CreatedBy,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset ExpiresAt,
+    DateTimeOffset? ConfirmedAt,
+    DateTimeOffset? CancelledAt,
+    long Version,
+    string? LastError);
+
+public static class ProvisioningJobStates
+{
+    public const string Queued = "Queued";
+    public const string AwaitingConfirmation = "AwaitingConfirmation";
+    public const string Cancelled = "Cancelled";
+}

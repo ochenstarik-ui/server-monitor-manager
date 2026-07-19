@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
 using ServerMonitorManager.Control;
 using ServerMonitorManager.Core;
 using Xunit;
@@ -9,6 +10,78 @@ namespace ServerMonitorManager.Control.Tests;
 public sealed class ControlStoreTests : IAsyncDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"smm-tests-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task VersionOneDatabaseMigratesToProvisioningSchema()
+    {
+        Directory.CreateDirectory(_directory);
+        var databasePath = Path.Combine(_directory, "control.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA user_version = 1;";
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = CreateStore();
+        await store.InitializeAsync(TestContext.Current.CancellationToken);
+
+        await using var migrated = new SqliteConnection($"Data Source={databasePath}");
+        await migrated.OpenAsync(TestContext.Current.CancellationToken);
+        var version = migrated.CreateCommand();
+        version.CommandText = "PRAGMA user_version;";
+        Assert.Equal(2L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        var table = migrated.CreateCommand();
+        table.CommandText = "SELECT COUNT(*) FROM pragma_table_info('provisioning_jobs');";
+        Assert.Equal(16L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+    }
+
+    [Fact]
+    public async Task ProvisioningJobRequiresConfirmationIsIdempotentAndLocksNode()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "home", "A1B2", cancellationToken);
+        using var parameters = JsonDocument.Parse("{}");
+        var request = new ProvisioningJobCreateRequest(
+            "system.base-install", 1, parameters.RootElement.Clone(), 60,
+            "Prepare test server", Guid.NewGuid().ToString());
+
+        var created = await store.CreateProvisioningJobAsync("home", request, "operator", cancellationToken);
+        var replay = await store.CreateProvisioningJobAsync("home", request, "operator", cancellationToken);
+
+        Assert.Equal(created.Id, replay.Id);
+        Assert.Equal(created.State, replay.State);
+        Assert.Equal(ProvisioningJobStates.AwaitingConfirmation, created.State);
+        Assert.True(created.ConfirmationRequired);
+        await Assert.ThrowsAsync<SqliteException>(() => store.CreateProvisioningJobAsync(
+            "home", request with { IdempotencyKey = Guid.NewGuid().ToString() }, "operator", cancellationToken));
+
+        var confirmation = new ProvisioningJobCommandRequest(
+            "Approved for test", Guid.NewGuid().ToString());
+        var confirmed = await store.ConfirmProvisioningJobAsync(
+            created.Id, confirmation, "operator", cancellationToken);
+        var confirmationReplay = await store.ConfirmProvisioningJobAsync(
+            created.Id, confirmation, "operator", cancellationToken);
+        Assert.Equal(confirmed!.Id, confirmationReplay!.Id);
+        Assert.Equal(confirmed.State, confirmationReplay.State);
+        Assert.Equal(ProvisioningJobStates.Queued, confirmed.State);
+        Assert.NotNull(confirmed.ConfirmedAt);
+
+        var cancelled = await store.CancelProvisioningJobAsync(
+            created.Id,
+            new ProvisioningJobCommandRequest("Test completed", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Cancelled, cancelled!.State);
+        Assert.NotNull(cancelled.CancelledAt);
+
+        var next = await store.CreateProvisioningJobAsync(
+            "home", request with { IdempotencyKey = Guid.NewGuid().ToString() }, "operator", cancellationToken);
+        Assert.Equal(ProvisioningJobStates.AwaitingConfirmation, next.State);
+    }
 
     [Fact]
     public void DiagnosticsExportOmitsRawIdentitiesAndNormalizesStates()

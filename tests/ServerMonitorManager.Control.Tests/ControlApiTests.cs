@@ -76,6 +76,48 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
+    [Fact]
+    public async Task OperatorCanCreateAndReadProvisioningJob()
+    {
+        var store = _factory.Services.GetRequiredService<ServerMonitorManager.Control.ControlStore>();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var token = await store.CreateEnrollmentTokenAsync("home", TimeSpan.FromMinutes(10), cancellationToken);
+        await store.EnrollAsync(
+            new ServerMonitorManager.Core.EnrollmentRequest(
+                "home", token, "csr", Guid.NewGuid().ToString()),
+            () => new ServerMonitorManager.Control.IssuedCertificate(
+                "certificate", "ca", "F1E2", DateTimeOffset.UtcNow.AddDays(1)),
+            cancellationToken);
+
+        using var anonymous = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{Guid.NewGuid():N}", cancellationToken)).StatusCode);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Identity", "windows-pc");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/control/agents/home/provisioning/jobs",
+            new
+            {
+                actionType = "system.base-install",
+                schemaVersion = 1,
+                parameters = new { },
+                ttlMinutes = 60,
+                auditReason = "API integration test",
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var job = await response.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.NotNull(job);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.AwaitingConfirmation, job.State);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}", cancellationToken)).StatusCode);
+    }
+
     public async ValueTask DisposeAsync() => await _factory.DisposeAsync();
 
     private sealed class ControlApiFactory : WebApplicationFactory<controlapp::Program>

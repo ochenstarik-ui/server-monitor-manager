@@ -108,16 +108,19 @@
 
 ## Этап 8 — Provisioning control plane
 
-- [ ] модели и SQLite migrations для ProvisioningJob;
+- [x] модели и SQLite migration v2 для ProvisioningJob;
 - [ ] state machine, confirmations, cancellation, retry и rollback;
-- [ ] обязательные idempotency key, audit reason и job TTL;
+- [x] создание, чтение, подтверждение и отмена через Operator API;
+- [ ] выполнение, retry, verification и rollback в полной state machine;
+- [x] обязательные idempotency key, audit reason и job TTL;
 - [ ] Agent job channel только для собственного `node_id`;
-- [ ] versioned JSON schemas для каждого action type;
+- [x] начальные строгие JSON schemas v1 для `preflight` и `system.base-install`;
+- [ ] versioned JSON schemas для остальных action type;
 - [ ] restricted root helper через Unix socket;
 - [ ] structured redacted events и progress;
 - [ ] `NeedsReconciliation` после неопределённого результата;
 - [ ] desired/factual configuration и drift;
-- [ ] запрет параллельных несовместимых опасных заданий.
+- [x] запрет параллельных активных заданий на одном Node (безопасный первый вариант).
 
 ## Этап 9 — базовая настройка и пользователи
 

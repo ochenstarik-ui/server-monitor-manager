@@ -105,7 +105,7 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
         await verify.OpenAsync(cancellationToken);
         var version = verify.CreateCommand();
         version.CommandText = "PRAGMA user_version;";
-        Assert.Equal(1L, (long)(await version.ExecuteScalarAsync(cancellationToken))!);
+        Assert.Equal(2L, (long)(await version.ExecuteScalarAsync(cancellationToken))!);
     }
 
     [Fact]

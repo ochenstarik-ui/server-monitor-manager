@@ -25,4 +25,8 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(LinkPolicy[]))]
 [JsonSerializable(typeof(ControlEvent))]
 [JsonSerializable(typeof(ControlError))]
+[JsonSerializable(typeof(ProvisioningJobCreateRequest))]
+[JsonSerializable(typeof(ProvisioningJobCommandRequest))]
+[JsonSerializable(typeof(ProvisioningJob))]
+[JsonSerializable(typeof(ProvisioningJob[]))]
 public sealed partial class SmmJsonContext : JsonSerializerContext;

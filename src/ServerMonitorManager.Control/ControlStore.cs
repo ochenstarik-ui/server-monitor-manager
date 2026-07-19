@@ -10,7 +10,7 @@ namespace ServerMonitorManager.Control;
 
 public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 4;
+    private const int CurrentSchemaVersion = 5;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -213,6 +213,23 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             await strengthenProvisioningLock.ExecuteNonQueryAsync(cancellationToken);
             await migration.CommitAsync(cancellationToken);
         }
+
+        if (schemaVersion < 5)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addStructuredEventFields = connection.CreateCommand();
+            addStructuredEventFields.Transaction = migration;
+            addStructuredEventFields.CommandText = """
+                ALTER TABLE provisioning_events
+                    ADD COLUMN step TEXT NOT NULL DEFAULT '';
+                ALTER TABLE provisioning_events
+                    ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0;
+                PRAGMA user_version = 5;
+                """;
+            await addStructuredEventFields.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
     }
 
     public async Task<ControlMaintenanceResult> MaintainAsync(
@@ -225,9 +242,10 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
             SELECT id, $now, 'job.expired', 'Cancelled',
-                   'Provisioning job expired before execution.'
+                   'Provisioning job expired before execution.', 'expired', progress_percent
             FROM provisioning_jobs
             WHERE expires_at <= $now
               AND state IN ('Queued', 'AwaitingConfirmation');
@@ -238,9 +256,11 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             WHERE expires_at <= $now
               AND state IN ('Queued', 'AwaitingConfirmation');
             SELECT changes();
-            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
             SELECT id, $now, 'job.reconciliation.required', 'NeedsReconciliation',
-                   'Execution lease expired; factual state must be inspected.'
+                   'Execution lease expired; factual state must be inspected.',
+                   'reconcile', progress_percent
             FROM provisioning_jobs
             WHERE expires_at <= $now
               AND state IN ('Preflight', 'Running', 'Verifying');
@@ -251,9 +271,11 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             WHERE expires_at <= $now
               AND state IN ('Preflight', 'Running', 'Verifying');
             SELECT changes();
-            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
             SELECT id, $now, 'job.rollback.reconciliation.required', 'NeedsReconciliation',
-                   'Rollback lease expired; factual state must be inspected.'
+                   'Rollback lease expired; factual state must be inspected.',
+                   'rollback-reconcile', progress_percent
             FROM provisioning_jobs
             WHERE expires_at <= $now AND state = 'RollingBack';
             UPDATE provisioning_jobs SET

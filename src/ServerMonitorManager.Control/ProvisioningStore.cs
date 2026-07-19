@@ -248,7 +248,8 @@ public sealed partial class ControlStore
 
         await WriteProvisioningEventAsync(
             connection, transaction, id, request.EventCode, request.State,
-            request.Message, now, cancellationToken);
+            $"Agent reported '{request.EventCode}' for step '{request.Step}' at "
+            + $"{request.ProgressPercent}%.", now, cancellationToken);
         await WriteIdempotentAsync(
             connection, transaction, operationKey, requestHash, updated,
             SmmJsonContext.Default.ProvisioningJob, cancellationToken);
@@ -264,6 +265,44 @@ public sealed partial class ControlStore
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return updated;
+    }
+
+    public async Task<IReadOnlyList<ProvisioningEvent>?> ListProvisioningEventsAsync(
+        string id,
+        int limit,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var exists = connection.CreateCommand();
+        exists.CommandText = "SELECT EXISTS(SELECT 1 FROM provisioning_jobs WHERE id = $id);";
+        exists.Parameters.AddWithValue("$id", id);
+        if (Convert.ToInt32(await exists.ExecuteScalarAsync(cancellationToken)) != 1)
+        {
+            return null;
+        }
+
+        var result = new List<ProvisioningEvent>();
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT sequence, job_id, recorded_at, event_type, state,
+                   step, progress_percent, message
+            FROM provisioning_events
+            WHERE job_id = $id
+            ORDER BY sequence DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$id", id);
+        command.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 200));
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new ProvisioningEvent(
+                reader.GetInt64(0), reader.GetString(1), DateTimeOffset.Parse(reader.GetString(2)),
+                reader.GetString(3), reader.GetString(4), reader.GetString(5),
+                reader.GetInt32(6), reader.GetString(7)));
+        }
+        result.Reverse();
+        return result;
     }
 
     public async Task<ProvisioningJob?> RetryProvisioningJobAsync(
@@ -336,7 +375,7 @@ public sealed partial class ControlStore
 
         await WriteProvisioningEventAsync(
             connection, transaction, id, "job.retry.queued", updated.State,
-            request.Reason, now, cancellationToken);
+            "Operator queued a retry after reconciliation.", now, cancellationToken);
         await WriteIdempotentAsync(
             connection, transaction, operationKey, requestHash, updated,
             SmmJsonContext.Default.ProvisioningJob, cancellationToken);
@@ -418,7 +457,7 @@ public sealed partial class ControlStore
 
         await WriteProvisioningEventAsync(
             connection, transaction, id, "job.rollback.queued", updated.State,
-            request.Reason, now, cancellationToken);
+            "Operator queued a rollback.", now, cancellationToken);
         await WriteIdempotentAsync(
             connection, transaction, operationKey, requestHash, updated,
             SmmJsonContext.Default.ProvisioningJob, cancellationToken);
@@ -494,7 +533,8 @@ public sealed partial class ControlStore
         }
 
         await WriteProvisioningEventAsync(
-            connection, transaction, id, eventType, targetState, request.Reason, now, cancellationToken);
+            connection, transaction, id, eventType, targetState,
+            $"Operator requested '{eventType}'.", now, cancellationToken);
         await WriteIdempotentAsync(
             connection, transaction, operationKey, requestHash, updated,
             SmmJsonContext.Default.ProvisioningJob, cancellationToken);
@@ -569,8 +609,12 @@ public sealed partial class ControlStore
         var command = connection.CreateCommand();
         command.Transaction = transaction;
         command.CommandText = """
-            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
-            VALUES ($job, $recorded, $event, $state, $message);
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
+            SELECT $job, $recorded, $event, $state, $message,
+                   current_step, progress_percent
+            FROM provisioning_jobs
+            WHERE id = $job;
             """;
         command.Parameters.AddWithValue("$job", jobId);
         command.Parameters.AddWithValue("$recorded", recordedAt.ToString("O"));

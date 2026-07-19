@@ -116,6 +116,13 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.AwaitingConfirmation, job.State);
         Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(
             $"/api/v1/control/provisioning/jobs/{job.Id}", cancellationToken)).StatusCode);
+        using var eventsResponse = await client.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/events?limit=10", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, eventsResponse.StatusCode);
+        var events = await eventsResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningEvent[]>(
+            cancellationToken);
+        Assert.NotNull(events);
+        Assert.NotEmpty(events);
     }
 
     [Fact]

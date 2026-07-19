@@ -31,7 +31,7 @@ public sealed class ControlStoreTests : IAsyncDisposable
         await migrated.OpenAsync(TestContext.Current.CancellationToken);
         var version = migrated.CreateCommand();
         version.CommandText = "PRAGMA user_version;";
-        Assert.Equal(4L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        Assert.Equal(5L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
         var table = migrated.CreateCommand();
         table.CommandText = "SELECT COUNT(*) FROM pragma_table_info('provisioning_jobs');";
         Assert.Equal(18L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
@@ -113,7 +113,7 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
         var preflight = new ProvisioningJobProgressRequest(
             ProvisioningJobStates.Preflight, 10, "inspect-os", "preflight.progress",
-            "Operating system detected.", Guid.NewGuid().ToString());
+            "secret-token-should-never-be-persisted", Guid.NewGuid().ToString());
         Assert.Null(await store.ReportProvisioningProgressAsync(
             "other", created.Id, preflight, cancellationToken));
         var firstProgress = await store.ReportProvisioningProgressAsync(
@@ -170,6 +170,13 @@ public sealed class ControlStoreTests : IAsyncDisposable
         Assert.Equal(ProvisioningJobStates.Running, running!.State);
         Assert.Equal(ProvisioningJobStates.Verifying, verifying!.State);
         Assert.Equal(ProvisioningJobStates.Completed, completed!.State);
+        var events = await store.ListProvisioningEventsAsync(created.Id, 100, cancellationToken);
+        Assert.NotNull(events);
+        var preflightEvent = Assert.Single(events!, item => item.EventType == "preflight.progress");
+        Assert.Equal("inspect-os", preflightEvent.Step);
+        Assert.Equal(10, preflightEvent.ProgressPercent);
+        Assert.DoesNotContain(
+            events!, item => item.Message.Contains("secret-token", StringComparison.Ordinal));
     }
 
     [Fact]

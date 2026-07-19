@@ -30,4 +30,6 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(ProvisioningJobProgressRequest))]
 [JsonSerializable(typeof(ProvisioningJob))]
 [JsonSerializable(typeof(ProvisioningJob[]))]
+[JsonSerializable(typeof(ProvisioningEvent))]
+[JsonSerializable(typeof(ProvisioningEvent[]))]
 public sealed partial class SmmJsonContext : JsonSerializerContext;

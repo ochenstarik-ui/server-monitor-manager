@@ -183,6 +183,16 @@ public sealed record ProvisioningJob(
     string CurrentStep,
     string? LastError);
 
+public sealed record ProvisioningEvent(
+    long Sequence,
+    string JobId,
+    DateTimeOffset RecordedAt,
+    string EventType,
+    string State,
+    string Step,
+    int ProgressPercent,
+    string Message);
+
 public static class ProvisioningJobStates
 {
     public const string Queued = "Queued";

@@ -484,6 +484,23 @@ control.MapGet("/provisioning/jobs/{id}", async (
     var job = await controlStore.GetProvisioningJobAsync(id, cancellationToken);
     return job is null ? Results.NotFound() : Results.Ok(job);
 });
+control.MapGet("/provisioning/jobs/{id}/events", async (
+    string id,
+    int? limit,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id) || limit is < 1 or > 200)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningEvents"] = ["Invalid provisioning job id or limit (1-200)."]
+        });
+    }
+    var events = await controlStore.ListProvisioningEventsAsync(
+        id, limit ?? 100, cancellationToken);
+    return events is null ? Results.NotFound() : Results.Ok(events.ToArray());
+});
 control.MapPost("/provisioning/jobs/{id}/confirm", async (
     string id,
     ProvisioningJobCommandRequest request,

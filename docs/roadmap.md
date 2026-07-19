@@ -117,7 +117,7 @@
 - [x] начальные строгие JSON schemas v1 для `preflight` и `system.base-install`;
 - [ ] versioned JSON schemas для остальных action type;
 - [ ] restricted root helper через Unix socket;
-- [ ] structured redacted events и progress;
+- [x] structured redacted events, bounded Operator history и progress;
 - [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
 - [ ] desired/factual configuration и drift;
 - [x] запрет параллельных активных заданий на одном Node (безопасный первый вариант).

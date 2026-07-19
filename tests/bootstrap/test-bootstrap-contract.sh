@@ -11,7 +11,9 @@ version_output="$(bash "$bootstrap" --version)"
 
 grep -Fq "install-control ARCHIVE PUBLIC_HOST" <<<"$help_output"
 grep -Fq "install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT" <<<"$help_output"
+grep -Fq "install-node ARCHIVE" <<<"$help_output"
 grep -Fq "SMM_ENROLL_TOKEN" <<<"$help_output"
+grep -Fq "node-code NODE_ID" <<<"$help_output"
 grep -Fq "node-token NODE_ID" <<<"$help_output"
 grep -Eq '^ochenstarik-server-monitor-manager [0-9]+\.[0-9]+\.[0-9]+-' <<<"$version_output"
 

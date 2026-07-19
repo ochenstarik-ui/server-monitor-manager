@@ -35,9 +35,11 @@ Usage:
   ochenstarik-server-monitor-manager.sh preflight
   ochenstarik-server-monitor-manager.sh install-control ARCHIVE PUBLIC_HOST [HTTPS_PORT]
   ochenstarik-server-monitor-manager.sh install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT
+  ochenstarik-server-monitor-manager.sh install-node ARCHIVE
   ochenstarik-server-monitor-manager.sh update-control ARCHIVE
   ochenstarik-server-monitor-manager.sh update-agent ARCHIVE
   ochenstarik-server-monitor-manager.sh rollback control|agent [BACKUP_ID]
+  ochenstarik-server-monitor-manager.sh node-code NODE_ID
   ochenstarik-server-monitor-manager.sh node-token NODE_ID
   ochenstarik-server-monitor-manager.sh control-ca-fingerprint
   ochenstarik-server-monitor-manager.sh status
@@ -49,6 +51,23 @@ ARCHIVE must have a matching ARCHIVE.sha256 file. Agent enrollment reads the
 one-time token from SMM_ENROLL_TOKEN or from a hidden local prompt; it is never
 written to agent.env.
 EOF
+}
+
+base64url_encode() {
+    base64 -w 0 | tr '+/' '-_' | tr -d '='
+}
+
+base64url_decode() {
+    local value="$1" remainder
+    [[ "$value" =~ ^[A-Za-z0-9_-]+$ ]] || fail "Enrollment code contains invalid base64url data."
+    remainder=$(( ${#value} % 4 ))
+    case "$remainder" in
+        0) ;;
+        2) value+="==" ;;
+        3) value+="=" ;;
+        *) fail "Enrollment code contains invalid base64url length." ;;
+    esac
+    printf '%s' "$value" | tr '_-' '/+' | base64 -d
 }
 
 require_root() {
@@ -264,8 +283,10 @@ Control__BackupDirectory=$STATE_DIR/backups
 Control__HubHelperPath=$POLICY_HELPER
 Control__PrivilegeEscalationPath=/usr/bin/sudo
 EOF
+    printf '%s\n' "https://$public_host:$port" >"$ETC_DIR/control-public-url"
     chown root:"$CONTROL_USER" "$ETC_DIR/control.env"
     chmod 0640 "$ETC_DIR/control.env"
+    chmod 0644 "$ETC_DIR/control-public-url"
     install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" "$POLICY_HELPER"
     printf '%s\n' "$CONTROL_USER ALL=(root) NOPASSWD: $POLICY_HELPER *" >"$SUDOERS_FILE"
     chmod 0440 "$SUDOERS_FILE"
@@ -346,6 +367,54 @@ EOF
     log "Agent $node_id installed and enrolled. Backup: $backup_id"
 }
 
+read_enrollment_code() {
+    if [[ -n "${SMM_ENROLL_CODE:-}" ]]; then
+        ENROLL_CODE="$SMM_ENROLL_CODE"
+        unset SMM_ENROLL_CODE
+        return
+    fi
+    [[ -t 0 ]] || fail "Set SMM_ENROLL_CODE or run from an interactive local terminal."
+    read -r -s -p "SMMNODE1 enrollment code: " ENROLL_CODE
+    printf '\n'
+    [[ -n "$ENROLL_CODE" ]] || fail "Enrollment code is empty."
+}
+
+confirm_ca_fingerprint() {
+    local ca_file="$1" answer
+    log "Control CA fingerprint: $(openssl x509 -in "$ca_file" -noout -fingerprint -sha256 | cut -d= -f2)"
+    if [[ "${SMM_ACCEPT_CA_FINGERPRINT:-}" == "1" ]]; then
+        return
+    fi
+    [[ -t 0 ]] || fail "Set SMM_ACCEPT_CA_FINGERPRINT=1 only after verifying the fingerprint out of band."
+    read -r -p "Type 'yes' after comparing this fingerprint with the Hub: " answer
+    [[ "$answer" == "yes" ]] || fail "Control CA fingerprint was not confirmed."
+}
+
+install_node_from_code() {
+    local archive="$1" prefix control_part ca_part node_part token_part extra
+    local control_url node_id token ca_file
+    require_root
+    require_command base64
+    require_command openssl
+    read_enrollment_code
+    IFS='.' read -r prefix control_part ca_part node_part token_part extra <<<"$ENROLL_CODE"
+    ENROLL_CODE=""
+    [[ "$prefix" == "SMMNODE1" && -n "$control_part" && -n "$ca_part" \
+        && -n "$node_part" && -n "$token_part" && -z "${extra:-}" ]] \
+        || fail "Invalid SMMNODE1 enrollment code."
+    control_url="$(base64url_decode "$control_part")"
+    node_id="$(base64url_decode "$node_part")"
+    token="$(base64url_decode "$token_part")"
+    ca_file="$(mktemp -t smm-control-ca.XXXXXXXX.crt)"
+    chmod 0600 "$ca_file"
+    base64url_decode "$ca_part" >"$ca_file"
+    confirm_ca_fingerprint "$ca_file"
+    SMM_ENROLL_TOKEN="$token"
+    token=""
+    install_agent "$archive" "$node_id" "$control_url" "$ca_file"
+    rm -f -- "$ca_file"
+}
+
 update_role() {
     local role="$1" archive="$2" binary unit user backup_id
     require_root
@@ -423,6 +492,26 @@ run_control_cli() {
         "$LIB_DIR/control/ochenstarik-smm-control" "$command_name" "$identifier"
 }
 
+create_node_code() {
+    local node_id="$1" token control_url ca_pem
+    require_root
+    validate_node_id "$node_id"
+    [[ -r "$ETC_DIR/control-public-url" ]] || fail "Control public URL is missing; reinstall Control with PUBLIC_HOST."
+    [[ -r "$ETC_DIR/control-ca.crt" ]] || fail "Control CA certificate is missing."
+    require_command base64
+    control_url="$(tr -d '\r\n' <"$ETC_DIR/control-public-url")"
+    validate_control_url "$control_url"
+    token="$(run_control_cli token-create "$node_id")"
+    [[ -n "$token" && "$token" != *$'\n'* ]] || fail "Control returned an invalid enrollment token."
+    ca_pem="$(cat "$ETC_DIR/control-ca.crt")"
+    printf 'SMMNODE1.%s.%s.%s.%s\n' \
+        "$(printf '%s' "$control_url" | base64url_encode)" \
+        "$(printf '%s' "$ca_pem" | base64url_encode)" \
+        "$(printf '%s' "$node_id" | base64url_encode)" \
+        "$(printf '%s' "$token" | base64url_encode)"
+    token=""
+}
+
 show_ca_fingerprint() {
     [[ -f "$ETC_DIR/control-ca.crt" ]] || fail "Control CA certificate is not installed."
     require_command openssl
@@ -471,9 +560,11 @@ main() {
         preflight) preflight ;;
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
+        install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;
         update-control) [[ $# -eq 1 ]] || fail "update-control requires ARCHIVE"; update_role control "$1" ;;
         update-agent) [[ $# -eq 1 ]] || fail "update-agent requires ARCHIVE"; update_role agent "$1" ;;
         rollback) [[ $# -ge 1 && $# -le 2 ]] || fail "rollback requires control|agent [BACKUP_ID]"; rollback_role "$@" ;;
+        node-code) [[ $# -eq 1 ]] || fail "node-code requires NODE_ID"; create_node_code "$1" ;;
         node-token) [[ $# -eq 1 ]] || fail "node-token requires NODE_ID"; run_control_cli token-create "$1" ;;
         control-ca-fingerprint) [[ $# -eq 0 ]] || fail "control-ca-fingerprint takes no arguments"; show_ca_fingerprint ;;
         status) show_status ;;

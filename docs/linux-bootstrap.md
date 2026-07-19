@@ -33,34 +33,30 @@ sudo ./ochenstarik-server-monitor-manager.sh install-control \
 
 Bootstrap создаёт собственный Control CA и HTTPS certificate, системного пользователя, root-only configuration, SQLite directory и hardened systemd unit. В конце он показывает SHA-256 fingerprint CA.
 
-Создайте десятиминутный token для Node:
+Создайте десятиминутный самодостаточный код `SMMNODE1` для Node:
 
 ```bash
-sudo ./ochenstarik-server-monitor-manager.sh node-token home
+sudo ./ochenstarik-server-monitor-manager.sh node-code home
 sudo ./ochenstarik-server-monitor-manager.sh control-ca-fingerprint
 ```
 
-Скопируйте на Node только публичный файл `/etc/ochenstarik-server-monitor-manager/control-ca.crt`. Приватный CA PFX остаётся на Hub.
+Код содержит URL Control, Node ID, одноразовый token и только публичный CA certificate. Приватный CA PFX остаётся на Hub.
 
 ## Установка Agent
 
-`CONTROL_URL` обязан использовать то же DNS-имя/IP, которое было передано при установке Control. Token вводится скрыто в локальном терминале и не сохраняется в `agent.env`:
+Вставьте код `SMMNODE1` в скрытый prompt. Bootstrap покажет fingerprint CA и потребует сравнить его с Hub до создания локального Agent key и CSR. Token не сохраняется в `agent.env`:
 
 ```bash
-sudo ./ochenstarik-server-monitor-manager.sh install-agent \
-  ./server-monitor-manager-linux-x64.tar.gz \
-  home \
-  https://hub.example.com:7443 \
-  ./control-ca.crt
+sudo ./ochenstarik-server-monitor-manager.sh install-node \
+  ./server-monitor-manager-linux-x64.tar.gz
 ```
 
-Для автоматизированного теста token можно передать только в окружении одного процесса:
+Для автоматизированного теста код и явное принятие уже сверенного fingerprint можно передать только в окружении одного процесса:
 
 ```bash
-sudo SMM_ENROLL_TOKEN='one-time-token' \
-  ./ochenstarik-server-monitor-manager.sh install-agent \
-  ./server-monitor-manager-linux-x64.tar.gz home \
-  https://hub.example.com:7443 ./control-ca.crt
+sudo SMM_ENROLL_CODE='SMMNODE1....' SMM_ACCEPT_CA_FINGERPRINT=1 \
+  ./ochenstarik-server-monitor-manager.sh install-node \
+  ./server-monitor-manager-linux-x64.tar.gz
 ```
 
 ## Жизненный цикл

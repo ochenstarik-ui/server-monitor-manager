@@ -3,7 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 readonly PROGRAM="ochenstarik-server-monitor-manager"
-readonly VERSION="0.2.0-dev"
+readonly PROGRAM_VERSION="0.2.0-dev"
 readonly ETC_DIR="/etc/ochenstarik-server-monitor-manager"
 readonly LIB_DIR="/usr/local/lib/ochenstarik-server-monitor-manager"
 readonly STATE_DIR="/var/lib/ochenstarik-server-monitor-manager"
@@ -850,7 +850,7 @@ main() {
     shift || true
     case "$action" in
         help|-h|--help) usage ;;
-        version|--version) printf '%s %s\n' "$PROGRAM" "$VERSION" ;;
+        version|--version) printf '%s %s\n' "$PROGRAM" "$PROGRAM_VERSION" ;;
         preflight) preflight ;;
         verify-release) [[ $# -eq 1 ]] || fail "verify-release requires ARCHIVE"; verify_release_payload "$1" ;;
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;

@@ -258,6 +258,86 @@ public sealed partial class ControlStore
         return updated;
     }
 
+    public async Task<ProvisioningJob?> RetryProvisioningJobAsync(
+        string id,
+        ProvisioningJobCommandRequest request,
+        string actor,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"provisioning-retry:{actor}:{id}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.ProvisioningJobCommandRequest);
+        var cached = await ReadIdempotentAsync(
+            connection, transaction, operationKey, requestHash,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var current = await ReadProvisioningJobAsync(connection, transaction, id, cancellationToken);
+        if (current is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+        if (current.State is not (ProvisioningJobStates.Failed
+            or ProvisioningJobStates.NeedsReconciliation))
+        {
+            throw new ProvisioningTransitionException(current.State, ProvisioningJobStates.Queued);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var originalLifetime = current.ExpiresAt - current.CreatedAt;
+        var retryLifetime = originalLifetime < TimeSpan.FromMinutes(5)
+            ? TimeSpan.FromMinutes(5)
+            : originalLifetime;
+        var updated = current with
+        {
+            State = ProvisioningJobStates.Queued,
+            ProgressPercent = 0,
+            CurrentStep = "retry-queued",
+            UpdatedAt = now,
+            ExpiresAt = now.Add(retryLifetime),
+            Version = current.Version + 1,
+            LastError = null
+        };
+        var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE provisioning_jobs SET
+                state = $state, progress_percent = 0, current_step = $step,
+                updated_at = $updated, expires_at = $expires,
+                version = $version, last_error = NULL
+            WHERE id = $id AND version = $previous_version;
+            """;
+        update.Parameters.AddWithValue("$state", updated.State);
+        update.Parameters.AddWithValue("$step", updated.CurrentStep);
+        update.Parameters.AddWithValue("$updated", updated.UpdatedAt.ToString("O"));
+        update.Parameters.AddWithValue("$expires", updated.ExpiresAt.ToString("O"));
+        update.Parameters.AddWithValue("$version", updated.Version);
+        update.Parameters.AddWithValue("$id", id);
+        update.Parameters.AddWithValue("$previous_version", current.Version);
+        if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            throw new ProvisioningTransitionException(current.State, ProvisioningJobStates.Queued);
+        }
+
+        await WriteProvisioningEventAsync(
+            connection, transaction, id, "job.retry.queued", updated.State,
+            request.Reason, now, cancellationToken);
+        await WriteIdempotentAsync(
+            connection, transaction, operationKey, requestHash, updated,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        await WriteAuditAsync(
+            connection, transaction, actor, "provisioning.job.retry", id,
+            JsonSerializer.Serialize(new { request.Reason }), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return updated;
+    }
+
     private async Task<ProvisioningJob?> TransitionProvisioningJobAsync(
         string id,
         ProvisioningJobCommandRequest request,

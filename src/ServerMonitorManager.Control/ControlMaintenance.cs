@@ -10,7 +10,9 @@ public sealed record ControlMaintenanceResult(
     int MetricsDeleted,
     int IdempotencyDeleted,
     int AuditDeleted,
-    int TokensDeleted);
+    int TokensDeleted,
+    int ProvisioningJobsCancelled,
+    int ProvisioningJobsNeedingReconciliation);
 
 public sealed class LinkExpirationBackgroundService(
     LinkService links,
@@ -65,15 +67,20 @@ public sealed class ControlMaintenanceBackgroundService(
             {
                 var result = await store.MaintainAsync(timeProvider.GetUtcNow(), stoppingToken);
                 await backups.CreateIfDueAsync(timeProvider.GetUtcNow(), stoppingToken);
-                if (result.MetricsDeleted + result.IdempotencyDeleted + result.AuditDeleted + result.TokensDeleted > 0)
+                if (result.MetricsDeleted + result.IdempotencyDeleted + result.AuditDeleted
+                    + result.TokensDeleted + result.ProvisioningJobsCancelled
+                    + result.ProvisioningJobsNeedingReconciliation > 0)
                 {
                     logger.LogInformation(
                         "Control maintenance removed {Metrics} metrics, {Idempotency} replay records, "
-                        + "{Audit} audit records, and {Tokens} enrollment tokens.",
+                        + "{Audit} audit records, and {Tokens} enrollment tokens; cancelled {Cancelled} "
+                        + "expired jobs and marked {Reconciliation} jobs for reconciliation.",
                         result.MetricsDeleted,
                         result.IdempotencyDeleted,
                         result.AuditDeleted,
-                        result.TokensDeleted);
+                        result.TokensDeleted,
+                        result.ProvisioningJobsCancelled,
+                        result.ProvisioningJobsNeedingReconciliation);
                 }
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)

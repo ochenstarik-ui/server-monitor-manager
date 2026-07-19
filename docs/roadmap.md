@@ -118,7 +118,7 @@
 - [ ] versioned JSON schemas для остальных action type;
 - [ ] restricted root helper через Unix socket;
 - [ ] structured redacted events и progress;
-- [ ] `NeedsReconciliation` после неопределённого результата;
+- [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
 - [ ] desired/factual configuration и drift;
 - [x] запрет параллельных активных заданий на одном Node (безопасный первый вариант).
 

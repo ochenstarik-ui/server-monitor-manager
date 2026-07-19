@@ -1,6 +1,7 @@
 using Microsoft.Data.Sqlite;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
+using System.Text.Json;
 using ServerMonitorManager.Control;
 using ServerMonitorManager.Core;
 using Xunit;
@@ -106,6 +107,54 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
         var version = verify.CreateCommand();
         version.CommandText = "PRAGMA user_version;";
         Assert.Equal(3L, (long)(await version.ExecuteScalarAsync(cancellationToken))!);
+    }
+
+    [Fact]
+    public async Task ExpiredProvisioningJobsAreCancelledOrRequireReconciliationAndCanRetry()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (store, _) = CreateServices();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "queued-node", "AABB", cancellationToken);
+        await EnrollAgentAsync(store, "running-node", "CCDD", cancellationToken);
+        using var parameters = JsonDocument.Parse("{}");
+        var queued = await store.CreateProvisioningJobAsync(
+            "queued-node",
+            new ProvisioningJobCreateRequest(
+                "system.base-install", 1, parameters.RootElement.Clone(), 5,
+                "Await approval", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        var running = await store.CreateProvisioningJobAsync(
+            "running-node",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 5,
+                "Inspect node", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.NotNull(await store.ClaimNextProvisioningJobAsync("running-node", cancellationToken));
+
+        var result = await store.MaintainAsync(
+            running.ExpiresAt.AddSeconds(1), cancellationToken);
+
+        Assert.Equal(1, result.ProvisioningJobsCancelled);
+        Assert.Equal(1, result.ProvisioningJobsNeedingReconciliation);
+        Assert.Equal(ProvisioningJobStates.Cancelled,
+            (await store.GetProvisioningJobAsync(queued.Id, cancellationToken))!.State);
+        var reconciliation = await store.GetProvisioningJobAsync(running.Id, cancellationToken);
+        Assert.Equal(ProvisioningJobStates.NeedsReconciliation, reconciliation!.State);
+        Assert.Equal("job.ttl_expired", reconciliation.LastError);
+
+        var retried = await store.RetryProvisioningJobAsync(
+            running.Id,
+            new ProvisioningJobCommandRequest("Factual state checked", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Queued, retried!.State);
+        Assert.Equal(0, retried.ProgressPercent);
+        Assert.Null(retried.LastError);
+        Assert.True(retried.ExpiresAt > running.ExpiresAt);
+        Assert.NotNull(await store.ClaimNextProvisioningJobAsync("running-node", cancellationToken));
     }
 
     [Fact]

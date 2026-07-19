@@ -500,6 +500,37 @@ control.MapPost("/provisioning/jobs/{id}/cancel", async (
     CancellationToken cancellationToken) =>
     await ChangeProvisioningJobAsync(
         id, request, context, controlStore, confirm: false, cancellationToken));
+control.MapPost("/provisioning/jobs/{id}/retry", async (
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] = ["Invalid job id, reason, or idempotency key."]
+        });
+    }
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var job = await controlStore.RetryProvisioningJobAsync(
+            id, request, actor, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 control.MapPost("/automations/token", async (
     AutomationTokenCreateRequest request,
     HttpContext context,

@@ -203,8 +203,37 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
+            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            SELECT id, $now, 'job.expired', 'Cancelled',
+                   'Provisioning job expired before execution.'
+            FROM provisioning_jobs
+            WHERE expires_at <= $now
+              AND state IN ('Queued', 'AwaitingConfirmation');
+            UPDATE provisioning_jobs SET
+                state = 'Cancelled', cancelled_at = $now, updated_at = $now,
+                current_step = 'expired', version = version + 1,
+                last_error = 'job.ttl_expired'
+            WHERE expires_at <= $now
+              AND state IN ('Queued', 'AwaitingConfirmation');
+            SELECT changes();
+            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            SELECT id, $now, 'job.reconciliation.required', 'NeedsReconciliation',
+                   'Execution lease expired; factual state must be inspected.'
+            FROM provisioning_jobs
+            WHERE expires_at <= $now
+              AND state IN ('Preflight', 'Running', 'Verifying');
+            UPDATE provisioning_jobs SET
+                state = 'NeedsReconciliation', updated_at = $now,
+                current_step = 'reconcile', version = version + 1,
+                last_error = 'job.ttl_expired'
+            WHERE expires_at <= $now
+              AND state IN ('Preflight', 'Running', 'Verifying');
+            SELECT changes();
             DELETE FROM metric_samples WHERE recorded_at < $metric_cutoff;
             SELECT changes();
             DELETE FROM idempotency WHERE created_at < $idempotency_cutoff;
@@ -225,24 +254,26 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue(
             "$audit_cutoff", now.AddDays(-_options.AuditRetentionDays).ToString("O"));
         command.Parameters.AddWithValue("$now", now.ToString("O"));
-        var deleted = new int[6];
+        var changes = new int[8];
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            for (var index = 0; index < deleted.Length; index++)
+            for (var index = 0; index < changes.Length; index++)
             {
                 if (await reader.ReadAsync(cancellationToken))
                 {
-                    deleted[index] = reader.GetInt32(0);
+                    changes[index] = reader.GetInt32(0);
                 }
                 await reader.NextResultAsync(cancellationToken);
             }
         }
+        await transaction.CommitAsync(cancellationToken);
 
         var optimize = connection.CreateCommand();
         optimize.CommandText = "PRAGMA optimize; PRAGMA wal_checkpoint(PASSIVE);";
         await optimize.ExecuteNonQueryAsync(cancellationToken);
         return new ControlMaintenanceResult(
-            deleted[0], deleted[1], deleted[2], deleted[3] + deleted[4] + deleted[5]);
+            changes[2], changes[3], changes[4], changes[5] + changes[6] + changes[7],
+            changes[0], changes[1]);
     }
 
     public async Task BackupDatabaseAsync(string destinationPath, CancellationToken cancellationToken = default)

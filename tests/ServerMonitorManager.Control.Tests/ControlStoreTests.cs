@@ -84,6 +84,35 @@ public sealed class ControlStoreTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task ProvisioningJobCanBeClaimedOnlyOnceByAssignedNode()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "home", "C3D4", cancellationToken);
+        await EnrollAgentAsync(store, "other", "E5F6", cancellationToken);
+        using var parameters = JsonDocument.Parse("{}");
+        var created = await store.CreateProvisioningJobAsync(
+            "home",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 60,
+                "Inspect server", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+
+        Assert.Null(await store.ClaimNextProvisioningJobAsync("other", cancellationToken));
+        var claims = await Task.WhenAll(
+            store.ClaimNextProvisioningJobAsync("home", cancellationToken),
+            store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+
+        var claimed = Assert.Single(claims, job => job is not null)!;
+        Assert.Equal(created.Id, claimed.Id);
+        Assert.Equal("home", claimed.NodeId);
+        Assert.Equal(ProvisioningJobStates.Preflight, claimed.State);
+        Assert.Null(Assert.Single(claims, job => job is null));
+    }
+
+    [Fact]
     public void DiagnosticsExportOmitsRawIdentitiesAndNormalizesStates()
     {
         const string endpoint = "root@secret.example.test:20202";

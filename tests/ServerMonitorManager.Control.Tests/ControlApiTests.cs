@@ -118,6 +118,50 @@ public sealed class ControlApiTests : IAsyncDisposable
             $"/api/v1/control/provisioning/jobs/{job.Id}", cancellationToken)).StatusCode);
     }
 
+    [Fact]
+    public async Task AgentReceivesOnlyItsOwnProvisioningJob()
+    {
+        var nodeId = $"node-{Guid.NewGuid():N}"[..13];
+        var store = _factory.Services.GetRequiredService<ServerMonitorManager.Control.ControlStore>();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var token = await store.CreateEnrollmentTokenAsync(nodeId, TimeSpan.FromMinutes(10), cancellationToken);
+        await store.EnrollAsync(
+            new ServerMonitorManager.Core.EnrollmentRequest(
+                nodeId, token, "csr", Guid.NewGuid().ToString()),
+            () => new ServerMonitorManager.Control.IssuedCertificate(
+                "certificate", "ca", Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.AddDays(1)),
+            cancellationToken);
+        using var parameters = System.Text.Json.JsonDocument.Parse("{}");
+        var created = await store.CreateProvisioningJobAsync(
+            nodeId,
+            new ServerMonitorManager.Core.ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 60,
+                "API Agent isolation test", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+
+        using var other = _factory.CreateClient();
+        other.DefaultRequestHeaders.Add("X-Test-Identity", "other-node");
+        other.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        Assert.Equal(HttpStatusCode.NoContent, (await other.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+
+        using var assigned = _factory.CreateClient();
+        assigned.DefaultRequestHeaders.Add("X-Test-Identity", nodeId);
+        assigned.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        var response = await assigned.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var claimed = await response.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.NotNull(claimed);
+        Assert.Equal(created.Id, claimed.Id);
+        Assert.Equal(nodeId, claimed.NodeId);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Preflight, claimed.State);
+        Assert.Equal(HttpStatusCode.NoContent, (await assigned.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+    }
+
     public async ValueTask DisposeAsync() => await _factory.DisposeAsync();
 
     private sealed class ControlApiFactory : WebApplicationFactory<controlapp::Program>

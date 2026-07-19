@@ -96,6 +96,56 @@ public sealed partial class ControlStore
         return await reader.ReadAsync(cancellationToken) ? ReadProvisioningJob(reader) : null;
     }
 
+    public async Task<ProvisioningJob?> ClaimNextProvisioningJobAsync(
+        string nodeId,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE provisioning_jobs SET
+                state = $preflight,
+                updated_at = $now,
+                version = version + 1
+            WHERE id = (
+                SELECT id FROM provisioning_jobs
+                WHERE node_id = $node
+                  AND state = $queued
+                  AND expires_at > $now
+                ORDER BY created_at, id
+                LIMIT 1)
+              AND state = $queued
+            RETURNING *;
+            """;
+        command.Parameters.AddWithValue("$node", nodeId);
+        command.Parameters.AddWithValue("$queued", ProvisioningJobStates.Queued);
+        command.Parameters.AddWithValue("$preflight", ProvisioningJobStates.Preflight);
+        command.Parameters.AddWithValue("$now", now.ToString("O"));
+        ProvisioningJob? job;
+        await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
+        {
+            job = await reader.ReadAsync(cancellationToken) ? ReadProvisioningJob(reader) : null;
+        }
+        if (job is null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return null;
+        }
+
+        await WriteProvisioningEventAsync(
+            connection, transaction, job.Id, "job.claimed", job.State,
+            "Provisioning job claimed by its assigned Node.", now, cancellationToken);
+        await WriteAuditAsync(
+            connection, transaction, nodeId, "provisioning.job.claimed", job.Id,
+            JsonSerializer.Serialize(new { job.NodeId, job.ActionType, job.SchemaVersion }),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return job;
+    }
+
     public Task<ProvisioningJob?> ConfirmProvisioningJobAsync(
         string id,
         ProvisioningJobCommandRequest request,
@@ -148,7 +198,9 @@ public sealed partial class ControlStore
         }
         var allowed = requiredState is not null
             ? current.State == requiredState
-            : current.State is ProvisioningJobStates.Queued or ProvisioningJobStates.AwaitingConfirmation;
+            : current.State is ProvisioningJobStates.Queued
+                or ProvisioningJobStates.Preflight
+                or ProvisioningJobStates.AwaitingConfirmation;
         if (!allowed || current.ExpiresAt <= DateTimeOffset.UtcNow)
         {
             throw new ProvisioningTransitionException(current.State, targetState);

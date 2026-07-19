@@ -176,6 +176,7 @@ public sealed record ProvisioningJob(
 public static class ProvisioningJobStates
 {
     public const string Queued = "Queued";
+    public const string Preflight = "Preflight";
     public const string AwaitingConfirmation = "AwaitingConfirmation";
     public const string Cancelled = "Cancelled";
 }

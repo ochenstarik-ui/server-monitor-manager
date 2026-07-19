@@ -377,6 +377,20 @@ agents.MapPost("/heartbeat", async (
         });
     }
 });
+agents.MapGet("/provisioning/jobs/next", async (
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId) || !NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.Forbid();
+    }
+
+    var job = await controlStore.ClaimNextProvisioningJobAsync(nodeId, cancellationToken);
+    return job is null ? Results.NoContent() : Results.Ok(job);
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>

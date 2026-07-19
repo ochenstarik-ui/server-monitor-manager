@@ -168,6 +168,54 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.NoContent, (await assigned.GetAsync(
             "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
 
+        var preflightReport = new
+        {
+            facts = new
+            {
+                operatingSystem = "ubuntu",
+                operatingSystemVersion = "24.04",
+                architecture = "x64",
+                hasSystemd = true,
+                hasSshd = true,
+                hasNftables = true,
+                hasWireGuard = false,
+                hasApt = true
+            },
+            observedAt = DateTimeOffset.UtcNow,
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken)).StatusCode);
+        using var factsResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, factsResponse.StatusCode);
+        var recorded = await factsResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(
+            cancellationToken);
+        Assert.Equal(nodeId, recorded!.NodeId);
+        Assert.Equal("ubuntu", recorded.Facts.OperatingSystem);
+        using var replayResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        var replayed = await replayResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(cancellationToken);
+        Assert.Equal(recorded.UpdatedAt, replayed!.UpdatedAt);
+
+        using var operatorClient = _factory.CreateClient();
+        operatorClient.DefaultRequestHeaders.Add("X-Test-Identity", "windows-pc");
+        operatorClient.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        using var storedFactsResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/facts/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, storedFactsResponse.StatusCode);
+        var stored = await storedFactsResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(cancellationToken);
+        Assert.Equal(created.Id, stored!.SourceJobId);
+
         var progress = new
         {
             state = "Running",

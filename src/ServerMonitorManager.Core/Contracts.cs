@@ -179,6 +179,7 @@ public sealed record ProvisioningHelperResponse(
     string Message,
     ProvisioningPreflightResult? Preflight);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProvisioningPreflightResult(
     string OperatingSystem,
     string OperatingSystemVersion,
@@ -188,6 +189,20 @@ public sealed record ProvisioningPreflightResult(
     bool HasNftables,
     bool HasWireGuard,
     bool HasApt);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ProvisioningPreflightReportRequest(
+    ProvisioningPreflightResult Facts,
+    DateTimeOffset ObservedAt,
+    string IdempotencyKey);
+
+public sealed record NodePreflightFacts(
+    string NodeId,
+    int SchemaVersion,
+    ProvisioningPreflightResult Facts,
+    DateTimeOffset ObservedAt,
+    string SourceJobId,
+    DateTimeOffset UpdatedAt);
 
 public sealed record ProvisioningJob(
     string Id,

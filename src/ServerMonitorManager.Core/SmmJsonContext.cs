@@ -31,6 +31,8 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(ProvisioningHelperRequest))]
 [JsonSerializable(typeof(ProvisioningHelperResponse))]
 [JsonSerializable(typeof(ProvisioningPreflightResult))]
+[JsonSerializable(typeof(ProvisioningPreflightReportRequest))]
+[JsonSerializable(typeof(NodePreflightFacts))]
 [JsonSerializable(typeof(ProvisioningJob))]
 [JsonSerializable(typeof(ProvisioningJob[]))]
 [JsonSerializable(typeof(ProvisioningEvent))]

@@ -144,33 +144,34 @@ internal sealed class AgentClient(AgentOptions options)
             return;
         }
 
-        var currentProgress = job.ProgressPercent;
+        ProvisioningPreflightResult result;
         try
         {
             var helper = new ProvisioningHelperClient(options.ProvisioningSocketPath);
-            var result = await helper.RunPreflightAsync(job, cancellationToken);
-            await ReportProvisioningAsync(
-                client, job, ProvisioningJobStates.Running, 40,
-                "inspect-host", "preflight.inspected", "Host inspection completed.", cancellationToken);
-            currentProgress = 40;
-            await ReportProvisioningAsync(
-                client, job, ProvisioningJobStates.Verifying, 80,
-                "verify-host", "preflight.verifying", "Verifying preflight result.", cancellationToken);
-            currentProgress = 80;
-            await ReportProvisioningAsync(
-                client, job, ProvisioningJobStates.Completed, 100,
-                "completed", "preflight.completed", "Preflight completed.", cancellationToken);
-            Console.WriteLine(
-                $"Preflight {job.Id} completed: {result.OperatingSystem} "
-                + $"{result.OperatingSystemVersion} {result.Architecture}.");
+            result = await helper.RunPreflightAsync(job, cancellationToken);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
             await ReportProvisioningAsync(
-                client, job, ProvisioningJobStates.Failed, currentProgress,
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
                 "preflight", "preflight.failed", "Preflight helper failed.", cancellationToken);
             Console.Error.WriteLine($"Preflight {job.Id} failed: {exception.Message}");
+            return;
         }
+
+        await ReportPreflightFactsAsync(client, job, result, cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Running, 40,
+            "inspect-host", "preflight.inspected", "Host inspection completed.", cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Verifying, 80,
+            "verify-host", "preflight.verifying", "Verifying preflight result.", cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Completed, 100,
+            "completed", "preflight.completed", "Preflight completed.", cancellationToken);
+        Console.WriteLine(
+            $"Preflight {job.Id} completed: {result.OperatingSystem} "
+            + $"{result.OperatingSystemVersion} {result.Architecture}.");
     }
 
     private static async Task ReportProvisioningAsync(
@@ -189,6 +190,22 @@ internal sealed class AgentClient(AgentOptions options)
             $"api/v1/agents/provisioning/jobs/{job.Id}/progress",
             request,
             SmmJsonContext.Default.ProvisioningJobProgressRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task ReportPreflightFactsAsync(
+        HttpClient client,
+        ProvisioningJob job,
+        ProvisioningPreflightResult facts,
+        CancellationToken cancellationToken)
+    {
+        var request = new ProvisioningPreflightReportRequest(
+            facts, DateTimeOffset.UtcNow, CreateOperationId(job.Id, "facts"));
+        using var response = await client.PostAsJsonAsync(
+            $"api/v1/agents/provisioning/jobs/{job.Id}/preflight-facts",
+            request,
+            SmmJsonContext.Default.ProvisioningPreflightReportRequest,
             cancellationToken);
         response.EnsureSuccessStatusCode();
     }

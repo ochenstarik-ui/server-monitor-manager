@@ -426,10 +426,59 @@ agents.MapPost("/provisioning/jobs/{id}/progress", async (
         return Results.Conflict(new ProblemDetails { Title = exception.Message });
     }
 });
+agents.MapPost("/provisioning/jobs/{id}/preflight-facts", async (
+    string id,
+    ProvisioningPreflightReportRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["preflightFacts"] = ["Invalid job id, facts, observation time, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var facts = await controlStore.RecordPreflightFactsAsync(
+            nodeId, id, request, cancellationToken);
+        return facts is null ? Results.NotFound() : Results.Ok(facts);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
+control.MapGet("/agents/{nodeId}/facts/preflight", async (
+    string nodeId,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["nodeId"] = ["Invalid node id."]
+        });
+    }
+    var facts = await controlStore.GetPreflightFactsAsync(nodeId, cancellationToken);
+    return facts is null ? Results.NotFound() : Results.Ok(facts);
+});
 control.MapPost("/agents/{nodeId}/provisioning/jobs", async (
     string nodeId,
     ProvisioningJobCreateRequest request,
@@ -879,6 +928,15 @@ internal static class ProvisioningJobValidator
            && request.Message.Length <= 512
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 
+    public static bool IsValid(ProvisioningPreflightReportRequest request)
+        => request.ObservedAt >= DateTimeOffset.UtcNow.AddHours(-1)
+           && request.ObservedAt <= DateTimeOffset.UtcNow.AddMinutes(1)
+           && request.Facts is not null
+           && IsSafeFact(request.Facts.OperatingSystem, 32)
+           && IsSafeFact(request.Facts.OperatingSystemVersion, 64)
+           && request.Facts.Architecture is "x64" or "x86" or "arm" or "arm64"
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
     public static bool IsValidId(string id)
         => id.Length == 32 && Guid.TryParseExact(id, "N", out _);
 
@@ -890,4 +948,10 @@ internal static class ProvisioningJobValidator
            && value.All(character => character is >= 'a' and <= 'z'
                or >= '0' and <= '9'
                or '.' or '-' or '_');
+
+    private static bool IsSafeFact(string? value, int maximumLength)
+        => value is not null
+           && value.Length is >= 1 && value.Length <= maximumLength
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '_' or '-' or '.');
 }

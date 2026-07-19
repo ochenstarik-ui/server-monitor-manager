@@ -193,5 +193,8 @@ public static class ProvisioningJobStates
     public const string Completed = "Completed";
     public const string Failed = "Failed";
     public const string NeedsReconciliation = "NeedsReconciliation";
+    public const string RollingBack = "RollingBack";
+    public const string RolledBack = "RolledBack";
+    public const string RollbackFailed = "RollbackFailed";
     public const string Cancelled = "Cancelled";
 }

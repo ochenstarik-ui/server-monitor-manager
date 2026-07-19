@@ -109,22 +109,29 @@ public sealed partial class ControlStore
         command.Transaction = transaction;
         command.CommandText = """
             UPDATE provisioning_jobs SET
-                state = $preflight,
+                state = CASE WHEN state = $queued THEN $preflight ELSE $rolling_back END,
+                current_step = CASE
+                    WHEN state = $queued THEN 'preflight'
+                    ELSE 'rollback'
+                END,
                 updated_at = $now,
                 version = version + 1
             WHERE id = (
                 SELECT id FROM provisioning_jobs
                 WHERE node_id = $node
-                  AND state = $queued
+                  AND (state = $queued
+                       OR (state = $rolling_back AND current_step = 'rollback-queued'))
                   AND expires_at > $now
-                ORDER BY created_at, id
+                ORDER BY CASE WHEN state = $rolling_back THEN 0 ELSE 1 END, created_at, id
                 LIMIT 1)
-              AND state = $queued
+              AND (state = $queued
+                   OR (state = $rolling_back AND current_step = 'rollback-queued'))
             RETURNING *;
             """;
         command.Parameters.AddWithValue("$node", nodeId);
         command.Parameters.AddWithValue("$queued", ProvisioningJobStates.Queued);
         command.Parameters.AddWithValue("$preflight", ProvisioningJobStates.Preflight);
+        command.Parameters.AddWithValue("$rolling_back", ProvisioningJobStates.RollingBack);
         command.Parameters.AddWithValue("$now", now.ToString("O"));
         ProvisioningJob? job;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
@@ -209,6 +216,7 @@ public sealed partial class ControlStore
             Version = current.Version + 1,
             LastError = request.State is ProvisioningJobStates.Failed
                 or ProvisioningJobStates.NeedsReconciliation
+                or ProvisioningJobStates.RollbackFailed
                 ? request.EventCode
                 : null
         };
@@ -284,7 +292,8 @@ public sealed partial class ControlStore
             return null;
         }
         if (current.State is not (ProvisioningJobStates.Failed
-            or ProvisioningJobStates.NeedsReconciliation))
+            or ProvisioningJobStates.NeedsReconciliation)
+            || current.CurrentStep == "rollback-reconcile")
         {
             throw new ProvisioningTransitionException(current.State, ProvisioningJobStates.Queued);
         }
@@ -333,6 +342,88 @@ public sealed partial class ControlStore
             SmmJsonContext.Default.ProvisioningJob, cancellationToken);
         await WriteAuditAsync(
             connection, transaction, actor, "provisioning.job.retry", id,
+            JsonSerializer.Serialize(new { request.Reason }), cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return updated;
+    }
+
+    public async Task<ProvisioningJob?> StartProvisioningRollbackAsync(
+        string id,
+        ProvisioningJobCommandRequest request,
+        string actor,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"provisioning-rollback:{actor}:{id}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(request, SmmJsonContext.Default.ProvisioningJobCommandRequest);
+        var cached = await ReadIdempotentAsync(
+            connection, transaction, operationKey, requestHash,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var current = await ReadProvisioningJobAsync(connection, transaction, id, cancellationToken);
+        if (current is null)
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+        if (current.State is not (ProvisioningJobStates.Failed
+            or ProvisioningJobStates.NeedsReconciliation
+            or ProvisioningJobStates.RollbackFailed))
+        {
+            throw new ProvisioningTransitionException(current.State, ProvisioningJobStates.RollingBack);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var lifetime = current.ExpiresAt - current.CreatedAt;
+        if (lifetime < TimeSpan.FromMinutes(5))
+        {
+            lifetime = TimeSpan.FromMinutes(5);
+        }
+        var updated = current with
+        {
+            State = ProvisioningJobStates.RollingBack,
+            ProgressPercent = 0,
+            CurrentStep = "rollback-queued",
+            UpdatedAt = now,
+            ExpiresAt = now.Add(lifetime),
+            Version = current.Version + 1,
+            LastError = null
+        };
+        var update = connection.CreateCommand();
+        update.Transaction = transaction;
+        update.CommandText = """
+            UPDATE provisioning_jobs SET
+                state = $state, progress_percent = 0, current_step = $step,
+                updated_at = $updated, expires_at = $expires,
+                version = $version, last_error = NULL
+            WHERE id = $id AND version = $previous_version;
+            """;
+        update.Parameters.AddWithValue("$state", updated.State);
+        update.Parameters.AddWithValue("$step", updated.CurrentStep);
+        update.Parameters.AddWithValue("$updated", updated.UpdatedAt.ToString("O"));
+        update.Parameters.AddWithValue("$expires", updated.ExpiresAt.ToString("O"));
+        update.Parameters.AddWithValue("$version", updated.Version);
+        update.Parameters.AddWithValue("$id", id);
+        update.Parameters.AddWithValue("$previous_version", current.Version);
+        if (await update.ExecuteNonQueryAsync(cancellationToken) != 1)
+        {
+            throw new ProvisioningTransitionException(current.State, ProvisioningJobStates.RollingBack);
+        }
+
+        await WriteProvisioningEventAsync(
+            connection, transaction, id, "job.rollback.queued", updated.State,
+            request.Reason, now, cancellationToken);
+        await WriteIdempotentAsync(
+            connection, transaction, operationKey, requestHash, updated,
+            SmmJsonContext.Default.ProvisioningJob, cancellationToken);
+        await WriteAuditAsync(
+            connection, transaction, actor, "provisioning.job.rollback", id,
             JsonSerializer.Serialize(new { request.Reason }), cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return updated;
@@ -509,6 +600,10 @@ internal static class ProvisioningStateMachine
                 or ProvisioningJobStates.Running
                 or ProvisioningJobStates.Verifying;
         }
+        if (target == ProvisioningJobStates.RollbackFailed)
+        {
+            return current == ProvisioningJobStates.RollingBack;
+        }
         return (current, target) switch
         {
             (ProvisioningJobStates.Preflight, ProvisioningJobStates.Preflight) => true,
@@ -517,6 +612,8 @@ internal static class ProvisioningStateMachine
             (ProvisioningJobStates.Running, ProvisioningJobStates.Verifying) => true,
             (ProvisioningJobStates.Verifying, ProvisioningJobStates.Verifying) => true,
             (ProvisioningJobStates.Verifying, ProvisioningJobStates.Completed) => targetProgress == 100,
+            (ProvisioningJobStates.RollingBack, ProvisioningJobStates.RollingBack) => true,
+            (ProvisioningJobStates.RollingBack, ProvisioningJobStates.RolledBack) => targetProgress == 100,
             _ => false
         };
     }

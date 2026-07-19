@@ -10,7 +10,7 @@ namespace ServerMonitorManager.Control;
 
 public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 3;
+    private const int CurrentSchemaVersion = 4;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -196,6 +196,23 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             await migrateProgress.ExecuteNonQueryAsync(cancellationToken);
             await migration.CommitAsync(cancellationToken);
         }
+
+        if (schemaVersion < 4)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var strengthenProvisioningLock = connection.CreateCommand();
+            strengthenProvisioningLock.Transaction = migration;
+            strengthenProvisioningLock.CommandText = """
+                DROP INDEX IF EXISTS ux_provisioning_jobs_active_node;
+                CREATE UNIQUE INDEX ux_provisioning_jobs_active_node
+                    ON provisioning_jobs(node_id)
+                    WHERE state NOT IN ('Completed', 'Cancelled', 'RolledBack');
+                PRAGMA user_version = 4;
+                """;
+            await strengthenProvisioningLock.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
     }
 
     public async Task<ControlMaintenanceResult> MaintainAsync(
@@ -234,6 +251,17 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             WHERE expires_at <= $now
               AND state IN ('Preflight', 'Running', 'Verifying');
             SELECT changes();
+            INSERT INTO provisioning_events(job_id, recorded_at, event_type, state, message)
+            SELECT id, $now, 'job.rollback.reconciliation.required', 'NeedsReconciliation',
+                   'Rollback lease expired; factual state must be inspected.'
+            FROM provisioning_jobs
+            WHERE expires_at <= $now AND state = 'RollingBack';
+            UPDATE provisioning_jobs SET
+                state = 'NeedsReconciliation', updated_at = $now,
+                current_step = 'rollback-reconcile', version = version + 1,
+                last_error = 'job.rollback.ttl_expired'
+            WHERE expires_at <= $now AND state = 'RollingBack';
+            SELECT changes();
             DELETE FROM metric_samples WHERE recorded_at < $metric_cutoff;
             SELECT changes();
             DELETE FROM idempotency WHERE created_at < $idempotency_cutoff;
@@ -254,7 +282,7 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue(
             "$audit_cutoff", now.AddDays(-_options.AuditRetentionDays).ToString("O"));
         command.Parameters.AddWithValue("$now", now.ToString("O"));
-        var changes = new int[8];
+        var changes = new int[9];
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             for (var index = 0; index < changes.Length; index++)
@@ -272,8 +300,8 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         optimize.CommandText = "PRAGMA optimize; PRAGMA wal_checkpoint(PASSIVE);";
         await optimize.ExecuteNonQueryAsync(cancellationToken);
         return new ControlMaintenanceResult(
-            changes[2], changes[3], changes[4], changes[5] + changes[6] + changes[7],
-            changes[0], changes[1]);
+            changes[3], changes[4], changes[5], changes[6] + changes[7] + changes[8],
+            changes[0], changes[1] + changes[2]);
     }
 
     public async Task BackupDatabaseAsync(string destinationPath, CancellationToken cancellationToken = default)

@@ -109,7 +109,7 @@
 ## Этап 8 — Provisioning control plane
 
 - [x] модели и SQLite migration v2 для ProvisioningJob;
-- [ ] state machine, confirmations, cancellation, retry и rollback;
+- [x] state machine, confirmations, cancellation, retry и rollback;
 - [x] создание, чтение, подтверждение и отмена через Operator API;
 - [ ] выполнение, retry, verification и rollback в полной state machine;
 - [x] обязательные idempotency key, audit reason и job TTL;

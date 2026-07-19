@@ -12,6 +12,9 @@ version_output="$(bash "$bootstrap" --version)"
 grep -Fq "install-control ARCHIVE PUBLIC_HOST" <<<"$help_output"
 grep -Fq "install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT" <<<"$help_output"
 grep -Fq "install-node ARCHIVE" <<<"$help_output"
+grep -Fq "mesh-init PUBLIC_ENDPOINT" <<<"$help_output"
+grep -Fq "peer-add SMMPEER1_CODE" <<<"$help_output"
+grep -Fq "mesh-status" <<<"$help_output"
 grep -Fq "SMM_ENROLL_TOKEN" <<<"$help_output"
 grep -Fq "node-code NODE_ID" <<<"$help_output"
 grep -Fq "verify-release ARCHIVE" <<<"$help_output"
@@ -28,6 +31,18 @@ if env -u SUDO_UID -u SUDO_USER bash "$helper" link-connect source target tcp 22
     exit 1
 fi
 
+policy_state="$(mktemp -t smm-policy-state.XXXXXXXX)"
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$policy_state"
+printf 'target\t10.77.0.3\tkey-target\tactive\n' >>"$policy_state"
+connect_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    bash "$helper" link-connect source target tcp 22 10)"
+grep -Fq 'ip saddr 10.77.0.2 ip daddr 10.77.0.3 tcp dport 22' <<<"$connect_output"
+grep -Fq 'smm:source:target:tcp:22' <<<"$connect_output"
+disconnect_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    bash "$helper" link-disconnect source target tcp 22)"
+grep -Fq 'smm:source:target:tcp:22' <<<"$disconnect_output"
+rm -f -- "$policy_state"
+
 fixture="$(mktemp -d -t smm-bootstrap-test.XXXXXXXX)"
 trap 'rm -rf -- "$fixture"' EXIT
 mkdir -p "$fixture/payload/agent" "$fixture/payload/control" "$fixture/payload/deploy" "$fixture/payload/bootstrap"
@@ -36,6 +51,7 @@ install -m 0755 /bin/true "$fixture/payload/control/ochenstarik-smm-control"
 install -m 0755 "$helper" "$fixture/payload/deploy/ochenstarik-smm-policy-apply"
 install -m 0644 "$root/deploy/ochenstarik-smm-control.service" "$fixture/payload/deploy/"
 install -m 0644 "$root/deploy/ochenstarik-smm-agent.service" "$fixture/payload/deploy/"
+install -m 0644 "$root/deploy/ochenstarik-smm-firewall.service" "$fixture/payload/deploy/"
 install -m 0755 "$bootstrap" "$fixture/payload/bootstrap/ochenstarik-server-monitor-manager.sh"
 tar -C "$fixture/payload" -czf "$fixture/release.tar.gz" agent control deploy bootstrap
 sha256sum "$fixture/release.tar.gz" >"$fixture/release.tar.gz.sha256"

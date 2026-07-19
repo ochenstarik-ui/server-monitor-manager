@@ -1,0 +1,15 @@
+[Unit]
+Description=Server Monitor Manager Mesh firewall
+After=network-pre.target
+Before=wg-quick@smm0.service network-online.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+ExecStartPre=-/usr/sbin/nft delete table inet ochenstarik_smm
+ExecStart=/usr/sbin/nft -f /etc/ochenstarik-server-monitor-manager/mesh.nft
+ExecReload=/usr/sbin/nft -f /etc/ochenstarik-server-monitor-manager/mesh.nft
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

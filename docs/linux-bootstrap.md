@@ -1,25 +1,20 @@
-# Linux bootstrap: первая тестовая версия
+# Linux bootstrap и собственная Mesh-сеть
 
-Собственный bootstrap Server Monitor Manager устанавливает Control или Agent из локального release-архива. Архив принимается только вместе с файлом `<archive>.sha256`, проверяется до распаковки и может содержать лишь каталоги `agent`, `control`, `deploy` и `bootstrap`.
+Server Monitor Manager устанавливает Control (Hub) и Agent (Node) из проверяемого release-архива. Для связи серверов используется собственная WireGuard-сеть `10.77.0.0/24`; Tailscale и другие внешние VPN-сервисы не требуются.
 
-Текущая версия предназначена для подготовки следующего alpha release. Она устанавливает Control/Agent и mTLS enrollment, но пока не настраивает WireGuard data plane. Ограниченный policy helper намеренно отклоняет Link mutations до реализации следующего этапа.
+Текущая версия предназначена для alpha-тестирования на Ubuntu Server 22.04/24.04 и Debian 12/13 (`amd64`, `arm64`, systemd). Hub должен иметь публичный IPv4-адрес или DNS-имя и доступный UDP-порт. Node может находиться за NAT без белого IP.
 
-## Поддерживаемые системы
+## Файлы релиза
 
-- Ubuntu Server 22.04/24.04;
-- Debian 12/13;
-- `amd64` и `arm64`;
-- systemd.
+Скачайте из одного GitHub Release:
 
-## Установка Control
-
-Скачайте из одного release:
-
-- `ochenstarik-server-monitor-manager.sh` и его `.sha256`;
+- `ochenstarik-server-monitor-manager.sh` и `.sha256`;
 - `server-monitor-manager-linux-x64.tar.gz` или `server-monitor-manager-linux-arm64.tar.gz`;
 - соответствующий `.tar.gz.sha256`.
 
-Сначала проверьте bootstrap, затем установите Control. `PUBLIC_HOST` должен совпадать с DNS-именем или IP, по которому Agents обращаются к Hub:
+Bootstrap проверяет SHA-256 до распаковки и принимает в архиве только каталоги `agent`, `control`, `deploy` и `bootstrap`.
+
+## 1. Установка главного сервера (Hub)
 
 ```bash
 sha256sum -c ochenstarik-server-monitor-manager.sh.sha256
@@ -31,40 +26,66 @@ sudo ./ochenstarik-server-monitor-manager.sh install-control \
   ./server-monitor-manager-linux-x64.tar.gz \
   hub.example.com \
   7443
+sudo ./ochenstarik-server-monitor-manager.sh mesh-init hub.example.com 51820
 ```
 
-Bootstrap создаёт собственный Control CA и HTTPS certificate, системного пользователя, root-only configuration, SQLite directory и hardened systemd unit. В конце он показывает SHA-256 fingerprint CA.
+Откройте на Hub и во внешнем firewall/security group:
 
-Создайте десятиминутный самодостаточный код `SMMNODE1` для Node:
+- TCP `7443` для Control HTTPS;
+- UDP `51820` для WireGuard.
+
+`install-control` создаёт локальный Control CA и HTTPS-сертификат. Приватный ключ CA не включается в коды подключения и остаётся на Hub. `mesh-init` устанавливает `wireguard-tools`, `nftables` и `iproute2`, создаёт ключ Hub, интерфейс `smm0`, включает IPv4 forwarding и межсерверный firewall с запретом по умолчанию.
+
+## 2. Выпуск кода для Node
 
 ```bash
 sudo ./ochenstarik-server-monitor-manager.sh node-code home
 sudo ./ochenstarik-server-monitor-manager.sh control-ca-fingerprint
 ```
 
-Код содержит URL Control, Node ID, одноразовый token и только публичный CA certificate. Приватный CA PFX остаётся на Hub.
+После `mesh-init` команда выдаёт одноразовый код `SMMNODE2`. Он содержит Control URL, публичный сертификат CA, Node ID, десятиминутный enrollment token, endpoint и публичный ключ Hub, а также зарезервированный Mesh-адрес. Обращайтесь с кодом как с временным секретом.
 
-## Установка Agent
+## 3. Установка вторичного сервера (Node)
 
-Вставьте код `SMMNODE1` в скрытый prompt. Bootstrap покажет fingerprint CA и потребует сравнить его с Hub до создания локального Agent key и CSR. Token не сохраняется в `agent.env`:
+Node может быть за NAT. Ему нужен исходящий доступ к TCP-порту Control и UDP-порту WireGuard на Hub.
 
 ```bash
 sudo ./ochenstarik-server-monitor-manager.sh install-node \
   ./server-monitor-manager-linux-x64.tar.gz
 ```
 
-Для автоматизированного теста код и явное принятие уже сверенного fingerprint можно передать только в окружении одного процесса:
+Вставьте `SMMNODE2` в скрытый prompt. Сверьте показанный SHA-256 fingerprint CA с Hub и введите `yes`. После mTLS enrollment установщик создаст локальный приватный ключ WireGuard, запустит `smm0` с `PersistentKeepalive = 25` и выведет публичный код `SMMPEER1`.
+
+Для автоматизированного стенда допускается передача кода только в окружении процесса после отдельной сверки fingerprint:
 
 ```bash
-sudo SMM_ENROLL_CODE='SMMNODE1....' SMM_ACCEPT_CA_FINGERPRINT=1 \
+sudo SMM_ENROLL_CODE='SMMNODE2....' SMM_ACCEPT_CA_FINGERPRINT=1 \
   ./ochenstarik-server-monitor-manager.sh install-node \
   ./server-monitor-manager-linux-x64.tar.gz
 ```
 
-## Жизненный цикл
+## 4. Активация Node на Hub
+
+Скопируйте выведенный Node код `SMMPEER1` на Hub:
+
+```bash
+sudo ./ochenstarik-server-monitor-manager.sh peer-add 'SMMPEER1....'
+sudo ./ochenstarik-server-monitor-manager.sh mesh-status
+```
+
+Hub проверяет Node ID и ранее зарезервированный IP, сохраняет публичный ключ peer и перезапускает интерфейс. Приватный ключ Node никогда не покидает Node.
+
+## Изоляция и управляемые соединения
+
+Трафик `smm0 -> smm0` по умолчанию блокируется. Control вызывает root-helper только для точных правил `source IP -> target IP`, протокола и порта. Поддерживаются команды helper `link-connect SOURCE TARGET tcp|udp PORT TTL_MINUTES` и `link-disconnect SOURCE TARGET tcp|udp PORT`. Это позволяет вручную подключать AI-агент к выбранному серверу и затем отзывать доступ, не открывая связь между всеми Node.
+
+В текущем alpha TTL валидируется и хранится Control, а удаление просроченных правил зависит от reconciliation Control. После перезапуска firewall разрешающие правила должны быть повторно применены Control.
+
+## Обслуживание
 
 ```bash
 sudo ./ochenstarik-server-monitor-manager.sh status
+sudo ./ochenstarik-server-monitor-manager.sh mesh-status
 sudo ./ochenstarik-server-monitor-manager.sh update-control ARCHIVE
 sudo ./ochenstarik-server-monitor-manager.sh update-agent ARCHIVE
 sudo ./ochenstarik-server-monitor-manager.sh rollback control
@@ -74,8 +95,4 @@ sudo ./ochenstarik-server-monitor-manager.sh uninstall-agent --purge
 sudo ./ochenstarik-server-monitor-manager.sh uninstall-control --confirm-destroy-control
 ```
 
-Update создаёт root-only backup перед заменой binaries. При неуспешном health state предыдущая версия восстанавливается. Agent uninstall без `--purge` сохраняет state; удаление Control требует явного подтверждения и удаляет его SQLite/CA state.
-
-## Следующий этап
-
-До тестирования Mesh необходимо добавить WireGuard Hub/Node setup, выдачу адресов, persistent keepalive и применение nftables Links в policy helper. До этого момента bootstrap подходит для тестирования Control, Agent, enrollment, heartbeat, update и rollback, но не для сетевого объединения серверов.
+Update создаёт root-only backup перед заменой binaries и автоматически восстанавливает предыдущую версию, если сервис не запускается. Перед alpha-тестом на реальных серверах обязательно сохраните отдельную консольную/SSH-сессию и не закрывайте основной административный доступ firewall-правилами проекта.

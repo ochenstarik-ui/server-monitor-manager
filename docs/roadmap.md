@@ -97,8 +97,8 @@
 - [x] добавить non-interactive install/update/rollback/uninstall;
 - [x] устанавливать Control/Agent, restricted helper и systemd units;
 - [x] локально создавать Agent key/CSR, выполнять mTLS enrollment и не сохранять token;
-- [ ] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
-- [ ] реализовать nftables policy helper вместо временного deny-by-default helper;
+- [x] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
+- [x] реализовать nftables policy helper вместо временного deny-by-default helper;
 - [ ] добавить VM CI matrix, повторную установку и reboot;
 - [ ] добавить локальную emergency recovery command.
 

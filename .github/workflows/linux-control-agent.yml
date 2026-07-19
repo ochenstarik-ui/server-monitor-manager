@@ -37,6 +37,14 @@ jobs:
           bash -n tests/acceptance/three-server-mesh.sh
           shellcheck --severity=error tests/acceptance/three-server-mesh.sh
 
+      - name: Verify standalone bootstrap
+        run: |
+          bash -n deploy/ochenstarik-server-monitor-manager.sh
+          bash -n deploy/ochenstarik-smm-policy-apply
+          shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
+          shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
+          bash tests/bootstrap/test-bootstrap-contract.sh
+
       - name: Publish agent amd64
         run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
 

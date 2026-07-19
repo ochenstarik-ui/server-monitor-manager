@@ -42,7 +42,7 @@ The control plane and data plane are separated:
 
 See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), [Linux bootstrap contract](docs/installer-contract.md), and the [Provisioning and Xray specification](docs/provisioning-vpn-requirements.md).
 
-Operational procedures are documented in [Control backup and recovery](docs/control-backup.md) and the [three-server acceptance test](docs/three-server-acceptance.md).
+Operational procedures are documented in [Linux bootstrap](docs/linux-bootstrap.md), [Control backup and recovery](docs/control-backup.md), and the [three-server acceptance test](docs/three-server-acceptance.md).
 
 ## Repository layout
 

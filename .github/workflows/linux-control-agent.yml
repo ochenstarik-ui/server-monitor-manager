@@ -90,7 +90,7 @@ jobs:
           done
           curl --fail --silent --show-error \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz \
+            https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \
             || report_failure 'Initial Control healthcheck failed'
           sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
             smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
@@ -102,7 +102,7 @@ jobs:
           curl --fail --silent --show-error \
             --retry 10 --retry-all-errors --retry-delay 1 \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz \
+            https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \
             || report_failure 'Repeated Control healthcheck failed'
 
       - name: Clean up systemd smoke installation

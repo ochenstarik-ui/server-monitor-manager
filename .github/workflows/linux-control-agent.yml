@@ -71,8 +71,18 @@ jobs:
       - name: Verify repeated systemd installation
         run: |
           set -Eeuo pipefail
+          smoke_log=/tmp/smm-systemd-smoke.log
+          report_failure() {
+            local title="$1" message
+            sudo systemctl status --no-pager ochenstarik-smm-control.service >>"$smoke_log" 2>&1 || true
+            sudo journalctl --no-pager -u ochenstarik-smm-control.service -n 40 >>"$smoke_log" 2>&1 || true
+            message="$(tail -c 6000 "$smoke_log" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"
+            printf '::error title=%s::%s\n' "$title" "$message"
+            exit 1
+          }
           sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
-            smoke-release.tar.gz 127.0.0.1 7443
+            smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
+            || report_failure 'Initial Control installation failed'
           for _ in {1..30}; do
             curl --fail --silent --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
               https://127.0.0.1:7443/healthz && break
@@ -80,15 +90,20 @@ jobs:
           done
           curl --fail --silent --show-error \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz
+            https://127.0.0.1:7443/healthz \
+            || report_failure 'Initial Control healthcheck failed'
           sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
-            smoke-release.tar.gz 127.0.0.1 7443
-          sudo systemctl restart ochenstarik-smm-control.service
-          sudo systemctl is-active --quiet ochenstarik-smm-control.service
+            smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
+            || report_failure 'Repeated Control installation failed'
+          sudo systemctl restart ochenstarik-smm-control.service \
+            || report_failure 'Control restart failed'
+          sudo systemctl is-active --quiet ochenstarik-smm-control.service \
+            || report_failure 'Control is inactive after restart'
           curl --fail --silent --show-error \
             --retry 10 --retry-all-errors --retry-delay 1 \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz
+            https://127.0.0.1:7443/healthz \
+            || report_failure 'Repeated Control healthcheck failed'
 
       - name: Clean up systemd smoke installation
         if: always()

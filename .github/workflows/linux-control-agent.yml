@@ -57,6 +57,12 @@ jobs:
       - name: Publish agent arm64
         run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
 
+      - name: Publish provisioning helper amd64
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+
+      - name: Publish provisioning helper arm64
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+
       - name: Build systemd smoke release
         run: |
           dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj \
@@ -65,14 +71,18 @@ jobs:
           dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj \
             --configuration Release --runtime linux-x64 --self-contained true \
             -p:PublishSingleFile=true -p:PublishTrimmed=true -o smoke/control
+          dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj \
+            --configuration Release --runtime linux-x64 --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -o smoke/provisioning-helper
           install -d smoke/deploy smoke/bootstrap
           install -m 0644 deploy/ochenstarik-smm-control.service smoke/deploy/
           install -m 0644 deploy/ochenstarik-smm-agent.service smoke/deploy/
+          install -m 0644 deploy/ochenstarik-smm-provisioning-helper.service smoke/deploy/
           install -m 0644 deploy/ochenstarik-smm-firewall.service smoke/deploy/
           install -m 0755 deploy/ochenstarik-smm-policy-apply smoke/deploy/
           install -m 0755 deploy/ochenstarik-smm-emergency smoke/deploy/
           install -m 0755 deploy/ochenstarik-server-monitor-manager.sh smoke/bootstrap/
-          tar -C smoke -czf smoke-release.tar.gz agent control deploy bootstrap
+          tar -C smoke -czf smoke-release.tar.gz agent control provisioning-helper deploy bootstrap
           sha256sum smoke-release.tar.gz > smoke-release.tar.gz.sha256
 
       - name: Verify repeated systemd installation

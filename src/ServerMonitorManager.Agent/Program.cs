@@ -19,7 +19,8 @@ if (options.HeartbeatSeconds is < 10 or > 300
     || options.BufferRecentSamples >= options.BufferMaxSamples
     || options.BufferDownsampleFactor is < 2 or > 100
     || options.UploadBatchSize is < 1 or > 100
-    || options.MaxRetrySeconds is < 10 or > 3600)
+    || options.MaxRetrySeconds is < 10 or > 3600
+    || !Path.IsPathFullyQualified(options.ProvisioningSocketPath))
 {
     Console.Error.WriteLine(
         "Invalid buffer settings: heartbeat 10-300s, max samples 10-10000, recent samples below max, "

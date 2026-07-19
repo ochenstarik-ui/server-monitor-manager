@@ -1,7 +1,8 @@
 [Unit]
 Description=Ochenstarik Server Monitor Manager Agent
-After=network-online.target
+After=network-online.target ochenstarik-smm-provisioning-helper.service
 Wants=network-online.target
+Requires=ochenstarik-smm-provisioning-helper.service
 
 [Service]
 Type=simple

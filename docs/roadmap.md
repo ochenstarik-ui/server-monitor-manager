@@ -116,7 +116,7 @@
 - [x] атомарный Agent job channel только для собственного `node_id`;
 - [x] начальные строгие JSON schemas v1 для `preflight` и `system.base-install`;
 - [ ] versioned JSON schemas для остальных action type;
-- [ ] restricted root helper через Unix socket;
+- [x] restricted root helper через Unix socket (первый allowlisted action `preflight`);
 - [x] structured redacted events, bounded Operator history и progress;
 - [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
 - [ ] desired/factual configuration и drift;

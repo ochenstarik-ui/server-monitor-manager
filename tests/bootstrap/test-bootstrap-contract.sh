@@ -53,16 +53,18 @@ rm -f -- "$policy_state"
 
 fixture="$(mktemp -d -t smm-bootstrap-test.XXXXXXXX)"
 trap 'rm -rf -- "$fixture"' EXIT
-mkdir -p "$fixture/payload/agent" "$fixture/payload/control" "$fixture/payload/deploy" "$fixture/payload/bootstrap"
+mkdir -p "$fixture/payload/agent" "$fixture/payload/control" "$fixture/payload/provisioning-helper" "$fixture/payload/deploy" "$fixture/payload/bootstrap"
 install -m 0755 /bin/true "$fixture/payload/agent/ochenstarik-smm-agent"
 install -m 0755 /bin/true "$fixture/payload/control/ochenstarik-smm-control"
+install -m 0755 /bin/true "$fixture/payload/provisioning-helper/ochenstarik-smm-provisioning-helper"
 install -m 0755 "$helper" "$fixture/payload/deploy/ochenstarik-smm-policy-apply"
 install -m 0755 "$emergency" "$fixture/payload/deploy/ochenstarik-smm-emergency"
 install -m 0644 "$root/deploy/ochenstarik-smm-control.service" "$fixture/payload/deploy/"
 install -m 0644 "$root/deploy/ochenstarik-smm-agent.service" "$fixture/payload/deploy/"
+install -m 0644 "$root/deploy/ochenstarik-smm-provisioning-helper.service" "$fixture/payload/deploy/"
 install -m 0644 "$root/deploy/ochenstarik-smm-firewall.service" "$fixture/payload/deploy/"
 install -m 0755 "$bootstrap" "$fixture/payload/bootstrap/ochenstarik-server-monitor-manager.sh"
-tar -C "$fixture/payload" -czf "$fixture/release.tar.gz" agent control deploy bootstrap
+tar -C "$fixture/payload" -czf "$fixture/release.tar.gz" agent control provisioning-helper deploy bootstrap
 sha256sum "$fixture/release.tar.gz" >"$fixture/release.tar.gz.sha256"
 bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null
 

@@ -12,6 +12,7 @@ readonly CONTROL_USER="ochenstarik-smm-control"
 readonly AGENT_USER="ochenstarik-smm-agent"
 readonly CONTROL_UNIT="ochenstarik-smm-control.service"
 readonly AGENT_UNIT="ochenstarik-smm-agent.service"
+readonly PROVISIONING_HELPER_UNIT="ochenstarik-smm-provisioning-helper.service"
 readonly POLICY_HELPER="/usr/local/libexec/ochenstarik-smm-policy-apply"
 readonly EMERGENCY_COMMAND="/usr/local/sbin/ochenstarik-smm-emergency"
 readonly SUDOERS_FILE="/etc/sudoers.d/ochenstarik-smm-control"
@@ -138,7 +139,7 @@ verify_archive() {
         [[ -n "$entry" ]] || continue
         [[ "$entry" != /* && "$entry" != *".."* ]] || fail "Unsafe archive entry: $entry"
         case "$entry" in
-            agent|agent/*|control|control/*|deploy|deploy/*|bootstrap|bootstrap/*) ;;
+            agent|agent/*|control|control/*|provisioning-helper|provisioning-helper/*|deploy|deploy/*|bootstrap|bootstrap/*) ;;
             *) fail "Unexpected archive entry: $entry" ;;
         esac
     done < <(tar -tzf "$archive")
@@ -152,6 +153,7 @@ extract_archive() {
     tar -xzf "$archive" -C "$TEMP_DIR" --no-same-owner --no-same-permissions
     [[ -f "$TEMP_DIR/deploy/$CONTROL_UNIT" ]] || fail "Control systemd unit is missing from archive."
     [[ -f "$TEMP_DIR/deploy/$AGENT_UNIT" ]] || fail "Agent systemd unit is missing from archive."
+    [[ -f "$TEMP_DIR/deploy/$PROVISIONING_HELPER_UNIT" ]] || fail "Provisioning helper systemd unit is missing from archive."
     [[ -f "$TEMP_DIR/deploy/$FIREWALL_UNIT" ]] || fail "Mesh firewall systemd unit is missing from archive."
     [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" ]] || fail "Policy helper is missing from archive."
     [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-emergency" ]] || fail "Emergency command is missing from archive."
@@ -164,6 +166,7 @@ verify_release_payload() {
     extract_archive "$archive"
     [[ -x "$TEMP_DIR/control/ochenstarik-smm-control" ]] || fail "Control binary is missing."
     [[ -x "$TEMP_DIR/agent/ochenstarik-smm-agent" ]] || fail "Agent binary is missing."
+    [[ -x "$TEMP_DIR/provisioning-helper/ochenstarik-smm-provisioning-helper" ]] || fail "Provisioning helper binary is missing."
     [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" ]] || fail "Policy helper is missing."
     [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-emergency" ]] || fail "Emergency recovery command is missing."
     [[ -f "$TEMP_DIR/deploy/$FIREWALL_UNIT" ]] || fail "Mesh firewall unit is missing."
@@ -229,9 +232,11 @@ create_backup() {
         agent)
             list=(
                 "usr/local/lib/ochenstarik-server-monitor-manager/agent"
+                "usr/local/lib/ochenstarik-server-monitor-manager/provisioning-helper"
                 "etc/ochenstarik-server-monitor-manager/agent.env"
                 "etc/ochenstarik-server-monitor-manager/control-ca.crt"
                 "etc/systemd/system/$AGENT_UNIT"
+                "etc/systemd/system/$PROVISIONING_HELPER_UNIT"
             )
             ;;
         *) fail "Unknown backup role: $role" ;;
@@ -531,11 +536,13 @@ install_agent() {
     openssl x509 -in "$ca_cert" -noout >/dev/null 2>&1 || fail "Invalid Control CA certificate."
     extract_archive "$archive"
     [[ -x "$TEMP_DIR/agent/ochenstarik-smm-agent" ]] || fail "Agent binary is missing."
+    [[ -x "$TEMP_DIR/provisioning-helper/ochenstarik-smm-provisioning-helper" ]] || fail "Provisioning helper binary is missing."
     backup_id="$(create_backup agent)"
     ensure_system_user "$AGENT_USER"
     install -d -m 0750 -o root -g "$AGENT_USER" "$ETC_DIR"
     install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$STATE_DIR/agent"
     install_tree_atomic "$TEMP_DIR/agent" "$LIB_DIR/agent" "root:root"
+    install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"
     install -d -m 0755 "$(dirname "$EMERGENCY_COMMAND")"
     install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-emergency" "$EMERGENCY_COMMAND"
     if [[ "$(realpath "$ca_cert")" != "$(realpath -m "$ETC_DIR/control-ca.crt")" ]]; then
@@ -564,6 +571,8 @@ EOF
     chown root:"$AGENT_USER" "$ETC_DIR/control-ca.crt"
     chmod 0640 "$ETC_DIR/control-ca.crt"
     install_unit "$TEMP_DIR/deploy/$AGENT_UNIT" "$AGENT_UNIT"
+    install_unit "$TEMP_DIR/deploy/$PROVISIONING_HELPER_UNIT" "$PROVISIONING_HELPER_UNIT"
+    systemctl enable --now "$PROVISIONING_HELPER_UNIT"
     systemctl enable --now "$AGENT_UNIT"
     systemctl is-active --quiet "$AGENT_UNIT" || {
         systemctl status --no-pager "$AGENT_UNIT" >&2 || true
@@ -661,8 +670,19 @@ update_role() {
     esac
     [[ -x "$TEMP_DIR/$role/$binary" ]] || fail "$role binary is missing."
     systemctl stop "$unit"
+    if [[ "$role" == "agent" ]]; then
+        systemctl stop "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true
+    fi
     backup_id="$(create_backup "$role")"
     install_tree_atomic "$TEMP_DIR/$role" "$LIB_DIR/$role" "$user"
+    if [[ "$role" == "agent" ]]; then
+        [[ -x "$TEMP_DIR/provisioning-helper/ochenstarik-smm-provisioning-helper" ]] \
+            || fail "Provisioning helper binary is missing."
+        install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"
+        install_unit "$TEMP_DIR/deploy/$AGENT_UNIT" "$AGENT_UNIT"
+        install_unit "$TEMP_DIR/deploy/$PROVISIONING_HELPER_UNIT" "$PROVISIONING_HELPER_UNIT"
+        systemctl enable --now "$PROVISIONING_HELPER_UNIT"
+    fi
     systemctl start "$unit"
     if ! systemctl is-active --quiet "$unit"; then
         log "Update failed; restoring backup $backup_id"
@@ -684,8 +704,14 @@ restore_backup() {
     case "$role" in control) unit="$CONTROL_UNIT" ;; agent) unit="$AGENT_UNIT" ;; *) fail "Unknown role: $role" ;; esac
     [[ -f "$archive" ]] || fail "Backup archive not found: $backup_id"
     systemctl stop "$unit" || true
+    if [[ "$role" == "agent" ]]; then
+        systemctl stop "$PROVISIONING_HELPER_UNIT" || true
+    fi
     tar -C / -xzf "$archive"
     systemctl daemon-reload
+    if [[ "$role" == "agent" ]]; then
+        systemctl start "$PROVISIONING_HELPER_UNIT"
+    fi
     systemctl start "$unit"
     systemctl is-active --quiet "$unit" || fail "Rollback restored files but service is not active."
     log "$role restored from $backup_id"
@@ -825,8 +851,9 @@ uninstall_agent() {
     local purge="${1:-}"
     require_root
     systemctl disable --now "$AGENT_UNIT" 2>/dev/null || true
-    rm -f -- "/etc/systemd/system/$AGENT_UNIT" "$ETC_DIR/agent.env"
-    rm -rf -- "$LIB_DIR/agent"
+    systemctl disable --now "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true
+    rm -f -- "/etc/systemd/system/$AGENT_UNIT" "/etc/systemd/system/$PROVISIONING_HELPER_UNIT" "$ETC_DIR/agent.env"
+    rm -rf -- "$LIB_DIR/agent" "$LIB_DIR/provisioning-helper"
     [[ "$purge" == "--purge" ]] && rm -rf -- "$STATE_DIR/agent" "$ETC_DIR/control-ca.crt"
     systemctl daemon-reload
     log "Agent removed${purge:+ ($purge)}."

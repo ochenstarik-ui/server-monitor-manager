@@ -1,4 +1,5 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
 
 namespace ServerMonitorManager.Core;
 
@@ -163,6 +164,31 @@ public sealed record ProvisioningJobProgressRequest(
     string Message,
     string IdempotencyKey);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ProvisioningHelperRequest(
+    string ProtocolVersion,
+    string JobId,
+    string ActionType,
+    int SchemaVersion,
+    string ModuleHash,
+    JsonElement Parameters);
+
+public sealed record ProvisioningHelperResponse(
+    bool Success,
+    string Code,
+    string Message,
+    ProvisioningPreflightResult? Preflight);
+
+public sealed record ProvisioningPreflightResult(
+    string OperatingSystem,
+    string OperatingSystemVersion,
+    string Architecture,
+    bool HasSystemd,
+    bool HasSshd,
+    bool HasNftables,
+    bool HasWireGuard,
+    bool HasApt);
+
 public sealed record ProvisioningJob(
     string Id,
     string NodeId,
@@ -207,4 +233,10 @@ public static class ProvisioningJobStates
     public const string RolledBack = "RolledBack";
     public const string RollbackFailed = "RollbackFailed";
     public const string Cancelled = "Cancelled";
+}
+
+public static class ProvisioningActionCatalog
+{
+    public const string PreflightModuleHash =
+        "2dc48fb4528a291221954fc2dd3478d431b66fe34228f29684ce1648dbe2f32b";
 }

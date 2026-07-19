@@ -91,11 +91,11 @@ jobs:
             smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
             || report_failure 'Initial Control installation failed'
           for _ in {1..30}; do
-            curl --fail --silent --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
+            sudo curl --fail --silent --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
               https://127.0.0.1:7443/healthz && break
             sleep 1
           done
-          curl --fail --silent --show-error \
+          sudo curl --fail --silent --show-error \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
             https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \
             || report_failure 'Initial Control healthcheck failed'
@@ -106,7 +106,7 @@ jobs:
             || report_failure 'Control restart failed'
           sudo systemctl is-active --quiet ochenstarik-smm-control.service \
             || report_failure 'Control is inactive after restart'
-          curl --fail --silent --show-error \
+          sudo curl --fail --silent --show-error \
             --retry 10 --retry-all-errors --retry-delay 1 \
             --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
             https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \

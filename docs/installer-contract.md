@@ -1,93 +1,110 @@
-# Контракт Linux-установщика
+# Контракт собственного Linux bootstrap
 
-Этот документ определяет контракт Linux-установщика `ochenstarik-server-monitor-manager.sh`. Публикуемая версия установщика должна соответствовать релизу Server Monitor Manager и этому контракту.
+## 1. Владение и поставка
 
-## Поддерживаемые роли
+Bootstrap, helper, systemd units, JSON schemas и manifests являются компонентами Server Monitor Manager и хранятся только в этом репозитории. Они публикуются одним совместимым release вместе с Desktop, Control и Agent.
 
-### Monitor only
+Bootstrap не скачивает и не запускает исходники других проектов. Production-установка использует закреплённый release/tag, проверяет signed compatibility manifest и SHA-256 каждого artifact. Mutable `main` не является источником production-установки.
 
-Режим `install` устанавливает SSH monitoring endpoint без WireGuard:
+Пока bootstrap не опубликован в release, документация не должна предлагать несуществующую команду его скачивания.
+
+## 2. Поддерживаемые роли
+
+### Monitor
 
 - Ubuntu/Debian с systemd;
-- публичный ключ `ssh-ed25519` из Windows-клиента;
-- отдельный системный пользователь `ochenstarik-monitor` без пароля;
-- root-owned forced-command;
+- отдельный `ochenstarik-monitor` без пароля;
+- публичный Ed25519 key из Desktop;
+- root-owned forced command;
 - сохранение существующего SSH-порта;
-- отсутствие нового публичного API.
+- запрет shell, PTY и forwarding.
 
-### Hub
+### Control Hub
 
-Режим `hub` дополнительно:
-
-- устанавливает WireGuard и nftables;
-- запрашивает публичный IPv4/домен и UDP-порт;
-- создаёт `smm0` с адресом `10.77.0.1/24`;
-- включает IPv4 forwarding;
-- устанавливает минимальный root helper и systemd restore unit;
-- хранит публичные identities Node и политики Links;
-- разрешает транзит только по явной политике.
+- ASP.NET Core Control service и SQLite;
+- локальный Control CA и HTTPS certificate;
+- TCP `7443` по умолчанию;
+- WireGuard interface и root-owned nftables policy helper;
+- systemd units и root-only state directories;
+- транзит только по explicit directional Link.
 
 ### Node
 
-Режим `node`:
+- локальная генерация Agent и WireGuard private keys;
+- CSR-based enrollment по одноразовому коду;
+- только исходящие mTLS/WireGuard sessions;
+- отсутствие требования публичного IP и входящего порта;
+- restricted provisioning helper без общего root shell.
 
-- локально генерирует WireGuard keypair;
-- принимает одноразовый enrollment token;
-- отправляет Hub только публичный ключ;
-- получает внутренний адрес и аутентифицированное подтверждение конфигурации;
-- создаёт только исходящее WireGuard-соединение;
-- не требует белого IP или входящего публичного порта.
+## 3. Enrollment
 
-## Постоянный control layer (alpha)
+1. Пользователь скачивает bootstrap и checksum из release Server Monitor Manager.
+2. Запускает bootstrap локально через `sudo`.
+3. Сверяет fingerprint Control CA.
+4. Вводит одноразовый enrollment code.
+5. Node локально создаёт key и CSR.
+6. Control выдаёт role-scoped certificate.
+7. Bootstrap устанавливает совместимые Agent/helper units.
+8. Enrollment code атомарно погашается.
 
-После установки существующих ролей отдельные действия добавляют постоянные сервисы:
+Sudo-пароль не передаётся в Desktop, Control или audit. Приватные Node keys не покидают Node. Приватный Control CA key не включается в enrollment code.
 
-- `install-control-hub` скачивает release-архив под amd64/arm64, проверяет SHA-256, создаёт локальный CA, HTTPS-сертификат Hub, SQLite-каталог и изолированный systemd service;
-- `control-code NAME` создаёт десятиминутный token и код `SMMCTL1`, содержащий URL Hub и только публичный CA;
-- `control-device-code DEVICE` создаёт отдельный код `SMMDEV1` для operator identity Windows-клиента;
-- `install-control-agent` проверяет CA, локально создаёт ключ и CSR, регистрирует сертификат и запускает исходящий mTLS Agent через systemd.
+## 4. Root helper
 
-Приватный ключ Control CA не включается в `SMMCTL1`, а приватный ключ Agent не покидает Node. По умолчанию Control Hub слушает TCP `7443`.
+Helper доступен только через root-owned Unix socket или фиксированный non-interactive privilege wrapper. Он принимает:
 
-Control service не получает общий доступ к root helper. Отдельный root-owned wrapper принимает только проверенные `link-connect` и `link-disconnect`; команды регистрации, удаления Node и произвольные аргументы ему недоступны.
+- известный action id;
+- schema version;
+- JSON, соответствующий строгой схеме;
+- job id и module hash.
 
-Репозиторий Control проверяет границу запуска helper отдельным Linux integration test: реальный дочерний процесс, обязательный non-interactive privilege wrapper, сохранение `Disabled/Partial` в SQLite и восстановление после пересоздания Control process. Проверка настоящих nftables ruleset и reboot хоста выполняется вместе с исходным установщиком, без его копирования в этот репозиторий.
+Helper не принимает shell text, произвольные paths, environment или неизвестные поля, способные изменить смысл операции. Username, UID, port, protocol, CIDR, timezone, package id и управляемые пути валидируются повторно.
 
-## Команды жизненного цикла
+Каждая mutation:
 
-Целевой интерфейс:
+1. выполняет preflight;
+2. создаёт root-only backup;
+3. отклоняет symlink в managed path;
+4. проверяет синтаксис новой конфигурации;
+5. применяет изменение атомарно;
+6. проверяет factual state;
+7. при ошибке выполняет rollback.
+
+## 5. Целевой CLI
 
 ```text
-install-monitor
-install-hub
-install-node
-install-control-hub
-install-control-agent
-control-code NAME
-control-device-code DEVICE
-status
-update
-rollback
-uninstall-monitor
-uninstall-node
-uninstall-hub
+bootstrap enroll
+bootstrap status
+bootstrap update
+bootstrap rollback BACKUP_ID
+bootstrap uninstall ROLE
+control device-code DEVICE_ID
+control node-code NODE_ID
+control automation-token AUTOMATION_ID SOURCE_NODE_ID
+emergency status
+emergency vpn-disable
+emergency ssh-restore BACKUP_ID
+emergency firewall-restore BACKUP_ID
 ```
 
-Каждая установка и обновление должны быть идемпотентными. Перед изменением рабочей конфигурации создаётся root-only backup. Ошибка проверки или запуска автоматически восстанавливает последнюю рабочую версию.
+CLI является non-interactive, кроме локального ввода enrollment code и явных подтверждений опасного удаления. Машиночитаемый режим возвращает versioned JSON и стабильные exit codes.
 
-Удаление роли должно убрать только принадлежащие ей файлы, units, интерфейсы и правила. Удаление Hub требует отдельного подтверждения и не должно молча оставлять включённый forwarding или nftables ACL.
+## 6. Идемпотентность и обновление
 
-## Forced-command
+- повторная установка не дублирует users, keys, units, routes или firewall rules;
+- несовместимая версия Control/Agent/helper блокирует provisioning job;
+- update загружает artifacts только из release этого репозитория;
+- checksum проверяется до остановки service;
+- бинарники и units заменяются атомарно;
+- неуспешный health check восстанавливает предыдущую версию;
+- uninstall удаляет только принадлежащие выбранной роли files, users, interfaces и rules;
+- удаление Hub требует отдельного подтверждения и не оставляет forwarding/ACL.
 
-Ключ мониторинга допускает только:
+## 7. Forced command monitoring
 
-- `metrics`;
-- read-only `mesh nodes`, `mesh links`, `mesh status` на Hub;
-- строго типизированные изменения Link с проверкой параметров.
+Monitoring key допускает только versioned metrics snapshot и read-only mesh status. Полный SSH-терминал использует отдельную пользовательскую identity.
 
-Он не должен позволять shell, PTY, agent forwarding, TCP forwarding или произвольную команду. Полный SSH-терминал использует отдельную identity.
-
-## Минимальный metrics snapshot
+Минимальный snapshot:
 
 ```text
 PROTOCOL=1
@@ -108,12 +125,18 @@ NETWORK_TX_BYTES=...
 KERNEL=...
 ```
 
-## Проверки перед применением
+## 8. Обязательные проверки
 
-- `bash -n` и ShellCheck;
-- проверка SSH-ключа через `ssh-keygen`;
-- `sshd -t` перед reload;
-- `wg-quick strip` и пробный запуск конфигурации;
-- `nft --check` перед заменой таблицы;
-- проверка systemd unit;
-- сохранение активной SSH-сессии до подтверждения нового доступа.
+- ShellCheck и `bash -n` для bootstrap scripts;
+- `ssh-keygen` для public keys;
+- `sshd -t` и `sshd -T` до reload;
+- `wg-quick strip` для WireGuard configuration;
+- `nft --check` до замены managed rules;
+- проверка systemd units;
+- проверка active session до миграции SSH;
+- checksum, permissions и ownership release artifacts;
+- repeated install/update/rollback/uninstall;
+- reboot на поддерживаемой VM matrix;
+- сохранение management-доступа при helper/VPN failure.
+
+Полные требования к заданиям, настройке ОС, пользователям и Xray приведены в [ТЗ Provisioning и Xray VPN](provisioning-vpn-requirements.md).

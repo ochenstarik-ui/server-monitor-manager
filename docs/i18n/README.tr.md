@@ -20,7 +20,7 @@ Server Monitor Manager, Linux sunucularını izleyen, doğrudan SSH oturumları 
 Windows istemcisi mTLS/HTTPS ile ASP.NET Core 10 ve SQLite Control Hub'a bağlanır. Linux Agent yalnızca dış oturum açar. WireGuard veriyi taşır, Hub üzerindeki nftables varsayılan olarak geçişi engeller. Link tek yönlüdür; NAT arkasındaki ev sunucusunun genel IP'ye ihtiyacı yoktur.
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# Önce sürüm dosyalarından ochenstarik-server-monitor-manager.sh dosyasını indirin.
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

@@ -22,7 +22,7 @@ El cliente Windows usa mTLS/HTTPS con un Control Hub ASP.NET Core 10 y SQLite. E
 ## Instalación rápida
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# Descargue primero ochenstarik-server-monitor-manager.sh desde los archivos de la versión.
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

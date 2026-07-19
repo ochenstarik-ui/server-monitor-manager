@@ -20,7 +20,7 @@ Server Monitor Manager ist eine schlanke, zunächst für Windows entwickelte Anw
 Der Windows-Client kommuniziert per mTLS/HTTPS mit einem ASP.NET Core 10 Control Hub und SQLite. Der Linux Agent baut nur ausgehende Sitzungen auf. WireGuard transportiert Daten, nftables sperrt Transit standardmäßig. Ein Link öffnet keine Gegenrichtung; ein Server hinter NAT benötigt keine öffentliche IP.
 
 ```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
+# Laden Sie ochenstarik-server-monitor-manager.sh zuerst aus den Release-Dateien herunter.
 chmod 700 ochenstarik-server-monitor-manager.sh
 bash -n ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh hub

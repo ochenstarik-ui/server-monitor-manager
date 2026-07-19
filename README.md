@@ -9,7 +9,7 @@ The current alpha combines a packaged WinUI 3 desktop client, an ASP.NET Core co
 ## What it does
 
 - monitors CPU/load, memory, swap, disks, inodes, network activity, uptime, latency, SSH, and WireGuard;
-- keeps several server profiles, groups, tags, favorites, alerts, and short local metric history;
+- keeps several server profiles, local health warnings, and short metric history;
 - generates a dedicated Ed25519 SSH key and stores private material only on the Windows device;
 - opens direct SSH terminals without sending a private terminal key to the Hub;
 - exports support diagnostics with hashed endpoint identities and without hosts, users, keys, certificates, or tokens;
@@ -40,7 +40,7 @@ The control plane and data plane are separated:
 - **Desktop:** packaged WinUI 3 client with DPAPI-protected operator certificate and SSH identity.
 - **Agent:** self-contained Linux binary for `amd64` and `arm64`; it only creates outbound mTLS sessions.
 
-See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), and [installer contract](docs/installer-contract.md).
+See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), [Linux bootstrap contract](docs/installer-contract.md), and the [Provisioning and Xray specification](docs/provisioning-vpn-requirements.md).
 
 Operational procedures are documented in [Control backup and recovery](docs/control-backup.md) and the [three-server acceptance test](docs/three-server-acceptance.md).
 
@@ -55,39 +55,11 @@ tests/                              Control-plane tests
 docs/                               Architecture, security, roadmap, translations
 ```
 
-The Linux installer is maintained in [`ochenstarik-ui/lightweight-server`](https://github.com/ochenstarik-ui/lightweight-server) as `ochenstarik-server-monitor-manager.sh`. Release binaries are attached to [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases).
+Self-contained Control and Agent binaries are published with [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases). The project-owned Linux bootstrap is specified but is not yet included in the current alpha release. Until it is implemented, checksummed, and tested, the project does not publish a one-command Hub/Node installation instruction.
 
-## Quick start: Hub and two Nodes
+The planned bootstrap, helper, schemas, and compatibility manifest will be maintained and released only from this repository. See the [Linux bootstrap contract](docs/installer-contract.md). Do not use an installer from another project as a Server Monitor Manager component.
 
-Use a fresh Debian or Ubuntu server with a public IP as the Hub. Download and inspect the installer before running it:
-
-```bash
-curl -fLO https://raw.githubusercontent.com/ochenstarik-ui/lightweight-server/main/ochenstarik-server-monitor-manager.sh
-chmod 700 ochenstarik-server-monitor-manager.sh
-bash -n ochenstarik-server-monitor-manager.sh
-sudo ./ochenstarik-server-monitor-manager.sh hub
-```
-
-Open the selected WireGuard UDP port (default `51820`) and Control Hub TCP port `7443`. Create enrollment codes on the Hub:
-
-```bash
-sudo ochenstarik-smm node-code home
-sudo ochenstarik-smm node-code ai-agent
-```
-
-On each secondary server, use the same installer and select the Node role. Paste the code for that Node. The private WireGuard key is created locally and never leaves the Node. Then install the persistent control layer:
-
-```bash
-# Hub
-sudo ./ochenstarik-server-monitor-manager.sh install-control-hub
-sudo ./ochenstarik-server-monitor-manager.sh control-code home
-sudo ./ochenstarik-server-monitor-manager.sh control-device-code windows-pc
-
-# Node: paste the corresponding SMMCTL1 code when prompted
-sudo ./ochenstarik-server-monitor-manager.sh install-control-agent
-```
-
-The installer selects the `amd64` or `arm64` archive and verifies its SHA-256 checksum. The `SMMDEV1` code enrolls the Windows application: the app creates its operator key locally, confirms the Hub CA fingerprint, obtains a separate certificate, and protects it with Windows DPAPI.
+The `SMMDEV1` flow enrolls the Windows application: the app creates its operator key locally, confirms the Hub CA fingerprint, obtains a separate certificate, and protects it with Windows DPAPI.
 
 An Operator can issue a ten-minute Automation enrollment token for exactly one source Node through `POST /api/v1/control/automations/token` or the local `automation-token-create AUTOMATION_ID SOURCE_NODE_ID` command. The automation process creates its private key and CSR locally, enrolls through `/api/v1/automation-enroll`, and can then read only `/api/v1/automation/links`. Link mutations remain Operator-only.
 
@@ -124,11 +96,11 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 ## Current status
 
-`v0.1.0-alpha.5` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, Bash syntax checks, signed x64 MSIX packaging, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
+`v0.1.0-alpha.5` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
 
-The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; the Hub/Node WireGuard installer; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
+The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
 
-Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Control also expires TTL Links through the firewall helper, prunes bounded operational data, versions its SQLite schema, and creates verified backups of SQLite state and the Control CA. Linux CI exercises the real Control-to-helper process boundary, repeated installation and a systemd reboot, a real WireGuard data path with directional nftables policies, HTTP authorization boundaries, and a 100-Node concurrent heartbeat and replay scenario. The Windows release pipeline produces a signed MSIX and publishes its SHA-256 checksum. Still planned: trusted public code signing and desktop/mobile clients for additional platforms.
+Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Control also expires TTL Links through the firewall helper, prunes bounded operational data, versions its SQLite schema, and creates verified backups of SQLite state and the Control CA. CI exercises the Control-to-helper process boundary, HTTP authorization, Agent parsing, Desktop contracts, and a 100-Node concurrent heartbeat/replay scenario. Still required are the project-owned bootstrap, physical WireGuard/nftables/reboot acceptance, trusted public code signing, Provisioning/Xray, and clients for additional platforms.
 
 ## License and project policy
 

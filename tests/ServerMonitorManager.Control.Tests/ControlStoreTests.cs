@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Options;
 using Microsoft.Data.Sqlite;
+using System.Text.Json;
 using ServerMonitorManager.Control;
 using ServerMonitorManager.Core;
 using Xunit;
@@ -9,6 +10,293 @@ namespace ServerMonitorManager.Control.Tests;
 public sealed class ControlStoreTests : IAsyncDisposable
 {
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"smm-tests-{Guid.NewGuid():N}");
+
+    [Fact]
+    public async Task VersionOneDatabaseMigratesToProvisioningSchema()
+    {
+        Directory.CreateDirectory(_directory);
+        var databasePath = Path.Combine(_directory, "control.db");
+        await using (var connection = new SqliteConnection($"Data Source={databasePath}"))
+        {
+            await connection.OpenAsync(TestContext.Current.CancellationToken);
+            var command = connection.CreateCommand();
+            command.CommandText = "PRAGMA user_version = 1;";
+            await command.ExecuteNonQueryAsync(TestContext.Current.CancellationToken);
+        }
+
+        var store = CreateStore();
+        await store.InitializeAsync(TestContext.Current.CancellationToken);
+
+        await using var migrated = new SqliteConnection($"Data Source={databasePath}");
+        await migrated.OpenAsync(TestContext.Current.CancellationToken);
+        var version = migrated.CreateCommand();
+        version.CommandText = "PRAGMA user_version;";
+        Assert.Equal(8L, Convert.ToInt64(await version.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+        var table = migrated.CreateCommand();
+        table.CommandText = "SELECT COUNT(*) FROM pragma_table_info('provisioning_jobs');";
+        Assert.Equal(18L, Convert.ToInt64(await table.ExecuteScalarAsync(TestContext.Current.CancellationToken)));
+    }
+
+    [Fact]
+    public async Task ProvisioningJobRequiresConfirmationIsIdempotentAndLocksNode()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "home", "A1B2", cancellationToken);
+        var parameters = CreateBaseInstallParameters();
+        var request = new ProvisioningJobCreateRequest(
+            "system.base-install", 1, parameters, 60,
+            "Prepare test server", Guid.NewGuid().ToString());
+
+        var created = await store.CreateProvisioningJobAsync("home", request, "operator", cancellationToken);
+        var replay = await store.CreateProvisioningJobAsync("home", request, "operator", cancellationToken);
+
+        Assert.Equal(created.Id, replay.Id);
+        Assert.Equal(created.State, replay.State);
+        Assert.Equal(ProvisioningJobStates.Queued, created.State);
+        Assert.True(created.ConfirmationRequired);
+        await Assert.ThrowsAsync<SqliteException>(() => store.CreateProvisioningJobAsync(
+            "home", request with { IdempotencyKey = Guid.NewGuid().ToString() }, "operator", cancellationToken));
+
+        var confirmation = new ProvisioningJobCommandRequest(
+            "Approved for test", Guid.NewGuid().ToString());
+        await Assert.ThrowsAsync<ProvisioningTransitionException>(() => store.ConfirmProvisioningJobAsync(
+            created.Id, confirmation, "operator", cancellationToken));
+
+        var claimed = await store.ClaimNextProvisioningJobAsync("home", cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Preflight, claimed!.State);
+        var expectedPlan = CreateBaseInstallPlan();
+        var invalidPlan = expectedPlan with { Packages = [.. expectedPlan.Packages, "untrusted-package"] };
+        await Assert.ThrowsAsync<ProvisioningPlanValidationException>(() => store.RecordBaseInstallPlanAsync(
+            "home", created.Id,
+            new SystemBaseInstallPlanReportRequest(invalidPlan, Guid.NewGuid().ToString()),
+            cancellationToken));
+
+        var planRequest = new SystemBaseInstallPlanReportRequest(
+            expectedPlan, Guid.NewGuid().ToString());
+        var recorded = await store.RecordBaseInstallPlanAsync(
+            "home", created.Id, planRequest, cancellationToken);
+        var planReplay = await store.RecordBaseInstallPlanAsync(
+            "home", created.Id, planRequest, cancellationToken);
+        Assert.Equal(recorded!.JobId, planReplay!.JobId);
+        Assert.Equal(recorded.NodeId, planReplay.NodeId);
+        Assert.Equal(recorded.CreatedAt, planReplay.CreatedAt);
+        Assert.Equal(recorded.Plan.Packages, planReplay.Plan.Packages);
+        Assert.Equal(expectedPlan.Packages, recorded!.Plan.Packages);
+        Assert.Equal(
+            ProvisioningJobStates.AwaitingConfirmation,
+            (await store.GetProvisioningJobAsync(created.Id, cancellationToken))!.State);
+        var readablePlan = await store.GetBaseInstallPlanAsync(created.Id, cancellationToken);
+        Assert.Equal(expectedPlan.Packages, readablePlan!.Plan.Packages);
+
+        var confirmed = await store.ConfirmProvisioningJobAsync(
+            created.Id, confirmation, "operator", cancellationToken);
+        var confirmationReplay = await store.ConfirmProvisioningJobAsync(
+            created.Id, confirmation, "operator", cancellationToken);
+        Assert.Equal(confirmed!.Id, confirmationReplay!.Id);
+        Assert.Equal(confirmed.State, confirmationReplay.State);
+        Assert.Equal(ProvisioningJobStates.Queued, confirmed.State);
+        Assert.Equal("confirmed-queued", confirmed.CurrentStep);
+        Assert.NotNull(confirmed.ConfirmedAt);
+        Assert.Null(await store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+
+        var cancelled = await store.CancelProvisioningJobAsync(
+            created.Id,
+            new ProvisioningJobCommandRequest("Test completed", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Cancelled, cancelled!.State);
+        Assert.NotNull(cancelled.CancelledAt);
+
+        var next = await store.CreateProvisioningJobAsync(
+            "home", request with { IdempotencyKey = Guid.NewGuid().ToString() }, "operator", cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Queued, next.State);
+    }
+
+    [Fact]
+    public async Task ProvisioningJobCanBeClaimedOnlyOnceByAssignedNode()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "home", "C3D4", cancellationToken);
+        await EnrollAgentAsync(store, "other", "E5F6", cancellationToken);
+        using var parameters = JsonDocument.Parse("{}");
+        var created = await store.CreateProvisioningJobAsync(
+            "home",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 60,
+                "Inspect server", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+
+        Assert.Null(await store.ClaimNextProvisioningJobAsync("other", cancellationToken));
+        var claims = await Task.WhenAll(
+            store.ClaimNextProvisioningJobAsync("home", cancellationToken),
+            store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+
+        var claimed = Assert.Single(claims, job => job is not null)!;
+        Assert.Equal(created.Id, claimed.Id);
+        Assert.Equal("home", claimed.NodeId);
+        Assert.Equal(ProvisioningJobStates.Preflight, claimed.State);
+        Assert.Null(Assert.Single(claims, job => job is null));
+
+        var preflight = new ProvisioningJobProgressRequest(
+            ProvisioningJobStates.Preflight, 10, "inspect-os", "preflight.progress",
+            "secret-token-should-never-be-persisted", Guid.NewGuid().ToString());
+        Assert.Null(await store.ReportProvisioningProgressAsync(
+            "other", created.Id, preflight, cancellationToken));
+        var firstProgress = await store.ReportProvisioningProgressAsync(
+            "home", created.Id, preflight, cancellationToken);
+        var replay = await store.ReportProvisioningProgressAsync(
+            "home", created.Id, preflight, cancellationToken);
+        Assert.Equal(firstProgress!.Id, replay!.Id);
+        Assert.Equal(10, replay.ProgressPercent);
+        Assert.Equal("inspect-os", replay.CurrentStep);
+        await Assert.ThrowsAsync<ProvisioningTransitionException>(() =>
+            store.ReportProvisioningProgressAsync(
+                "home", created.Id,
+                preflight with
+                {
+                    State = ProvisioningJobStates.Completed,
+                    ProgressPercent = 100,
+                    IdempotencyKey = Guid.NewGuid().ToString()
+                },
+                cancellationToken));
+
+        var running = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Running,
+                ProgressPercent = 40,
+                Step = "apply",
+                EventCode = "apply.started",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        var verifying = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Verifying,
+                ProgressPercent = 90,
+                Step = "verify",
+                EventCode = "verify.started",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        var completed = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            preflight with
+            {
+                State = ProvisioningJobStates.Completed,
+                ProgressPercent = 100,
+                Step = "complete",
+                EventCode = "job.completed",
+                IdempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Running, running!.State);
+        Assert.Equal(ProvisioningJobStates.Verifying, verifying!.State);
+        Assert.Equal(ProvisioningJobStates.Completed, completed!.State);
+        var events = await store.ListProvisioningEventsAsync(created.Id, 100, cancellationToken);
+        Assert.NotNull(events);
+        var preflightEvent = Assert.Single(events!, item => item.EventType == "preflight.progress");
+        Assert.Equal("inspect-os", preflightEvent.Step);
+        Assert.Equal(10, preflightEvent.ProgressPercent);
+        Assert.DoesNotContain(
+            events!, item => item.Message.Contains("secret-token", StringComparison.Ordinal));
+    }
+
+    [Fact]
+    public async Task FailedJobRollbackIsNodeScopedRecoverableAndTerminal()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var store = CreateStore();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "home", "7788", cancellationToken);
+        using var parameters = JsonDocument.Parse("{}");
+        var created = await store.CreateProvisioningJobAsync(
+            "home",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 5,
+                "Rollback test", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.NotNull(await store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+        var failed = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            new ProvisioningJobProgressRequest(
+                ProvisioningJobStates.Failed, 20, "inspect-os", "preflight.failed",
+                "Preflight failed.", Guid.NewGuid().ToString()),
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Failed, failed!.State);
+        await Assert.ThrowsAsync<SqliteException>(() => store.CreateProvisioningJobAsync(
+            "home",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 5,
+                "Must remain blocked", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken));
+
+        var rollbackRequest = new ProvisioningJobCommandRequest(
+            "Restore preflight state", Guid.NewGuid().ToString());
+        var queued = await store.StartProvisioningRollbackAsync(
+            created.Id, rollbackRequest, "operator", cancellationToken);
+        var replay = await store.StartProvisioningRollbackAsync(
+            created.Id, rollbackRequest, "operator", cancellationToken);
+        Assert.Equal(queued!.Id, replay!.Id);
+        Assert.Equal("rollback-queued", queued.CurrentStep);
+        var claimed = await store.ClaimNextProvisioningJobAsync("home", cancellationToken);
+        Assert.Equal(ProvisioningJobStates.RollingBack, claimed!.State);
+        Assert.Equal("rollback", claimed.CurrentStep);
+        Assert.Null(await store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+
+        var maintenance = await store.MaintainAsync(
+            queued.ExpiresAt.AddSeconds(1), cancellationToken);
+        Assert.Equal(1, maintenance.ProvisioningJobsNeedingReconciliation);
+        var uncertain = await store.GetProvisioningJobAsync(created.Id, cancellationToken);
+        Assert.Equal(ProvisioningJobStates.NeedsReconciliation, uncertain!.State);
+        Assert.Equal("rollback-reconcile", uncertain.CurrentStep);
+        await Assert.ThrowsAsync<ProvisioningTransitionException>(() =>
+            store.RetryProvisioningJobAsync(
+                created.Id,
+                new ProvisioningJobCommandRequest("Unsafe retry", Guid.NewGuid().ToString()),
+                "operator",
+                cancellationToken));
+
+        await store.StartProvisioningRollbackAsync(
+            created.Id,
+            new ProvisioningJobCommandRequest("Resume rollback", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.NotNull(await store.ClaimNextProvisioningJobAsync("home", cancellationToken));
+        var rolling = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            new ProvisioningJobProgressRequest(
+                ProvisioningJobStates.RollingBack, 50, "restore", "rollback.progress",
+                "Restoring backup.", Guid.NewGuid().ToString()),
+            cancellationToken);
+        var rolledBack = await store.ReportProvisioningProgressAsync(
+            "home", created.Id,
+            new ProvisioningJobProgressRequest(
+                ProvisioningJobStates.RolledBack, 100, "rollback-complete", "rollback.completed",
+                "Backup restored.", Guid.NewGuid().ToString()),
+            cancellationToken);
+        Assert.Equal(50, rolling!.ProgressPercent);
+        Assert.Equal(ProvisioningJobStates.RolledBack, rolledBack!.State);
+        Assert.Null(rolledBack.LastError);
+        var replacement = await store.CreateProvisioningJobAsync(
+            "home",
+            new ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 5,
+                "Allowed after rollback", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Queued, replacement.State);
+    }
 
     [Fact]
     public void DiagnosticsExportOmitsRawIdentitiesAndNormalizesStates()
@@ -486,6 +774,19 @@ public sealed class ControlStoreTests : IAsyncDisposable
             CertificateAuthorityPath = Path.Combine(_directory, "unused.pfx")
         }));
     }
+
+    private static JsonElement CreateBaseInstallParameters()
+        => JsonSerializer.SerializeToElement(
+            new SystemBaseInstallParameters(
+                "UTC", "en_US.UTF-8", true, false, 1, ["core"],
+                "disabled", null, 60, true, "never"),
+            SmmJsonContext.Default.SystemBaseInstallParameters);
+
+    private static SystemBaseInstallPlan CreateBaseInstallPlan()
+        => new(
+            "UTC", "en_US.UTF-8", true, false,
+            SystemBaseInstallCatalogDefinition.ExpandGroups(["core"]),
+            "disabled", null, 60, true, "never", []);
 
     private static async Task EnrollAgentAsync(
         ControlStore store,

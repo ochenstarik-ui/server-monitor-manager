@@ -377,10 +377,398 @@ agents.MapPost("/heartbeat", async (
         });
     }
 });
+agents.MapGet("/provisioning/jobs/next", async (
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId) || !NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.Forbid();
+    }
+
+    var job = await controlStore.ClaimNextProvisioningJobAsync(nodeId, cancellationToken);
+    return job is null ? Results.NoContent() : Results.Ok(job);
+});
+agents.MapPost("/provisioning/jobs/{id}/progress", async (
+    string id,
+    ProvisioningJobProgressRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningProgress"] =
+                ["Invalid job id, state, progress, step, event code, message, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var job = await controlStore.ReportProvisioningProgressAsync(
+            nodeId, id, request, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
+agents.MapPost("/provisioning/jobs/{id}/preflight-facts", async (
+    string id,
+    ProvisioningPreflightReportRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["preflightFacts"] = ["Invalid job id, facts, observation time, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var facts = await controlStore.RecordPreflightFactsAsync(
+            nodeId, id, request, cancellationToken);
+        return facts is null ? Results.NotFound() : Results.Ok(facts);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
+agents.MapPost("/provisioning/jobs/{id}/base-install-plan", async (
+    string id,
+    SystemBaseInstallPlanReportRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["baseInstallPlan"] = ["Invalid job id, plan, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var plan = await controlStore.RecordBaseInstallPlanAsync(
+            nodeId, id, request, cancellationToken);
+        return plan is null ? Results.NotFound() : Results.Ok(plan);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+    catch (ProvisioningPlanValidationException exception)
+    {
+        return Results.BadRequest(new ProblemDetails { Title = exception.Message });
+    }
+});
+agents.MapPost("/provisioning/jobs/{id}/execution-grant", async (
+    string id,
+    ProvisioningExecutionGrantRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CertificateAuthority authority,
+    TimeProvider timeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["executionGrant"] = ["Invalid job id or idempotency key."]
+        });
+    }
+    try
+    {
+        var grant = await controlStore.IssueBaseInstallExecutionGrantAsync(
+            nodeId,
+            id,
+            request,
+            (job, plan) => authority.SignProvisioningExecutionGrant(
+                job, plan, timeProvider.GetUtcNow(), TimeSpan.FromMinutes(2)),
+            cancellationToken);
+        return grant is null ? Results.NotFound() : Results.Ok(grant);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
+control.MapGet("/provisioning/catalogs/system-base-install/1", () =>
+    Results.Ok(SystemBaseInstallCatalogDefinition.Create()));
+control.MapGet("/agents/{nodeId}/facts/preflight", async (
+    string nodeId,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["nodeId"] = ["Invalid node id."]
+        });
+    }
+    var facts = await controlStore.GetPreflightFactsAsync(nodeId, cancellationToken);
+    return facts is null ? Results.NotFound() : Results.Ok(facts);
+});
+control.MapPut("/agents/{nodeId}/desired/preflight", async (
+    string nodeId,
+    PreflightDesiredStateUpdateRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId) || !PreflightDesiredStateValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["preflightDesiredState"] =
+                ["Invalid schema, requirements, architectures, audit reason, or idempotency key."]
+        });
+    }
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var desired = await controlStore.SetPreflightDesiredStateAsync(
+            nodeId, request, actor, cancellationToken);
+        return Results.Ok(desired);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningNodeNotFoundException)
+    {
+        return Results.NotFound();
+    }
+});
+control.MapGet("/agents/{nodeId}/drift/preflight", async (
+    string nodeId,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["nodeId"] = ["Invalid node id."]
+        });
+    }
+    var assessment = await controlStore.AssessPreflightDriftAsync(nodeId, cancellationToken);
+    return assessment is null ? Results.NotFound() : Results.Ok(assessment);
+});
+control.MapPost("/agents/{nodeId}/provisioning/jobs", async (
+    string nodeId,
+    ProvisioningJobCreateRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId) || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] =
+                ["Invalid node id, action schema, parameters, TTL, audit reason, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var job = await controlStore.CreateProvisioningJobAsync(
+            nodeId, request, actor, cancellationToken);
+        return Results.Created($"/api/v1/control/provisioning/jobs/{job.Id}", job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningNodeNotFoundException)
+    {
+        return Results.NotFound();
+    }
+    catch (SqliteException exception) when (exception.SqliteErrorCode == 19)
+    {
+        return Results.Conflict(new ProblemDetails
+        {
+            Title = "The node already has an incompatible active provisioning job."
+        });
+    }
+});
+control.MapGet("/provisioning/jobs/{id}", async (
+    string id,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] = ["Invalid provisioning job id."]
+        });
+    }
+    var job = await controlStore.GetProvisioningJobAsync(id, cancellationToken);
+    return job is null ? Results.NotFound() : Results.Ok(job);
+});
+control.MapGet("/provisioning/jobs/{id}/plan", async (
+    string id,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["baseInstallPlan"] = ["Invalid provisioning job id."]
+        });
+    }
+    var plan = await controlStore.GetBaseInstallPlanAsync(id, cancellationToken);
+    return plan is null ? Results.NotFound() : Results.Ok(plan);
+});
+control.MapGet("/provisioning/jobs/{id}/events", async (
+    string id,
+    int? limit,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id) || limit is < 1 or > 200)
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningEvents"] = ["Invalid provisioning job id or limit (1-200)."]
+        });
+    }
+    var events = await controlStore.ListProvisioningEventsAsync(
+        id, limit ?? 100, cancellationToken);
+    return events is null ? Results.NotFound() : Results.Ok(events.ToArray());
+});
+control.MapPost("/provisioning/jobs/{id}/confirm", async (
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+    await ChangeProvisioningJobAsync(
+        id, request, context, controlStore, confirm: true, cancellationToken));
+control.MapPost("/provisioning/jobs/{id}/cancel", async (
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+    await ChangeProvisioningJobAsync(
+        id, request, context, controlStore, confirm: false, cancellationToken));
+control.MapPost("/provisioning/jobs/{id}/retry", async (
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] = ["Invalid job id, reason, or idempotency key."]
+        });
+    }
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var job = await controlStore.RetryProvisioningJobAsync(
+            id, request, actor, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
+control.MapPost("/provisioning/jobs/{id}/rollback", async (
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CancellationToken cancellationToken) =>
+{
+    if (!ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] = ["Invalid job id, reason, or idempotency key."]
+        });
+    }
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var job = await controlStore.StartProvisioningRollbackAsync(
+            id, request, actor, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 control.MapPost("/automations/token", async (
     AutomationTokenCreateRequest request,
     HttpContext context,
@@ -577,6 +965,41 @@ automation.MapGet("/links", async (
 await app.RunAsync();
 return 0;
 
+static async Task<IResult> ChangeProvisioningJobAsync(
+    string id,
+    ProvisioningJobCommandRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    bool confirm,
+    CancellationToken cancellationToken)
+{
+    if (!ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["provisioningJob"] = ["Invalid job id, reason, or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier)!;
+        var job = confirm
+            ? await controlStore.ConfirmProvisioningJobAsync(id, request, actor, cancellationToken)
+            : await controlStore.CancelProvisioningJobAsync(id, request, actor, cancellationToken);
+        return job is null ? Results.NotFound() : Results.Ok(job);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+}
+
 public partial class Program;
 
 internal static class NodeIdValidator
@@ -609,5 +1032,105 @@ internal static class CertificateReenrollmentValidator
 {
     public static bool IsValid(CertificateReenrollmentRequest request)
         => request.Reason.Length is >= 1 and <= 200
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+}
+
+internal static class ProvisioningJobValidator
+{
+    private const int MaximumParametersBytes = 16 * 1024;
+
+    public static bool IsValid(ProvisioningJobCreateRequest request)
+    {
+        if (request.SchemaVersion != 1
+            || request.Parameters.ValueKind != JsonValueKind.Object
+            || request.Parameters.GetRawText().Length > MaximumParametersBytes
+            || request.TtlMinutes is < 5 or > 1440
+            || request.AuditReason is not { Length: >= 1 and <= 256 }
+            || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+        {
+            return false;
+        }
+        if (request.ActionType == "preflight")
+        {
+            return !request.Parameters.EnumerateObject().Any();
+        }
+        if (request.ActionType != "system.base-install")
+        {
+            return false;
+        }
+        return SystemBaseInstallSchema.TryParse(request.Parameters, out _);
+    }
+
+    public static bool IsValid(ProvisioningJobCommandRequest request)
+        => request.Reason.Length is >= 1 and <= 256
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(ProvisioningJobProgressRequest request)
+        => request.State is ProvisioningJobStates.Preflight
+            or ProvisioningJobStates.Running
+            or ProvisioningJobStates.Verifying
+            or ProvisioningJobStates.Completed
+            or ProvisioningJobStates.Failed
+            or ProvisioningJobStates.NeedsReconciliation
+            or ProvisioningJobStates.RollingBack
+            or ProvisioningJobStates.RolledBack
+            or ProvisioningJobStates.RollbackFailed
+           && request.ProgressPercent is >= 0 and <= 100
+           && IsSafeCode(request.Step, 64)
+           && IsSafeCode(request.EventCode, 64)
+           && request.Message.Length <= 512
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(ProvisioningPreflightReportRequest request)
+        => request.ObservedAt >= DateTimeOffset.UtcNow.AddHours(-1)
+           && request.ObservedAt <= DateTimeOffset.UtcNow.AddMinutes(1)
+           && request.Facts is not null
+           && IsSafeFact(request.Facts.OperatingSystem, 32)
+           && IsSafeFact(request.Facts.OperatingSystemVersion, 64)
+           && request.Facts.Architecture is "x64" or "x86" or "arm" or "arm64"
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(SystemBaseInstallPlanReportRequest request)
+        => request.Plan is not null
+           && request.Plan.Packages is { Length: <= 64 }
+           && request.Plan.Warnings is { Length: <= 2 }
+           && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(ProvisioningExecutionGrantRequest request)
+        => IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValidId(string id)
+        => id.Length == 32 && Guid.TryParseExact(id, "N", out _);
+
+    public static bool RequiresConfirmation(string actionType)
+        => actionType == "system.base-install";
+
+    private static bool IsSafeCode(string value, int maximumLength)
+        => value.Length is >= 1 && value.Length <= maximumLength
+           && value.All(character => character is >= 'a' and <= 'z'
+               or >= '0' and <= '9'
+               or '.' or '-' or '_');
+
+    private static bool IsSafeFact(string? value, int maximumLength)
+        => value is not null
+           && value.Length is >= 1 && value.Length <= maximumLength
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '_' or '-' or '.');
+
+}
+
+internal static class PreflightDesiredStateValidator
+{
+    private static readonly HashSet<string> SupportedArchitectures =
+        new(["x64", "x86", "arm", "arm64"], StringComparer.Ordinal);
+
+    public static bool IsValid(PreflightDesiredStateUpdateRequest request)
+        => request.SchemaVersion == 1
+           && request.Desired is not null
+           && request.Desired.AllowedArchitectures is { Length: >= 1 and <= 4 }
+           && request.Desired.AllowedArchitectures.Distinct(StringComparer.Ordinal).Count()
+               == request.Desired.AllowedArchitectures.Length
+           && request.Desired.AllowedArchitectures.All(SupportedArchitectures.Contains)
+           && request.AuditReason is { Length: >= 1 and <= 256 }
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 }

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using Microsoft.Extensions.Options;
+using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Control;
 
@@ -63,6 +64,49 @@ public sealed class CertificateAuthority : IDisposable
             _issuer.ExportCertificatePem(),
             certificate.Thumbprint,
             notAfter);
+    }
+
+    public ProvisioningExecutionGrant SignProvisioningExecutionGrant(
+        ProvisioningJob job,
+        SystemBaseInstallPlan plan,
+        DateTimeOffset issuedAt,
+        TimeSpan lifetime)
+    {
+        if (job.ActionType != "system.base-install"
+            || job.SchemaVersion != 1
+            || job.State != ProvisioningJobStates.Queued
+            || !job.ConfirmationRequired
+            || job.ConfirmedAt is null
+            || lifetime <= TimeSpan.Zero
+            || lifetime > ProvisioningExecutionGrantCodec.MaximumLifetime)
+        {
+            throw new InvalidOperationException(
+                "Only a confirmed queued base installation job can receive an execution grant.");
+        }
+
+        var grant = new ProvisioningExecutionGrant(
+            ProvisioningExecutionGrantCodec.ProtocolVersion,
+            job.Id,
+            job.NodeId,
+            job.ActionType,
+            job.SchemaVersion,
+            ProvisioningExecutionGrantCodec.ComputePlanSha256(plan),
+            issuedAt.ToUnixTimeSeconds(),
+            issuedAt.Add(lifetime).ToUnixTimeSeconds(),
+            Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
+            ProvisioningExecutionGrantCodec.SignatureAlgorithm,
+            string.Empty);
+        using var key = _issuer.GetECDsaPrivateKey();
+        if (key is not { KeySize: 256 })
+        {
+            throw new InvalidOperationException(
+                "Control CA must use an ECDSA P-256 key to sign provisioning execution grants.");
+        }
+        var signature = key.SignData(
+            ProvisioningExecutionGrantCodec.CreateSigningPayload(grant),
+            HashAlgorithmName.SHA256,
+            DSASignatureFormat.IeeeP1363FixedFieldConcatenation);
+        return grant with { Signature = ProvisioningExecutionGrantCodec.EncodeBase64Url(signature) };
     }
 
     public void Dispose() => _issuer.Dispose();

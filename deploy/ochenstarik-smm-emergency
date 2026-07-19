@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+readonly PROGRAM="ochenstarik-smm-emergency"
+readonly STATE_DIR="/var/lib/ochenstarik-server-monitor-manager"
+readonly ETC_DIR="/etc/ochenstarik-server-monitor-manager"
+readonly MARKER="$STATE_DIR/mesh/emergency-disabled"
+readonly CONTROL_UNIT="ochenstarik-smm-control.service"
+readonly AGENT_UNIT="ochenstarik-smm-agent.service"
+readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
+readonly WIREGUARD_UNIT="wg-quick@smm0.service"
+readonly NFT_FAMILY="inet"
+readonly NFT_TABLE="ochenstarik_smm"
+
+fail() { printf '%s: %s\n' "$PROGRAM" "$*" >&2; exit 78; }
+log() { printf '%s: %s\n' "$PROGRAM" "$*"; }
+
+usage() {
+    cat <<'EOF'
+Local Server Monitor Manager emergency recovery
+
+Usage:
+  ochenstarik-smm-emergency status
+  ochenstarik-smm-emergency mesh-disable
+  ochenstarik-smm-emergency mesh-enable
+  ochenstarik-smm-emergency firewall-restore
+
+Commands use only Server Monitor Manager-owned units, interface and nftables
+table. They do not modify the host SSH service or unrelated firewall rules.
+EOF
+}
+
+require_root() {
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "this action must run as root (use sudo)"
+}
+
+unit_state() {
+    local unit="$1"
+    if systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q "^$unit"; then
+        systemctl is-active "$unit" 2>/dev/null || true
+    else
+        printf '%s\n' "not-installed"
+    fi
+}
+
+show_status() {
+    local unit
+    for unit in "$CONTROL_UNIT" "$AGENT_UNIT" "$FIREWALL_UNIT" "$WIREGUARD_UNIT"; do
+        printf '%s: %s\n' "$unit" "$(unit_state "$unit")"
+    done
+    if command -v ip >/dev/null 2>&1 && ip link show smm0 >/dev/null 2>&1; then
+        printf '%s\n' "mesh-interface: present"
+    else
+        printf '%s\n' "mesh-interface: absent"
+    fi
+    if command -v nft >/dev/null 2>&1 && nft list table "$NFT_FAMILY" "$NFT_TABLE" >/dev/null 2>&1; then
+        printf '%s\n' "mesh-firewall: loaded"
+    else
+        printf '%s\n' "mesh-firewall: absent"
+    fi
+    [[ -f "$MARKER" ]] && printf '%s\n' "emergency-lock: active" || printf '%s\n' "emergency-lock: inactive"
+    printf '%s\n' "backups:"
+    find "$STATE_DIR/bootstrap-backups" -maxdepth 1 -type f \
+        \( -name '*.tar.gz' -o -name '*.empty' \) -printf '  %f\n' 2>/dev/null | sort -r | head -n 10 || true
+}
+
+delete_project_firewall() {
+    if command -v nft >/dev/null 2>&1; then
+        nft delete table "$NFT_FAMILY" "$NFT_TABLE" 2>/dev/null || true
+    fi
+}
+
+mesh_disable() {
+    require_root
+    systemctl disable --now "$WIREGUARD_UNIT" 2>/dev/null || true
+    systemctl disable --now "$FIREWALL_UNIT" 2>/dev/null || true
+    delete_project_firewall
+    install -d -m 0700 "$(dirname "$MARKER")"
+    printf '%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" >"$MARKER"
+    chmod 0600 "$MARKER"
+    log "Mesh disabled locally; Control and SSH were not changed."
+}
+
+restore_project_firewall() {
+    require_root
+    [[ -f "$ETC_DIR/mesh.nft" ]] || fail "managed firewall configuration is missing"
+    command -v nft >/dev/null 2>&1 || fail "nft is unavailable"
+    if ! nft list table "$NFT_FAMILY" "$NFT_TABLE" >/dev/null 2>&1; then
+        nft --check -f "$ETC_DIR/mesh.nft"
+    fi
+    delete_project_firewall
+    if ! nft -f "$ETC_DIR/mesh.nft"; then
+        systemctl disable --now "$WIREGUARD_UNIT" 2>/dev/null || true
+        fail "managed firewall restore failed; Mesh was disabled to fail closed"
+    fi
+    if systemctl list-unit-files "$FIREWALL_UNIT" --no-legend 2>/dev/null | grep -q "^$FIREWALL_UNIT"; then
+        systemctl enable "$FIREWALL_UNIT" >/dev/null
+    fi
+    log "Base deny-by-default Mesh firewall restored; Control must reconcile active Links."
+}
+
+mesh_enable() {
+    require_root
+    [[ -f /etc/wireguard/smm0.conf ]] || fail "WireGuard smm0 configuration is missing"
+    if [[ -f "$ETC_DIR/mesh.nft" ]]; then
+        restore_project_firewall
+    fi
+    systemctl enable "$WIREGUARD_UNIT" >/dev/null
+    systemctl restart "$WIREGUARD_UNIT"
+    rm -f -- "$MARKER"
+    log "Mesh enabled locally."
+}
+
+main() {
+    local action="${1:-help}"
+    shift || true
+    [[ $# -eq 0 ]] || fail "unexpected arguments"
+    case "$action" in
+        help|-h|--help) usage ;;
+        status) show_status ;;
+        mesh-disable) mesh_disable ;;
+        mesh-enable) mesh_enable ;;
+        firewall-restore) restore_project_firewall ;;
+        *) fail "unknown action: $action" ;;
+    esac
+}
+
+main "$@"

@@ -76,6 +76,359 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal("application/problem+json", response.Content.Headers.ContentType?.MediaType);
     }
 
+    [Fact]
+    public async Task OperatorCanCreateAndReadProvisioningJob()
+    {
+        var store = _factory.Services.GetRequiredService<ServerMonitorManager.Control.ControlStore>();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var token = await store.CreateEnrollmentTokenAsync("home", TimeSpan.FromMinutes(10), cancellationToken);
+        await store.EnrollAsync(
+            new ServerMonitorManager.Core.EnrollmentRequest(
+                "home", token, "csr", Guid.NewGuid().ToString()),
+            () => new ServerMonitorManager.Control.IssuedCertificate(
+                "certificate", "ca", "F1E2", DateTimeOffset.UtcNow.AddDays(1)),
+            cancellationToken);
+
+        using var anonymous = _factory.CreateClient();
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{Guid.NewGuid():N}", cancellationToken)).StatusCode);
+
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Identity", "windows-pc");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        var catalog = await client.GetFromJsonAsync<ServerMonitorManager.Core.SystemBaseInstallCatalog>(
+            "/api/v1/control/provisioning/catalogs/system-base-install/1",
+            cancellationToken);
+        Assert.Equal(1, catalog!.Version);
+        Assert.Contains(catalog.Groups, group => group.Id == "development"
+            && group.Packages.Contains("git"));
+        using var response = await client.PostAsJsonAsync(
+            "/api/v1/control/agents/home/provisioning/jobs",
+            new
+            {
+                actionType = "system.base-install",
+                schemaVersion = 1,
+                parameters = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packageCatalogVersion = 1,
+                    packageGroupIds = new[] { "core", "development" },
+                    swapMode = "automatic",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = true,
+                    rebootPolicy = "never"
+                },
+                ttlMinutes = 60,
+                auditReason = "API integration test",
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken);
+
+        Assert.Equal(HttpStatusCode.Created, response.StatusCode);
+        var job = await response.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.NotNull(job);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, job.State);
+        Assert.Equal(HttpStatusCode.Conflict, (await client.PostAsJsonAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/confirm",
+            new { reason = "Too early", idempotencyKey = Guid.NewGuid().ToString() },
+            cancellationToken)).StatusCode);
+
+        using var agent = _factory.CreateClient();
+        agent.DefaultRequestHeaders.Add("X-Test-Identity", "home");
+        agent.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        var claimed = await agent.GetFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken);
+        Assert.Equal(job.Id, claimed!.Id);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Preflight, claimed.State);
+        var expectedPackages = ServerMonitorManager.Core.SystemBaseInstallCatalogDefinition
+            .ExpandGroups(["core", "development"]);
+        Assert.Equal(HttpStatusCode.OK, (await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/base-install-plan",
+            new
+            {
+                plan = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packages = expectedPackages,
+                    swapMode = "automatic",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = true,
+                    rebootPolicy = "never",
+                    warnings = Array.Empty<string>()
+                },
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken)).StatusCode);
+        var storedPlan = await client.GetFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningBaseInstallPlanRecord>(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/plan", cancellationToken);
+        Assert.Equal(expectedPackages, storedPlan!.Plan.Packages);
+        var confirmResponse = await client.PostAsJsonAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/confirm",
+            new { reason = "Reviewed generated plan", idempotencyKey = Guid.NewGuid().ToString() },
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, confirmResponse.StatusCode);
+        var confirmed = await confirmResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningJob>(cancellationToken);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, confirmed!.State);
+        Assert.Equal("confirmed-queued", confirmed.CurrentStep);
+        var grantRequest = new { idempotencyKey = Guid.NewGuid().ToString() };
+        var grantResponse = await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/execution-grant",
+            grantRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
+        var grant = await grantResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningExecutionGrant>(cancellationToken);
+        var grantReplayResponse = await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/execution-grant",
+            grantRequest,
+            cancellationToken);
+        var grantReplay = await grantReplayResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningExecutionGrant>(cancellationToken);
+        Assert.Equal(grant!.Signature, grantReplay!.Signature);
+        var authority = _factory.Services.GetRequiredService<
+            ServerMonitorManager.Control.CertificateAuthority>();
+        Assert.True(ServerMonitorManager.Core.ProvisioningExecutionGrantCodec.Verify(
+            grant,
+            authority.PublicCertificate,
+            job.Id,
+            "home",
+            storedPlan.Plan,
+            DateTimeOffset.UtcNow));
+        Assert.Equal(HttpStatusCode.NoContent, (await agent.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(
+            "/api/v1/control/agents/home/provisioning/jobs",
+            new
+            {
+                actionType = "system.base-install",
+                schemaVersion = 1,
+                parameters = new
+                {
+                    timezone = "UTC",
+                    locale = "en_US.UTF-8",
+                    aptUpdate = true,
+                    aptUpgrade = false,
+                    packageCatalogVersion = 1,
+                    packageGroupIds = new[] { "curl" },
+                    swapMode = "disabled",
+                    swapSizeMiB = (int?)null,
+                    vmSwappiness = 60,
+                    enableUnattendedUpgrades = false,
+                    rebootPolicy = "never"
+                },
+                ttlMinutes = 60,
+                auditReason = "Reject arbitrary package input",
+                idempotencyKey = Guid.NewGuid().ToString()
+            },
+            cancellationToken)).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await client.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}", cancellationToken)).StatusCode);
+        using var eventsResponse = await client.GetAsync(
+            $"/api/v1/control/provisioning/jobs/{job.Id}/events?limit=10", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, eventsResponse.StatusCode);
+        var events = await eventsResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningEvent[]>(
+            cancellationToken);
+        Assert.NotNull(events);
+        Assert.NotEmpty(events);
+    }
+
+    [Fact]
+    public async Task AgentReceivesOnlyItsOwnProvisioningJob()
+    {
+        var nodeId = $"node-{Guid.NewGuid():N}"[..13];
+        var store = _factory.Services.GetRequiredService<ServerMonitorManager.Control.ControlStore>();
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var token = await store.CreateEnrollmentTokenAsync(nodeId, TimeSpan.FromMinutes(10), cancellationToken);
+        await store.EnrollAsync(
+            new ServerMonitorManager.Core.EnrollmentRequest(
+                nodeId, token, "csr", Guid.NewGuid().ToString()),
+            () => new ServerMonitorManager.Control.IssuedCertificate(
+                "certificate", "ca", Guid.NewGuid().ToString("N"), DateTimeOffset.UtcNow.AddDays(1)),
+            cancellationToken);
+        using var parameters = System.Text.Json.JsonDocument.Parse("{}");
+        var created = await store.CreateProvisioningJobAsync(
+            nodeId,
+            new ServerMonitorManager.Core.ProvisioningJobCreateRequest(
+                "preflight", 1, parameters.RootElement.Clone(), 60,
+                "API Agent isolation test", Guid.NewGuid().ToString()),
+            "windows-pc",
+            cancellationToken);
+
+        using var other = _factory.CreateClient();
+        other.DefaultRequestHeaders.Add("X-Test-Identity", "other-node");
+        other.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        Assert.Equal(HttpStatusCode.NoContent, (await other.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+
+        using var assigned = _factory.CreateClient();
+        assigned.DefaultRequestHeaders.Add("X-Test-Identity", nodeId);
+        assigned.DefaultRequestHeaders.Add("X-Test-Role", "Agent");
+        var response = await assigned.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        var claimed = await response.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.NotNull(claimed);
+        Assert.Equal(created.Id, claimed.Id);
+        Assert.Equal(nodeId, claimed.NodeId);
+        Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Preflight, claimed.State);
+        Assert.Equal(HttpStatusCode.NoContent, (await assigned.GetAsync(
+            "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
+
+        var preflightReport = new
+        {
+            facts = new
+            {
+                operatingSystem = "ubuntu",
+                operatingSystemVersion = "24.04",
+                architecture = "x64",
+                hasSystemd = true,
+                hasSshd = true,
+                hasNftables = true,
+                hasWireGuard = false,
+                hasApt = true
+            },
+            observedAt = DateTimeOffset.UtcNow,
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken)).StatusCode);
+        using var factsResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, factsResponse.StatusCode);
+        var recorded = await factsResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(
+            cancellationToken);
+        Assert.Equal(nodeId, recorded!.NodeId);
+        Assert.Equal("ubuntu", recorded.Facts.OperatingSystem);
+        using var replayResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/preflight-facts",
+            preflightReport,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, replayResponse.StatusCode);
+        var replayed = await replayResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(cancellationToken);
+        Assert.Equal(recorded.UpdatedAt, replayed!.UpdatedAt);
+
+        using var operatorClient = _factory.CreateClient();
+        operatorClient.DefaultRequestHeaders.Add("X-Test-Identity", "windows-pc");
+        operatorClient.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+        using var storedFactsResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/facts/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, storedFactsResponse.StatusCode);
+        var stored = await storedFactsResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightFacts>(cancellationToken);
+        Assert.Equal(created.Id, stored!.SourceJobId);
+
+        var desiredRequest = new
+        {
+            schemaVersion = 1,
+            desired = new
+            {
+                requireSystemd = true,
+                requireSshd = true,
+                requireNftables = true,
+                requireWireGuard = true,
+                requireApt = true,
+                allowedArchitectures = new[] { "x64", "arm64" }
+            },
+            auditReason = "Detect missing host capabilities",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        using var desiredResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            desiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, desiredResponse.StatusCode);
+        var desired = await desiredResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(1, desired!.Version);
+        using var desiredReplayResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            desiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, desiredReplayResponse.StatusCode);
+        var desiredReplay = await desiredReplayResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(desired.UpdatedAt, desiredReplay!.UpdatedAt);
+
+        using var driftResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/drift/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, driftResponse.StatusCode);
+        var drift = await driftResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.PreflightDriftAssessment>(cancellationToken);
+        Assert.Equal("Drifted", drift!.Status);
+        Assert.Equal(["wireguard.missing"], drift.DriftCodes);
+
+        var synchronizedDesiredRequest = new
+        {
+            schemaVersion = 1,
+            desired = new
+            {
+                requireSystemd = true,
+                requireSshd = true,
+                requireNftables = true,
+                requireWireGuard = false,
+                requireApt = true,
+                allowedArchitectures = new[] { "x64", "arm64" }
+            },
+            auditReason = "Accept host without WireGuard tooling",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        using var synchronizedDesiredResponse = await operatorClient.PutAsJsonAsync(
+            $"/api/v1/control/agents/{nodeId}/desired/preflight",
+            synchronizedDesiredRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, synchronizedDesiredResponse.StatusCode);
+        var synchronizedDesired = await synchronizedDesiredResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.NodePreflightDesiredState>(cancellationToken);
+        Assert.Equal(2, synchronizedDesired!.Version);
+        using var synchronizedDriftResponse = await operatorClient.GetAsync(
+            $"/api/v1/control/agents/{nodeId}/drift/preflight", cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, synchronizedDriftResponse.StatusCode);
+        var synchronizedDrift = await synchronizedDriftResponse.Content
+            .ReadFromJsonAsync<ServerMonitorManager.Core.PreflightDriftAssessment>(cancellationToken);
+        Assert.Equal("InSync", synchronizedDrift!.Status);
+        Assert.Empty(synchronizedDrift.DriftCodes);
+
+        var progress = new
+        {
+            state = "Running",
+            progressPercent = 25,
+            step = "apply",
+            eventCode = "apply.started",
+            message = "Applying the approved plan.",
+            idempotencyKey = Guid.NewGuid().ToString()
+        };
+        Assert.Equal(HttpStatusCode.NotFound, (await other.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/progress",
+            progress,
+            cancellationToken)).StatusCode);
+        using var progressResponse = await assigned.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{created.Id}/progress",
+            progress,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, progressResponse.StatusCode);
+        var updated = await progressResponse.Content.ReadFromJsonAsync<ServerMonitorManager.Core.ProvisioningJob>(
+            cancellationToken);
+        Assert.Equal(25, updated!.ProgressPercent);
+        Assert.Equal("apply", updated.CurrentStep);
+    }
+
     public async ValueTask DisposeAsync() => await _factory.DisposeAsync();
 
     private sealed class ControlApiFactory : WebApplicationFactory<controlapp::Program>

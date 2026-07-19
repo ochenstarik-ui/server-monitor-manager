@@ -2,6 +2,8 @@
 
 Подробные требования к собственному bootstrap, управляемой настройке Linux и Xray находятся в [ТЗ Provisioning и Xray VPN](provisioning-vpn-requirements.md). Все компоненты Server Monitor Manager разрабатываются, версионируются и выпускаются только в этом репозитории.
 
+Текущее автоматическое покрытие поддерживаемых Linux-платформ описано в [Linux platform matrix](linux-platform-matrix.md).
+
 ## Этап 0 — граница и базовая архитектура
 
 - [x] переименовать проект в Server Monitor Manager;
@@ -90,33 +92,43 @@
 
 ## Этап 7 — собственный bootstrap Server Monitor Manager
 
-- [ ] добавить bootstrap source в этот репозиторий;
-- [ ] публиковать bootstrap, checksum и signed compatibility manifest в release;
-- [ ] поддержать Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
-- [ ] добавить non-interactive install/update/rollback/uninstall;
-- [ ] устанавливать Agent, restricted helper и systemd units;
-- [ ] локально создавать Node keys/CSR и погашать bootstrap enrollment;
-- [ ] добавить VM CI matrix, повторную установку и reboot;
-- [ ] добавить локальную emergency recovery command.
+- [x] добавить bootstrap source в этот репозиторий;
+- [x] упаковывать bootstrap, checksum и compatibility manifest в release workflow;
+- [ ] добавить криптографическую подпись compatibility manifest для production release;
+- [x] проверять Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
+- [x] добавить non-interactive install/update/rollback/uninstall;
+- [x] устанавливать Control/Agent, restricted helper и systemd units;
+- [x] локально создавать Agent key/CSR, выполнять mTLS enrollment и не сохранять token;
+- [x] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
+- [x] реализовать nftables policy helper вместо временного deny-by-default helper;
+- [x] добавить native Ubuntu 22.04/24.04 x64/arm64 VM CI и повторную установку;
+- [x] добавить Debian 12/13 x64/arm64 systemd-container restart matrix;
+- [ ] добавить полный reboot настоящих Debian VM;
+- [x] добавить локальную emergency recovery command для текущих Mesh/firewall-компонентов.
 
 ## Этап 8 — Provisioning control plane
 
-- [ ] модели и SQLite migrations для ProvisioningJob;
-- [ ] state machine, confirmations, cancellation, retry и rollback;
-- [ ] обязательные idempotency key, audit reason и job TTL;
-- [ ] Agent job channel только для собственного `node_id`;
-- [ ] versioned JSON schemas для каждого action type;
-- [ ] restricted root helper через Unix socket;
-- [ ] structured redacted events и progress;
-- [ ] `NeedsReconciliation` после неопределённого результата;
-- [ ] desired/factual configuration и drift;
-- [ ] запрет параллельных несовместимых опасных заданий.
+- [x] модели и SQLite migration v2 для ProvisioningJob;
+- [x] state machine, confirmations, cancellation, retry и rollback;
+- [x] создание, чтение, подтверждение и отмена через Operator API;
+- [ ] выполнение, retry, verification и rollback в полной state machine;
+- [x] обязательные idempotency key, audit reason и job TTL;
+- [x] атомарный Agent job channel только для собственного `node_id`;
+- [x] начальные строгие JSON schemas v1 для `preflight` и `system.base-install`;
+- [ ] versioned JSON schemas для остальных action type;
+- [x] restricted root helper через Unix socket (`preflight` и non-mutating plan для `system.base-install`);
+- [x] двухфазный `system.base-install`: сохранённый проверенный plan до Operator confirmation;
+- [x] короткоживущий ECDSA execution grant, привязанный к Node, job и SHA-256 подтверждённого plan;
+- [x] structured redacted events, bounded Operator history и progress;
+- [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
+- [ ] desired/factual configuration и drift (`preflight` завершён; остальные action type ещё не подключены);
+- [x] запрет параллельных активных заданий на одном Node (безопасный первый вариант).
 
 ## Этап 9 — базовая настройка и пользователи
 
 - [ ] preflight ОС, архитектуры, SSH, firewall, APT и capabilities;
 - [ ] Desktop wizard timezone/locale/packages/swap/unattended upgrades;
-- [ ] versioned package allowlist;
+- [x] versioned package allowlist (catalog v1 с фиксированными package groups);
 - [ ] root-only backups и symlink protection;
 - [ ] user lifecycle без sudo по умолчанию;
 - [ ] SSH public keys, fingerprints и permissions;

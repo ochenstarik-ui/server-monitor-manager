@@ -1,0 +1,153 @@
+name: Linux platform matrix
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/linux-platform-matrix.yml'
+      - 'deploy/**'
+      - 'src/ServerMonitorManager.Agent/**'
+      - 'src/ServerMonitorManager.Control/**'
+      - 'src/ServerMonitorManager.Core/**'
+      - 'tests/bootstrap/**'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/linux-platform-matrix.yml'
+      - 'deploy/**'
+      - 'src/ServerMonitorManager.Agent/**'
+      - 'src/ServerMonitorManager.Control/**'
+      - 'src/ServerMonitorManager.Core/**'
+      - 'tests/bootstrap/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: linux-platform-matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-archive:
+    name: Release archive (${{ matrix.runtime }})
+    runs-on: ubuntu-24.04
+    strategy:
+      matrix:
+        runtime: [linux-x64, linux-arm64]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Publish compatible release
+        run: |
+          set -Eeuo pipefail
+          dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj \
+            --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/agent
+          dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj \
+            --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/control
+          dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj \
+            --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/provisioning-helper
+          install -d out/deploy out/bootstrap
+          install -m 0644 deploy/ochenstarik-smm-control.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-agent.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-provisioning-helper.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-firewall.service out/deploy/
+          install -m 0755 deploy/ochenstarik-smm-policy-apply out/deploy/
+          install -m 0755 deploy/ochenstarik-smm-emergency out/deploy/
+          install -m 0755 deploy/ochenstarik-server-monitor-manager.sh out/bootstrap/
+          archive='server-monitor-manager-${{ matrix.runtime }}.tar.gz'
+          tar -C out -czf "$archive" agent control provisioning-helper deploy bootstrap
+          sha256sum "$archive" >"$archive.sha256"
+
+      - name: Upload release archive
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-monitor-manager-${{ matrix.runtime }}-matrix
+          path: |
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz
+            server-monitor-manager-${{ matrix.runtime }}.tar.gz.sha256
+
+  ubuntu-vm:
+    name: ${{ matrix.name }} native VM
+    needs: release-archive
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Ubuntu 22.04 x64
+            runner: ubuntu-22.04
+            runtime: linux-x64
+          - name: Ubuntu 24.04 x64
+            runner: ubuntu-24.04
+            runtime: linux-x64
+          - name: Ubuntu 22.04 arm64
+            runner: ubuntu-22.04-arm
+            runtime: linux-arm64
+          - name: Ubuntu 24.04 arm64
+            runner: ubuntu-24.04-arm
+            runtime: linux-arm64
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download release archive
+        uses: actions/download-artifact@v8
+        with:
+          name: server-monitor-manager-${{ matrix.runtime }}-matrix
+          path: artifacts
+
+      - name: Install twice and restart services
+        run: |
+          bash tests/bootstrap/run-native-systemd-smoke.sh \
+            'artifacts/server-monitor-manager-${{ matrix.runtime }}.tar.gz' \
+            deploy/ochenstarik-server-monitor-manager.sh
+
+  debian-systemd:
+    name: ${{ matrix.name }} systemd restart
+    needs: release-archive
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Debian 12 x64
+            runner: ubuntu-24.04
+            runtime: linux-x64
+            image: debian:12
+          - name: Debian 13 x64
+            runner: ubuntu-24.04
+            runtime: linux-x64
+            image: debian:13
+          - name: Debian 12 arm64
+            runner: ubuntu-24.04-arm
+            runtime: linux-arm64
+            image: debian:12
+          - name: Debian 13 arm64
+            runner: ubuntu-24.04-arm
+            runtime: linux-arm64
+            image: debian:13
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Download release archive
+        uses: actions/download-artifact@v8
+        with:
+          name: server-monitor-manager-${{ matrix.runtime }}-matrix
+          path: artifacts
+
+      - name: Install twice and restart systemd container
+        run: |
+          bash tests/bootstrap/run-systemd-container-smoke.sh \
+            '${{ matrix.image }}' \
+            'artifacts/server-monitor-manager-${{ matrix.runtime }}.tar.gz' \
+            deploy/ochenstarik-server-monitor-manager.sh

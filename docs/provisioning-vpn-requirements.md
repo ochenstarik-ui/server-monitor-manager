@@ -278,6 +278,7 @@ GET    /api/v1/nodes/{nodeId}/configuration
 POST   /api/v1/nodes/{nodeId}/provisioning/preflight
 POST   /api/v1/nodes/{nodeId}/provisioning/jobs
 GET    /api/v1/provisioning/jobs/{jobId}
+GET    /api/v1/provisioning/jobs/{jobId}/plan
 POST   /api/v1/provisioning/jobs/{jobId}/confirm
 POST   /api/v1/provisioning/jobs/{jobId}/cancel
 POST   /api/v1/provisioning/jobs/{jobId}/rollback
@@ -287,6 +288,8 @@ GET    /api/v1/nodes/{nodeId}/vpn-profiles
 ```
 
 Agent получает только задания своего Node. Automation identity не создаёт provisioning jobs, не читает VPN secrets и не управляет пользователями. Mutation требует Operator certificate, idempotency key и audit reason.
+
+Подтверждённая опасная операция дополнительно требует короткоживущий execution grant. Control подписывает его ECDSA-ключом Control CA и связывает с `node_id`, `job_id`, action/schema, SHA-256 подтверждённого plan, nonce и сроком действия. Agent получает grant через `POST /api/v1/agents/provisioning/jobs/{jobId}/execution-grant`; root-helper проверяет подпись по закреплённому Control CA до запуска любой мутации.
 
 Каждый action type имеет отдельную versioned JSON Schema. Неизвестные смысловые поля отклоняются на Control, Agent и helper.
 

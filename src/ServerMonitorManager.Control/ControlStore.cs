@@ -8,9 +8,9 @@ using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Control;
 
-public sealed class ControlStore(IOptions<ControlOptions> options)
+public sealed partial class ControlStore(IOptions<ControlOptions> options)
 {
-    private const int CurrentSchemaVersion = 1;
+    private const int CurrentSchemaVersion = 8;
     private readonly ControlOptions _options = options.Value;
     private readonly string _connectionString = new SqliteConnectionStringBuilder
     {
@@ -124,9 +124,174 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
             CREATE UNIQUE INDEX IF NOT EXISTS ux_links_active_policy
                 ON links(source_node_id, target_node_id, protocol, port)
                 WHERE desired_state = 'Active';
-            PRAGMA user_version = 1;
             """;
         await command.ExecuteNonQueryAsync(cancellationToken);
+
+        if (schemaVersion < 1)
+        {
+            var markVersionOne = connection.CreateCommand();
+            markVersionOne.CommandText = "PRAGMA user_version = 1;";
+            await markVersionOne.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 2)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var migrateProvisioning = connection.CreateCommand();
+            migrateProvisioning.Transaction = migration;
+            migrateProvisioning.CommandText = """
+                CREATE TABLE IF NOT EXISTS provisioning_jobs (
+                    id TEXT PRIMARY KEY,
+                    node_id TEXT NOT NULL REFERENCES agents(node_id) ON DELETE CASCADE,
+                    action_type TEXT NOT NULL,
+                    schema_version INTEGER NOT NULL,
+                    parameters_json TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    confirmation_required INTEGER NOT NULL,
+                    audit_reason TEXT NOT NULL,
+                    created_by TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    expires_at TEXT NOT NULL,
+                    confirmed_at TEXT NULL,
+                    cancelled_at TEXT NULL,
+                    version INTEGER NOT NULL,
+                    last_error TEXT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_provisioning_jobs_node_created
+                    ON provisioning_jobs(node_id, created_at DESC);
+                CREATE UNIQUE INDEX IF NOT EXISTS ux_provisioning_jobs_active_node
+                    ON provisioning_jobs(node_id)
+                    WHERE state NOT IN ('Completed', 'Cancelled', 'Failed', 'RolledBack', 'RollbackFailed');
+                CREATE TABLE IF NOT EXISTS provisioning_events (
+                    sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+                    job_id TEXT NOT NULL REFERENCES provisioning_jobs(id) ON DELETE CASCADE,
+                    recorded_at TEXT NOT NULL,
+                    event_type TEXT NOT NULL,
+                    state TEXT NOT NULL,
+                    message TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS ix_provisioning_events_job_sequence
+                    ON provisioning_events(job_id, sequence);
+                PRAGMA user_version = 2;
+                """;
+            await migrateProvisioning.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 3)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var migrateProgress = connection.CreateCommand();
+            migrateProgress.Transaction = migration;
+            migrateProgress.CommandText = """
+                ALTER TABLE provisioning_jobs
+                    ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0;
+                ALTER TABLE provisioning_jobs
+                    ADD COLUMN current_step TEXT NOT NULL DEFAULT '';
+                PRAGMA user_version = 3;
+                """;
+            await migrateProgress.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 4)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var strengthenProvisioningLock = connection.CreateCommand();
+            strengthenProvisioningLock.Transaction = migration;
+            strengthenProvisioningLock.CommandText = """
+                DROP INDEX IF EXISTS ux_provisioning_jobs_active_node;
+                CREATE UNIQUE INDEX ux_provisioning_jobs_active_node
+                    ON provisioning_jobs(node_id)
+                    WHERE state NOT IN ('Completed', 'Cancelled', 'RolledBack');
+                PRAGMA user_version = 4;
+                """;
+            await strengthenProvisioningLock.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 5)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addStructuredEventFields = connection.CreateCommand();
+            addStructuredEventFields.Transaction = migration;
+            addStructuredEventFields.CommandText = """
+                ALTER TABLE provisioning_events
+                    ADD COLUMN step TEXT NOT NULL DEFAULT '';
+                ALTER TABLE provisioning_events
+                    ADD COLUMN progress_percent INTEGER NOT NULL DEFAULT 0;
+                PRAGMA user_version = 5;
+                """;
+            await addStructuredEventFields.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 6)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addNodePreflightFacts = connection.CreateCommand();
+            addNodePreflightFacts.Transaction = migration;
+            addNodePreflightFacts.CommandText = """
+                CREATE TABLE IF NOT EXISTS node_preflight_facts (
+                    node_id TEXT PRIMARY KEY REFERENCES agents(node_id) ON DELETE CASCADE,
+                    schema_version INTEGER NOT NULL,
+                    facts_json TEXT NOT NULL,
+                    observed_at TEXT NOT NULL,
+                    source_job_id TEXT NOT NULL REFERENCES provisioning_jobs(id),
+                    updated_at TEXT NOT NULL
+                );
+                PRAGMA user_version = 6;
+                """;
+            await addNodePreflightFacts.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 7)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addPreflightDesiredState = connection.CreateCommand();
+            addPreflightDesiredState.Transaction = migration;
+            addPreflightDesiredState.CommandText = """
+                CREATE TABLE IF NOT EXISTS node_preflight_desired_state (
+                    node_id TEXT PRIMARY KEY REFERENCES agents(node_id) ON DELETE CASCADE,
+                    schema_version INTEGER NOT NULL,
+                    desired_json TEXT NOT NULL,
+                    version INTEGER NOT NULL,
+                    updated_by TEXT NOT NULL,
+                    audit_reason TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+                PRAGMA user_version = 7;
+                """;
+            await addPreflightDesiredState.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
+
+        if (schemaVersion < 8)
+        {
+            await using var migration =
+                (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+            var addBaseInstallPlans = connection.CreateCommand();
+            addBaseInstallPlans.Transaction = migration;
+            addBaseInstallPlans.CommandText = """
+                CREATE TABLE IF NOT EXISTS provisioning_base_install_plans (
+                    job_id TEXT PRIMARY KEY REFERENCES provisioning_jobs(id) ON DELETE CASCADE,
+                    schema_version INTEGER NOT NULL,
+                    plan_json TEXT NOT NULL,
+                    created_at TEXT NOT NULL
+                );
+                PRAGMA user_version = 8;
+                """;
+            await addBaseInstallPlans.ExecuteNonQueryAsync(cancellationToken);
+            await migration.CommitAsync(cancellationToken);
+        }
     }
 
     public async Task<ControlMaintenanceResult> MaintainAsync(
@@ -134,8 +299,53 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         CancellationToken cancellationToken = default)
     {
         await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
         var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = """
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
+            SELECT id, $now, 'job.expired', 'Cancelled',
+                   'Provisioning job expired before execution.', 'expired', progress_percent
+            FROM provisioning_jobs
+            WHERE expires_at <= $now
+              AND state IN ('Queued', 'AwaitingConfirmation');
+            UPDATE provisioning_jobs SET
+                state = 'Cancelled', cancelled_at = $now, updated_at = $now,
+                current_step = 'expired', version = version + 1,
+                last_error = 'job.ttl_expired'
+            WHERE expires_at <= $now
+              AND state IN ('Queued', 'AwaitingConfirmation');
+            SELECT changes();
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
+            SELECT id, $now, 'job.reconciliation.required', 'NeedsReconciliation',
+                   'Execution lease expired; factual state must be inspected.',
+                   'reconcile', progress_percent
+            FROM provisioning_jobs
+            WHERE expires_at <= $now
+              AND state IN ('Preflight', 'Running', 'Verifying');
+            UPDATE provisioning_jobs SET
+                state = 'NeedsReconciliation', updated_at = $now,
+                current_step = 'reconcile', version = version + 1,
+                last_error = 'job.ttl_expired'
+            WHERE expires_at <= $now
+              AND state IN ('Preflight', 'Running', 'Verifying');
+            SELECT changes();
+            INSERT INTO provisioning_events(
+                job_id, recorded_at, event_type, state, message, step, progress_percent)
+            SELECT id, $now, 'job.rollback.reconciliation.required', 'NeedsReconciliation',
+                   'Rollback lease expired; factual state must be inspected.',
+                   'rollback-reconcile', progress_percent
+            FROM provisioning_jobs
+            WHERE expires_at <= $now AND state = 'RollingBack';
+            UPDATE provisioning_jobs SET
+                state = 'NeedsReconciliation', updated_at = $now,
+                current_step = 'rollback-reconcile', version = version + 1,
+                last_error = 'job.rollback.ttl_expired'
+            WHERE expires_at <= $now AND state = 'RollingBack';
+            SELECT changes();
             DELETE FROM metric_samples WHERE recorded_at < $metric_cutoff;
             SELECT changes();
             DELETE FROM idempotency WHERE created_at < $idempotency_cutoff;
@@ -156,24 +366,26 @@ public sealed class ControlStore(IOptions<ControlOptions> options)
         command.Parameters.AddWithValue(
             "$audit_cutoff", now.AddDays(-_options.AuditRetentionDays).ToString("O"));
         command.Parameters.AddWithValue("$now", now.ToString("O"));
-        var deleted = new int[6];
+        var changes = new int[9];
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
-            for (var index = 0; index < deleted.Length; index++)
+            for (var index = 0; index < changes.Length; index++)
             {
                 if (await reader.ReadAsync(cancellationToken))
                 {
-                    deleted[index] = reader.GetInt32(0);
+                    changes[index] = reader.GetInt32(0);
                 }
                 await reader.NextResultAsync(cancellationToken);
             }
         }
+        await transaction.CommitAsync(cancellationToken);
 
         var optimize = connection.CreateCommand();
         optimize.CommandText = "PRAGMA optimize; PRAGMA wal_checkpoint(PASSIVE);";
         await optimize.ExecuteNonQueryAsync(cancellationToken);
         return new ControlMaintenanceResult(
-            deleted[0], deleted[1], deleted[2], deleted[3] + deleted[4] + deleted[5]);
+            changes[3], changes[4], changes[5], changes[6] + changes[7] + changes[8],
+            changes[0], changes[1] + changes[2]);
     }
 
     public async Task BackupDatabaseAsync(string destinationPath, CancellationToken cancellationToken = default)

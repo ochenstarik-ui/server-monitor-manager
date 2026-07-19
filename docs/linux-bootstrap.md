@@ -25,6 +25,8 @@
 sha256sum -c ochenstarik-server-monitor-manager.sh.sha256
 chmod 700 ochenstarik-server-monitor-manager.sh
 sudo ./ochenstarik-server-monitor-manager.sh preflight
+sudo ./ochenstarik-server-monitor-manager.sh verify-release \
+  ./server-monitor-manager-linux-x64.tar.gz
 sudo ./ochenstarik-server-monitor-manager.sh install-control \
   ./server-monitor-manager-linux-x64.tar.gz \
   hub.example.com \

@@ -33,6 +33,7 @@ Server Monitor Manager Linux bootstrap
 
 Usage:
   ochenstarik-server-monitor-manager.sh preflight
+  ochenstarik-server-monitor-manager.sh verify-release ARCHIVE
   ochenstarik-server-monitor-manager.sh install-control ARCHIVE PUBLIC_HOST [HTTPS_PORT]
   ochenstarik-server-monitor-manager.sh install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT
   ochenstarik-server-monitor-manager.sh install-node ARCHIVE
@@ -141,6 +142,18 @@ extract_archive() {
     tar -xzf "$archive" -C "$TEMP_DIR" --no-same-owner --no-same-permissions
     [[ -f "$TEMP_DIR/deploy/$CONTROL_UNIT" ]] || fail "Control systemd unit is missing from archive."
     [[ -f "$TEMP_DIR/deploy/$AGENT_UNIT" ]] || fail "Agent systemd unit is missing from archive."
+}
+
+verify_release_payload() {
+    local archive="$1"
+    require_command sha256sum
+    require_command tar
+    extract_archive "$archive"
+    [[ -x "$TEMP_DIR/control/ochenstarik-smm-control" ]] || fail "Control binary is missing."
+    [[ -x "$TEMP_DIR/agent/ochenstarik-smm-agent" ]] || fail "Agent binary is missing."
+    [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" ]] || fail "Policy helper is missing."
+    [[ -x "$TEMP_DIR/bootstrap/ochenstarik-server-monitor-manager.sh" ]] || fail "Packaged bootstrap is missing."
+    log "Release archive and checksum are valid."
 }
 
 ensure_system_user() {
@@ -558,6 +571,7 @@ main() {
         help|-h|--help) usage ;;
         version|--version) printf '%s %s\n' "$PROGRAM" "$VERSION" ;;
         preflight) preflight ;;
+        verify-release) [[ $# -eq 1 ]] || fail "verify-release requires ARCHIVE"; verify_release_payload "$1" ;;
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
         install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;

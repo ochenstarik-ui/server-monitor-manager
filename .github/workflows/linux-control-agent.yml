@@ -73,9 +73,16 @@ jobs:
           set -Eeuo pipefail
           smoke_log=/tmp/smm-systemd-smoke.log
           report_failure() {
-            local title="$1" message
+            local title="$1" message main_pid
             sudo systemctl status --no-pager ochenstarik-smm-control.service >>"$smoke_log" 2>&1 || true
             sudo journalctl --no-pager -u ochenstarik-smm-control.service -n 40 >>"$smoke_log" 2>&1 || true
+            sudo ss -ltnp >>"$smoke_log" 2>&1 || true
+            main_pid="$(sudo systemctl show -p MainPID --value ochenstarik-smm-control.service 2>/dev/null || true)"
+            if [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
+              sudo sh -c "tr '\0' '\n' </proc/$main_pid/environ | grep '^ASPNETCORE_'" \
+                >>"$smoke_log" 2>&1 || true
+              sudo sh -c "printf 'wchan='; cat /proc/$main_pid/wchan" >>"$smoke_log" 2>&1 || true
+            fi
             message="$(tail -c 6000 "$smoke_log" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"
             printf '::error title=%s::%s\n' "$title" "$message"
             exit 1

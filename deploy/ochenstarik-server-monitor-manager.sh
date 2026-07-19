@@ -13,6 +13,7 @@ readonly AGENT_USER="ochenstarik-smm-agent"
 readonly CONTROL_UNIT="ochenstarik-smm-control.service"
 readonly AGENT_UNIT="ochenstarik-smm-agent.service"
 readonly POLICY_HELPER="/usr/local/libexec/ochenstarik-smm-policy-apply"
+readonly EMERGENCY_COMMAND="/usr/local/sbin/ochenstarik-smm-emergency"
 readonly SUDOERS_FILE="/etc/sudoers.d/ochenstarik-smm-control"
 readonly MESH_DIR="${STATE_DIR}/mesh"
 readonly WG_DIR="${ETC_DIR}/wireguard"
@@ -152,6 +153,8 @@ extract_archive() {
     [[ -f "$TEMP_DIR/deploy/$CONTROL_UNIT" ]] || fail "Control systemd unit is missing from archive."
     [[ -f "$TEMP_DIR/deploy/$AGENT_UNIT" ]] || fail "Agent systemd unit is missing from archive."
     [[ -f "$TEMP_DIR/deploy/$FIREWALL_UNIT" ]] || fail "Mesh firewall systemd unit is missing from archive."
+    [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" ]] || fail "Policy helper is missing from archive."
+    [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-emergency" ]] || fail "Emergency command is missing from archive."
 }
 
 verify_release_payload() {
@@ -162,6 +165,7 @@ verify_release_payload() {
     [[ -x "$TEMP_DIR/control/ochenstarik-smm-control" ]] || fail "Control binary is missing."
     [[ -x "$TEMP_DIR/agent/ochenstarik-smm-agent" ]] || fail "Agent binary is missing."
     [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" ]] || fail "Policy helper is missing."
+    [[ -x "$TEMP_DIR/deploy/ochenstarik-smm-emergency" ]] || fail "Emergency recovery command is missing."
     [[ -f "$TEMP_DIR/deploy/$FIREWALL_UNIT" ]] || fail "Mesh firewall unit is missing."
     [[ -x "$TEMP_DIR/bootstrap/ochenstarik-server-monitor-manager.sh" ]] || fail "Packaged bootstrap is missing."
     log "Release archive and checksum are valid."
@@ -483,6 +487,8 @@ EOF
     chmod 0644 "$ETC_DIR/control-public-url"
     install -d -m 0755 "$(dirname "$POLICY_HELPER")"
     install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" "$POLICY_HELPER"
+    install -d -m 0755 "$(dirname "$EMERGENCY_COMMAND")"
+    install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-emergency" "$EMERGENCY_COMMAND"
     install -d -m 0755 "$LIB_DIR/bootstrap"
     install -m 0644 "$TEMP_DIR/deploy/$FIREWALL_UNIT" "$LIB_DIR/bootstrap/$FIREWALL_UNIT"
     printf '%s\n' "$CONTROL_USER ALL=(root) NOPASSWD: $POLICY_HELPER *" >"$SUDOERS_FILE"
@@ -530,6 +536,8 @@ install_agent() {
     install -d -m 0750 -o root -g "$AGENT_USER" "$ETC_DIR"
     install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$STATE_DIR/agent"
     install_tree_atomic "$TEMP_DIR/agent" "$LIB_DIR/agent" "root:root"
+    install -d -m 0755 "$(dirname "$EMERGENCY_COMMAND")"
+    install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-emergency" "$EMERGENCY_COMMAND"
     if [[ "$(realpath "$ca_cert")" != "$(realpath -m "$ETC_DIR/control-ca.crt")" ]]; then
         install -m 0600 -o "$AGENT_USER" -g "$AGENT_USER" "$ca_cert" "$ETC_DIR/control-ca.crt"
     else

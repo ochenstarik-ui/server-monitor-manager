@@ -100,7 +100,7 @@
 - [x] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
 - [x] реализовать nftables policy helper вместо временного deny-by-default helper;
 - [ ] добавить VM CI matrix, повторную установку и reboot;
-- [ ] добавить локальную emergency recovery command.
+- [x] добавить локальную emergency recovery command для текущих Mesh/firewall-компонентов.
 
 ## Этап 8 — Provisioning control plane
 

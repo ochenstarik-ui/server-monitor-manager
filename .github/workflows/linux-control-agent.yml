@@ -41,8 +41,10 @@ jobs:
         run: |
           bash -n deploy/ochenstarik-server-monitor-manager.sh
           bash -n deploy/ochenstarik-smm-policy-apply
+          bash -n deploy/ochenstarik-smm-emergency
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
+          shellcheck --severity=error deploy/ochenstarik-smm-emergency
           bash tests/bootstrap/test-bootstrap-contract.sh
 
       - name: Publish agent amd64
@@ -64,6 +66,7 @@ jobs:
           install -m 0644 deploy/ochenstarik-smm-agent.service smoke/deploy/
           install -m 0644 deploy/ochenstarik-smm-firewall.service smoke/deploy/
           install -m 0755 deploy/ochenstarik-smm-policy-apply smoke/deploy/
+          install -m 0755 deploy/ochenstarik-smm-emergency smoke/deploy/
           install -m 0755 deploy/ochenstarik-server-monitor-manager.sh smoke/bootstrap/
           tar -C smoke -czf smoke-release.tar.gz agent control deploy bootstrap
           sha256sum smoke-release.tar.gz > smoke-release.tar.gz.sha256
@@ -90,6 +93,10 @@ jobs:
           sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
             smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
             || report_failure 'Initial Control installation failed'
+          sudo test -x /usr/local/sbin/ochenstarik-smm-emergency \
+            || report_failure 'Emergency recovery command was not installed'
+          sudo /usr/local/sbin/ochenstarik-smm-emergency status >>"$smoke_log" 2>&1 \
+            || report_failure 'Emergency recovery status failed'
           for _ in {1..30}; do
             sudo curl --fail --silent --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
               https://127.0.0.1:7443/healthz && break

@@ -96,3 +96,16 @@ sudo ./ochenstarik-server-monitor-manager.sh uninstall-control --confirm-destroy
 ```
 
 Update создаёт root-only backup перед заменой binaries и автоматически восстанавливает предыдущую версию, если сервис не запускается. Перед alpha-тестом на реальных серверах обязательно сохраните отдельную консольную/SSH-сессию и не закрывайте основной административный доступ firewall-правилами проекта.
+
+## Локальное аварийное восстановление
+
+Установщик размещает независимую от Control Hub команду `/usr/local/sbin/ochenstarik-smm-emergency`. Она принимает только фиксированные действия и управляет исключительно интерфейсом `smm0`, systemd units и nftables-таблицей Server Monitor Manager:
+
+```bash
+sudo ochenstarik-smm-emergency status
+sudo ochenstarik-smm-emergency mesh-disable
+sudo ochenstarik-smm-emergency firewall-restore
+sudo ochenstarik-smm-emergency mesh-enable
+```
+
+`mesh-disable` останавливает WireGuard, удаляет только таблицу `inet ochenstarik_smm` и ставит локальный emergency marker, не останавливая Control, Agent или SSH. `firewall-restore` восстанавливает базовую политику deny-by-default; разрешающие Link-правила после этого должен повторно применить Control. Если firewall не удаётся восстановить, команда отключает Mesh для fail-closed результата. `mesh-enable` запускайте только после проверки конфигурации и доступности Hub.

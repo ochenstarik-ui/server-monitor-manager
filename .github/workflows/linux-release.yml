@@ -20,8 +20,10 @@ jobs:
         run: |
           bash -n deploy/ochenstarik-server-monitor-manager.sh
           bash -n deploy/ochenstarik-smm-policy-apply
+          bash -n deploy/ochenstarik-smm-emergency
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
+          shellcheck --severity=error deploy/ochenstarik-smm-emergency
           bash tests/bootstrap/test-bootstrap-contract.sh
 
       - name: Package bootstrap
@@ -87,6 +89,7 @@ jobs:
           install -m 0644 deploy/ochenstarik-smm-agent.service out/deploy/
           install -m 0644 deploy/ochenstarik-smm-firewall.service out/deploy/
           install -m 0755 deploy/ochenstarik-smm-policy-apply out/deploy/
+          install -m 0755 deploy/ochenstarik-smm-emergency out/deploy/
           install -m 0755 deploy/ochenstarik-server-monitor-manager.sh out/bootstrap/
           archive="server-monitor-manager-${{ matrix.runtime }}.tar.gz"
           tar -C out -czf "$archive" agent control deploy bootstrap

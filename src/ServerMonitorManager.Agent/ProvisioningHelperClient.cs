@@ -16,6 +16,33 @@ public sealed class ProvisioningHelperClient(string socketPath)
         var request = new ProvisioningHelperRequest(
             "1", job.Id, job.ActionType, job.SchemaVersion,
             ProvisioningActionCatalog.PreflightModuleHash, job.Parameters);
+        var response = await SendAsync(request, cancellationToken);
+        if (!response.Success || response.Preflight is null)
+        {
+            throw new InvalidOperationException($"Provisioning helper rejected the request: {response.Code}");
+        }
+        return response.Preflight;
+    }
+
+    public async Task<SystemBaseInstallPlan> CreateBaseInstallPlanAsync(
+        ProvisioningJob job,
+        CancellationToken cancellationToken)
+    {
+        var request = new ProvisioningHelperRequest(
+            "1", job.Id, job.ActionType, job.SchemaVersion,
+            ProvisioningActionCatalog.SystemBaseInstallModuleHash, job.Parameters);
+        var response = await SendAsync(request, cancellationToken);
+        if (!response.Success || response.BaseInstallPlan is null)
+        {
+            throw new InvalidOperationException($"Provisioning helper rejected the request: {response.Code}");
+        }
+        return response.BaseInstallPlan;
+    }
+
+    private async Task<ProvisioningHelperResponse> SendAsync(
+        ProvisioningHelperRequest request,
+        CancellationToken cancellationToken)
+    {
         using var socket = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
         await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cancellationToken);
         await using var stream = new NetworkStream(socket, ownsSocket: false);
@@ -24,11 +51,7 @@ public sealed class ProvisioningHelperClient(string socketPath)
         var payload = await ReadResponseAsync(stream, cancellationToken);
         var response = JsonSerializer.Deserialize(payload, SmmJsonContext.Default.ProvisioningHelperResponse)
             ?? throw new InvalidDataException("Provisioning helper returned an empty response.");
-        if (!response.Success || response.Preflight is null)
-        {
-            throw new InvalidOperationException($"Provisioning helper rejected the request: {response.Code}");
-        }
-        return response.Preflight;
+        return response;
     }
 
     private static async Task<byte[]> ReadResponseAsync(Stream stream, CancellationToken cancellationToken)

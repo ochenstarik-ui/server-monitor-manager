@@ -46,9 +46,22 @@ public sealed class ProvisioningHelperServer(string socketPath)
         {
             return Failure("request.invalid-job", "Invalid provisioning job identifier.");
         }
-        if (request.ActionType != "preflight" || request.SchemaVersion != 1
-            || request.ModuleHash != ProvisioningActionCatalog.PreflightModuleHash
-            || request.Parameters.ValueKind != JsonValueKind.Object
+        if (request.SchemaVersion != 1 || request.Parameters.ValueKind != JsonValueKind.Object)
+        {
+            return Failure("action.denied", "The requested action is not allowed.");
+        }
+
+        return request.ActionType switch
+        {
+            "preflight" => ExecutePreflight(request),
+            "system.base-install" => CreateBaseInstallPlan(request),
+            _ => Failure("action.denied", "The requested action is not allowed.")
+        };
+    }
+
+    private static ProvisioningHelperResponse ExecutePreflight(ProvisioningHelperRequest request)
+    {
+        if (request.ModuleHash != ProvisioningActionCatalog.PreflightModuleHash
             || request.Parameters.EnumerateObject().Any())
         {
             return Failure("action.denied", "The requested action is not allowed.");
@@ -64,7 +77,41 @@ public sealed class ProvisioningHelperServer(string socketPath)
             Exists("/usr/sbin/nft", "/usr/bin/nft", "/sbin/nft"),
             Exists("/usr/bin/wg", "/usr/sbin/wg", "/bin/wg"),
             Exists("/usr/bin/apt-get", "/bin/apt-get"));
-        return new ProvisioningHelperResponse(true, "preflight.completed", "Preflight completed.", result);
+        return new ProvisioningHelperResponse(
+            true, "preflight.completed", "Preflight completed.", result, null);
+    }
+
+    private static ProvisioningHelperResponse CreateBaseInstallPlan(ProvisioningHelperRequest request)
+    {
+        if (request.ModuleHash != ProvisioningActionCatalog.SystemBaseInstallModuleHash
+            || !SystemBaseInstallSchema.TryParse(request.Parameters, out var parameters))
+        {
+            return Failure("action.denied", "The requested action is not allowed.");
+        }
+
+        var warnings = new List<string>();
+        if (!Exists("/usr/bin/apt-get", "/bin/apt-get"))
+        {
+            warnings.Add("apt.missing");
+        }
+        if (!File.Exists(Path.Combine("/usr/share/zoneinfo", parameters!.Timezone)))
+        {
+            warnings.Add("timezone.missing");
+        }
+        var plan = new SystemBaseInstallPlan(
+            parameters.Timezone,
+            parameters.Locale,
+            parameters.AptUpdate,
+            parameters.AptUpgrade,
+            SystemBaseInstallCatalogDefinition.ExpandGroups(parameters.PackageGroupIds),
+            parameters.SwapMode,
+            parameters.SwapSizeMiB,
+            parameters.VmSwappiness,
+            parameters.EnableUnattendedUpgrades,
+            parameters.RebootPolicy,
+            [.. warnings]);
+        return new ProvisioningHelperResponse(
+            true, "system.base-install.plan-ready", "Base install plan is ready.", null, plan);
     }
 
     private static async Task HandleAsync(Socket socket, CancellationToken cancellationToken)
@@ -135,5 +182,5 @@ public sealed class ProvisioningHelperServer(string socketPath)
     private static bool Exists(params string[] paths) => paths.Any(File.Exists);
 
     private static ProvisioningHelperResponse Failure(string code, string message)
-        => new(false, code, message, null);
+        => new(false, code, message, null, null);
 }

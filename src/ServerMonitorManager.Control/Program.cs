@@ -965,16 +965,7 @@ internal static class ProvisioningJobValidator
         {
             return false;
         }
-        try
-        {
-            var parameters = JsonSerializer.Deserialize(
-                request.Parameters, SmmJsonContext.Default.SystemBaseInstallParameters);
-            return parameters is not null && IsValid(parameters);
-        }
-        catch (JsonException)
-        {
-            return false;
-        }
+        return SystemBaseInstallSchema.TryParse(request.Parameters, out _);
     }
 
     public static bool IsValid(ProvisioningJobCommandRequest request)
@@ -1012,22 +1003,6 @@ internal static class ProvisioningJobValidator
     public static bool RequiresConfirmation(string actionType)
         => actionType == "system.base-install";
 
-    private static bool IsValid(SystemBaseInstallParameters parameters)
-        => IsSafeTimezone(parameters.Timezone)
-           && IsSafeLocale(parameters.Locale)
-           && (!parameters.AptUpgrade || parameters.AptUpdate)
-           && parameters.PackageCatalogVersion == SystemBaseInstallCatalogDefinition.Version
-           && parameters.PackageGroupIds is { Length: <= 4 }
-           && parameters.PackageGroupIds.Distinct(StringComparer.Ordinal).Count()
-               == parameters.PackageGroupIds.Length
-           && parameters.PackageGroupIds.All(SystemBaseInstallCatalogDefinition.ContainsGroup)
-           && parameters.SwapMode is "disabled" or "automatic" or "explicit"
-           && (parameters.SwapMode == "explicit"
-               ? parameters.SwapSizeMiB is >= 128 and <= 1_048_576
-               : parameters.SwapSizeMiB is null)
-           && parameters.VmSwappiness is >= 0 and <= 200
-           && parameters.RebootPolicy == "never";
-
     private static bool IsSafeCode(string value, int maximumLength)
         => value.Length is >= 1 && value.Length <= maximumLength
            && value.All(character => character is >= 'a' and <= 'z'
@@ -1040,17 +1015,6 @@ internal static class ProvisioningJobValidator
            && value.All(character => char.IsAsciiLetterOrDigit(character)
                || character is '_' or '-' or '.');
 
-    private static bool IsSafeTimezone(string? value)
-        => value is { Length: >= 1 and <= 64 }
-           && value[0] is not '/' and not '.'
-           && !value.Contains("..", StringComparison.Ordinal)
-           && value.All(character => char.IsAsciiLetterOrDigit(character)
-               || character is '/' or '_' or '-' or '+');
-
-    private static bool IsSafeLocale(string? value)
-        => value is { Length: >= 1 and <= 32 }
-           && value.All(character => char.IsAsciiLetterOrDigit(character)
-               || character is '_' or '-' or '.' or '@');
 }
 
 internal static class PreflightDesiredStateValidator

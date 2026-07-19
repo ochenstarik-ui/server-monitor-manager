@@ -67,4 +67,25 @@ public sealed class ProvisioningHelperTests
         Assert.Throws<JsonException>(() =>
             JsonSerializer.Deserialize(json, SmmJsonContext.Default.SystemBaseInstallParameters));
     }
+
+    [Fact]
+    public void HelperBuildsDeterministicBaseInstallPlanWithoutCommands()
+    {
+        var parameters = new SystemBaseInstallParameters(
+            "UTC", "en_US.UTF-8", true, false, 1,
+            ["development", "core"], "disabled", null, 60, true, "never");
+        var json = JsonSerializer.SerializeToElement(
+            parameters, SmmJsonContext.Default.SystemBaseInstallParameters);
+        var response = ProvisioningHelperServer.Execute(new ProvisioningHelperRequest(
+            "1", new string('c', 32), "system.base-install", 1,
+            ProvisioningActionCatalog.SystemBaseInstallModuleHash, json));
+
+        Assert.True(response.Success);
+        Assert.Equal("system.base-install.plan-ready", response.Code);
+        Assert.Null(response.Preflight);
+        Assert.Equal(
+            ["ca-certificates", "curl", "jq", "build-essential", "git"],
+            response.BaseInstallPlan!.Packages);
+        Assert.Equal("never", response.BaseInstallPlan.RebootPolicy);
+    }
 }

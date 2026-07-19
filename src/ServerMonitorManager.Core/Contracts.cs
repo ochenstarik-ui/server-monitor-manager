@@ -177,7 +177,8 @@ public sealed record ProvisioningHelperResponse(
     bool Success,
     string Code,
     string Message,
-    ProvisioningPreflightResult? Preflight);
+    ProvisioningPreflightResult? Preflight,
+    SystemBaseInstallPlan? BaseInstallPlan);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProvisioningPreflightResult(
@@ -258,6 +259,19 @@ public sealed record SystemBaseInstallCatalog(
     int Version,
     SystemPackageGroup[] Groups);
 
+public sealed record SystemBaseInstallPlan(
+    string Timezone,
+    string Locale,
+    bool AptUpdate,
+    bool AptUpgrade,
+    string[] Packages,
+    string SwapMode,
+    int? SwapSizeMiB,
+    int VmSwappiness,
+    bool EnableUnattendedUpgrades,
+    string RebootPolicy,
+    string[] Warnings);
+
 public static class PreflightDriftStatuses
 {
     public const string NotConfigured = "NotConfigured";
@@ -327,6 +341,8 @@ public static class ProvisioningActionCatalog
 {
     public const string PreflightModuleHash =
         "2dc48fb4528a291221954fc2dd3478d431b66fe34228f29684ce1648dbe2f32b";
+    public const string SystemBaseInstallModuleHash =
+        "355d55e214b941160a32957ced1a681e3c7324f94ecb340f26042f0c3b59b99e";
 }
 
 public static class SystemBaseInstallCatalogDefinition
@@ -344,4 +360,60 @@ public static class SystemBaseInstallCatalogDefinition
 
     public static bool ContainsGroup(string id)
         => id is "core" or "development" or "diagnostics" or "container-host";
+
+    public static string[] ExpandGroups(IEnumerable<string> ids)
+    {
+        var selected = ids.ToHashSet(StringComparer.Ordinal);
+        return Create().Groups
+            .Where(group => selected.Contains(group.Id))
+            .SelectMany(group => group.Packages)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+    }
+}
+
+public static class SystemBaseInstallSchema
+{
+    public static bool TryParse(JsonElement json, out SystemBaseInstallParameters? parameters)
+    {
+        try
+        {
+            parameters = JsonSerializer.Deserialize(
+                json, SmmJsonContext.Default.SystemBaseInstallParameters);
+            return parameters is not null && IsValid(parameters);
+        }
+        catch (JsonException)
+        {
+            parameters = null;
+            return false;
+        }
+    }
+
+    public static bool IsValid(SystemBaseInstallParameters parameters)
+        => IsSafeTimezone(parameters.Timezone)
+           && IsSafeLocale(parameters.Locale)
+           && (!parameters.AptUpgrade || parameters.AptUpdate)
+           && parameters.PackageCatalogVersion == SystemBaseInstallCatalogDefinition.Version
+           && parameters.PackageGroupIds is { Length: <= 4 }
+           && parameters.PackageGroupIds.Distinct(StringComparer.Ordinal).Count()
+               == parameters.PackageGroupIds.Length
+           && parameters.PackageGroupIds.All(SystemBaseInstallCatalogDefinition.ContainsGroup)
+           && parameters.SwapMode is "disabled" or "automatic" or "explicit"
+           && (parameters.SwapMode == "explicit"
+               ? parameters.SwapSizeMiB is >= 128 and <= 1_048_576
+               : parameters.SwapSizeMiB is null)
+           && parameters.VmSwappiness is >= 0 and <= 200
+           && parameters.RebootPolicy == "never";
+
+    private static bool IsSafeTimezone(string? value)
+        => value is { Length: >= 1 and <= 64 }
+           && value[0] is not '/' and not '.'
+           && !value.Contains("..", StringComparison.Ordinal)
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '/' or '_' or '-' or '+');
+
+    private static bool IsSafeLocale(string? value)
+        => value is { Length: >= 1 and <= 32 }
+           && value.All(character => char.IsAsciiLetterOrDigit(character)
+               || character is '_' or '-' or '.' or '@');
 }

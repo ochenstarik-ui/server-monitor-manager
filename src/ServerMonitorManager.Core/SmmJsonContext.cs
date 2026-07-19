@@ -42,6 +42,7 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(SystemPackageGroup))]
 [JsonSerializable(typeof(SystemPackageGroup[]))]
 [JsonSerializable(typeof(SystemBaseInstallCatalog))]
+[JsonSerializable(typeof(SystemBaseInstallPlan))]
 [JsonSerializable(typeof(ProvisioningJob))]
 [JsonSerializable(typeof(ProvisioningJob[]))]
 [JsonSerializable(typeof(ProvisioningEvent))]

@@ -481,6 +481,7 @@ EOF
     chown root:"$CONTROL_USER" "$ETC_DIR/control.env"
     chmod 0640 "$ETC_DIR/control.env"
     chmod 0644 "$ETC_DIR/control-public-url"
+    install -d -m 0755 "$(dirname "$POLICY_HELPER")"
     install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-policy-apply" "$POLICY_HELPER"
     install -d -m 0755 "$LIB_DIR/bootstrap"
     install -m 0644 "$TEMP_DIR/deploy/$FIREWALL_UNIT" "$LIB_DIR/bootstrap/$FIREWALL_UNIT"

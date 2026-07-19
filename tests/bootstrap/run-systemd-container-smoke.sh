@@ -9,6 +9,9 @@ bootstrap="$(realpath "${3:?bootstrap is required}")"
 name="smm-systemd-${RANDOM}-${RANDOM}"
 image="smm-systemd-smoke:${base_image//[:\/]/-}"
 port="17443"
+smoke_dir="/root/smm-smoke"
+remote_archive="$smoke_dir/release.tar.gz"
+remote_bootstrap="$smoke_dir/ochenstarik-server-monitor-manager.sh"
 
 cleanup() {
     docker rm -f "$name" >/dev/null 2>&1 || true
@@ -38,18 +41,19 @@ state="$(docker exec "$name" systemctl is-system-running 2>/dev/null || true)"
     exit 1
 }
 
-docker cp "$archive" "$name:/tmp/release.tar.gz"
-docker cp "${archive}.sha256" "$name:/tmp/release.tar.gz.sha256"
-docker cp "$bootstrap" "$name:/tmp/ochenstarik-server-monitor-manager.sh"
-docker exec "$name" chmod 0700 /tmp/ochenstarik-server-monitor-manager.sh
-docker exec "$name" /tmp/ochenstarik-server-monitor-manager.sh preflight
-docker exec "$name" /tmp/ochenstarik-server-monitor-manager.sh install-control \
-    /tmp/release.tar.gz 127.0.0.1 "$port"
+docker exec "$name" install -d -m 0700 "$smoke_dir"
+docker cp "$archive" "$name:$remote_archive"
+docker cp "${archive}.sha256" "$name:${remote_archive}.sha256"
+docker cp "$bootstrap" "$name:$remote_bootstrap"
+docker exec "$name" chmod 0700 "$remote_bootstrap"
+docker exec "$name" "$remote_bootstrap" preflight
+docker exec "$name" "$remote_bootstrap" install-control \
+    "$remote_archive" 127.0.0.1 "$port"
 docker exec "$name" curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
     --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
     "https://127.0.0.1:$port/healthz"
-docker exec "$name" /tmp/ochenstarik-server-monitor-manager.sh install-control \
-    /tmp/release.tar.gz 127.0.0.1 "$port"
+docker exec "$name" "$remote_bootstrap" install-control \
+    "$remote_archive" 127.0.0.1 "$port"
 
 docker restart "$name" >/dev/null
 for _ in {1..60}; do

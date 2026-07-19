@@ -20,7 +20,7 @@ export TARGET_PORT=22
 bash tests/acceptance/three-server-mesh.sh
 ```
 
-Set `SMM_ACCEPT_REBOOT=1` to reboot the Hub and source Node and verify that the first Link remains usable while the disabled Link remains blocked. The reboot option is deliberately opt-in because it interrupts active sessions.
+Set `SMM_ACCEPT_RESTORE=1` to restore the backup created by the run, restart Control, and recheck both policies. Set `SMM_ACCEPT_REBOOT=1` to reboot the Hub and source Node and verify that the first Link remains usable while the disabled Link remains blocked. Restore and reboot are deliberately opt-in because they interrupt active sessions. Use both flags for the complete release acceptance run.
 
 Prerequisites:
 
@@ -30,4 +30,4 @@ Prerequisites:
 - `TARGET_PORT` listens on both destination Nodes;
 - `HOME_WG_IP` and `SECOND_WG_IP` are their `smm0` addresses.
 
-Success ends with `THREE_SERVER_ACCEPTANCE=PASS`. The script keeps the home Link enabled for continued testing, leaves the second Link disabled, and never exports the Hub CA private key.
+Success ends with `THREE_SERVER_ACCEPTANCE=PASS`. The script keeps the home Link enabled for continued testing, leaves the second Link disabled, revokes its temporary Operator certificate, and never exports the Hub CA private key.

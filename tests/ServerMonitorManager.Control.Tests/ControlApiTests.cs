@@ -181,6 +181,30 @@ public sealed class ControlApiTests : IAsyncDisposable
             ServerMonitorManager.Core.ProvisioningJob>(cancellationToken);
         Assert.Equal(ServerMonitorManager.Core.ProvisioningJobStates.Queued, confirmed!.State);
         Assert.Equal("confirmed-queued", confirmed.CurrentStep);
+        var grantRequest = new { idempotencyKey = Guid.NewGuid().ToString() };
+        var grantResponse = await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/execution-grant",
+            grantRequest,
+            cancellationToken);
+        Assert.Equal(HttpStatusCode.OK, grantResponse.StatusCode);
+        var grant = await grantResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningExecutionGrant>(cancellationToken);
+        var grantReplayResponse = await agent.PostAsJsonAsync(
+            $"/api/v1/agents/provisioning/jobs/{job.Id}/execution-grant",
+            grantRequest,
+            cancellationToken);
+        var grantReplay = await grantReplayResponse.Content.ReadFromJsonAsync<
+            ServerMonitorManager.Core.ProvisioningExecutionGrant>(cancellationToken);
+        Assert.Equal(grant!.Signature, grantReplay!.Signature);
+        var authority = _factory.Services.GetRequiredService<
+            ServerMonitorManager.Control.CertificateAuthority>();
+        Assert.True(ServerMonitorManager.Core.ProvisioningExecutionGrantCodec.Verify(
+            grant,
+            authority.PublicCertificate,
+            job.Id,
+            "home",
+            storedPlan.Plan,
+            DateTimeOffset.UtcNow));
         Assert.Equal(HttpStatusCode.NoContent, (await agent.GetAsync(
             "/api/v1/agents/provisioning/jobs/next", cancellationToken)).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest, (await client.PostAsJsonAsync(

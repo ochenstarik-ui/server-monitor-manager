@@ -498,6 +498,46 @@ agents.MapPost("/provisioning/jobs/{id}/base-install-plan", async (
         return Results.BadRequest(new ProblemDetails { Title = exception.Message });
     }
 });
+agents.MapPost("/provisioning/jobs/{id}/execution-grant", async (
+    string id,
+    ProvisioningExecutionGrantRequest request,
+    HttpContext context,
+    ControlStore controlStore,
+    CertificateAuthority authority,
+    TimeProvider timeProvider,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !ProvisioningJobValidator.IsValidId(id)
+        || !ProvisioningJobValidator.IsValid(request))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["executionGrant"] = ["Invalid job id or idempotency key."]
+        });
+    }
+    try
+    {
+        var grant = await controlStore.IssueBaseInstallExecutionGrantAsync(
+            nodeId,
+            id,
+            request,
+            (job, plan) => authority.SignProvisioningExecutionGrant(
+                job, plan, timeProvider.GetUtcNow(), TimeSpan.FromMinutes(2)),
+            cancellationToken);
+        return grant is null ? Results.NotFound() : Results.Ok(grant);
+    }
+    catch (IdempotencyConflictException)
+    {
+        return Results.Conflict(new ProblemDetails { Title = "Idempotency key conflict" });
+    }
+    catch (ProvisioningTransitionException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
@@ -1055,6 +1095,9 @@ internal static class ProvisioningJobValidator
            && request.Plan.Packages is { Length: <= 64 }
            && request.Plan.Warnings is { Length: <= 2 }
            && IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
+
+    public static bool IsValid(ProvisioningExecutionGrantRequest request)
+        => IdempotencyKeyValidator.IsValid(request.IdempotencyKey);
 
     public static bool IsValidId(string id)
         => id.Length == 32 && Guid.TryParseExact(id, "N", out _);

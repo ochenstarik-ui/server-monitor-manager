@@ -284,6 +284,23 @@ public sealed record ProvisioningBaseInstallPlanRecord(
     SystemBaseInstallPlan Plan,
     DateTimeOffset CreatedAt);
 
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ProvisioningExecutionGrant(
+    string ProtocolVersion,
+    string JobId,
+    string NodeId,
+    string ActionType,
+    int SchemaVersion,
+    string PlanSha256,
+    long IssuedAtUnixSeconds,
+    long ExpiresAtUnixSeconds,
+    string Nonce,
+    string SignatureAlgorithm,
+    string Signature);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ProvisioningExecutionGrantRequest(string IdempotencyKey);
+
 public static class PreflightDriftStatuses
 {
     public const string NotConfigured = "NotConfigured";

@@ -118,6 +118,7 @@
 - [ ] versioned JSON schemas для остальных action type;
 - [x] restricted root helper через Unix socket (`preflight` и non-mutating plan для `system.base-install`);
 - [x] двухфазный `system.base-install`: сохранённый проверенный plan до Operator confirmation;
+- [x] короткоживущий ECDSA execution grant, привязанный к Node, job и SHA-256 подтверждённого plan;
 - [x] structured redacted events, bounded Operator history и progress;
 - [x] `NeedsReconciliation` после истечения execution TTL и неопределённого результата;
 - [ ] desired/factual configuration и drift (`preflight` завершён; остальные action type ещё не подключены);

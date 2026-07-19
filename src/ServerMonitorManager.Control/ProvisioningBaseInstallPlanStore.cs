@@ -132,6 +132,77 @@ public sealed partial class ControlStore
             jobId, reader.GetString(3), reader.GetInt32(0), plan,
             DateTimeOffset.Parse(reader.GetString(2)));
     }
+
+    public async Task<ProvisioningExecutionGrant?> IssueBaseInstallExecutionGrantAsync(
+        string nodeId,
+        string jobId,
+        ProvisioningExecutionGrantRequest request,
+        Func<ProvisioningJob, SystemBaseInstallPlan, ProvisioningExecutionGrant> issueGrant,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction =
+            (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var operationKey = $"provisioning-execution-grant:{nodeId}:{jobId}:{request.IdempotencyKey}";
+        var requestHash = Fingerprint(
+            request, SmmJsonContext.Default.ProvisioningExecutionGrantRequest);
+        var cached = await ReadIdempotentAsync(
+            connection, transaction, operationKey, requestHash,
+            SmmJsonContext.Default.ProvisioningExecutionGrant, cancellationToken);
+        if (cached is not null)
+        {
+            await transaction.CommitAsync(cancellationToken);
+            return cached;
+        }
+
+        var job = await ReadProvisioningJobAsync(connection, transaction, jobId, cancellationToken);
+        if (job is null || !string.Equals(job.NodeId, nodeId, StringComparison.Ordinal))
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            return null;
+        }
+        if (job.ActionType != "system.base-install"
+            || job.SchemaVersion != 1
+            || job.State != ProvisioningJobStates.Queued
+            || !job.ConfirmationRequired
+            || job.ConfirmedAt is null
+            || job.ExpiresAt <= DateTimeOffset.UtcNow)
+        {
+            throw new ProvisioningTransitionException(job.State, "ExecutionGrant");
+        }
+
+        var planCommand = connection.CreateCommand();
+        planCommand.Transaction = transaction;
+        planCommand.CommandText = """
+            SELECT plan_json FROM provisioning_base_install_plans
+            WHERE job_id = $job AND schema_version = 1;
+            """;
+        planCommand.Parameters.AddWithValue("$job", jobId);
+        var planJson = await planCommand.ExecuteScalarAsync(cancellationToken) as string;
+        if (planJson is null)
+        {
+            throw new ProvisioningTransitionException(job.State, "ExecutionGrant");
+        }
+        var plan = JsonSerializer.Deserialize(
+            planJson, SmmJsonContext.Default.SystemBaseInstallPlan)
+            ?? throw new InvalidDataException("Stored base installation plan is invalid.");
+        var grant = issueGrant(job, plan);
+        await WriteIdempotentAsync(
+            connection, transaction, operationKey, requestHash, grant,
+            SmmJsonContext.Default.ProvisioningExecutionGrant, cancellationToken);
+        await WriteAuditAsync(
+            connection, transaction, nodeId, "provisioning.execution-grant.issued", jobId,
+            JsonSerializer.Serialize(new
+            {
+                grant.ActionType,
+                grant.SchemaVersion,
+                grant.PlanSha256,
+                grant.ExpiresAtUnixSeconds
+            }),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return grant;
+    }
 }
 
 public sealed class ProvisioningPlanValidationException()

@@ -35,10 +35,14 @@ Console.CancelKeyPress += (_, eventArgs) =>
     shutdown.Cancel();
 };
 var client = new AgentClient(options);
-var enrollmentToken = configuration["EnrollToken"];
-if (!string.IsNullOrWhiteSpace(enrollmentToken))
+if (!string.IsNullOrWhiteSpace(configuration["EnrollToken"]))
 {
-    await client.EnrollAsync(enrollmentToken, shutdown.Token);
+    Console.Error.WriteLine("Inline enrollment tokens are not supported; use SMM_EnrollTokenFile.");
+    return 2;
+}
+if (!string.IsNullOrWhiteSpace(options.EnrollTokenFile))
+{
+    await client.EnrollFromFileAsync(options.EnrollTokenFile, shutdown.Token);
     Console.WriteLine("Agent enrollment completed.");
     return 0;
 }

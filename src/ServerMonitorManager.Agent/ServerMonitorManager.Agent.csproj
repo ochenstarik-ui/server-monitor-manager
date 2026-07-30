@@ -18,4 +18,7 @@
   <ItemGroup>
     <None Update="appsettings.json" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="ServerMonitorManager.Control.Tests" />
+  </ItemGroup>
 </Project>

@@ -11,6 +11,24 @@ provisioning_helper_unit="$root/deploy/ochenstarik-smm-provisioning-helper.servi
 grep -Fq 'EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env' "$provisioning_helper_unit"
 grep -Fq 'ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback' "$provisioning_helper_unit"
 grep -Fq 'install -d -m 0700 -o root -g root "$STATE_DIR/provisioning/rollback"' "$bootstrap"
+if grep -Fq 'SMM_EnrollToken=$ENROLL_TOKEN' "$bootstrap"; then
+    printf '%s\n' "enrollment token is exposed through process argv" >&2
+    exit 1
+fi
+grep -Fq 'readonly ENROLLMENT_DIR="${STATE_DIR}-enrollment"' "$bootstrap"
+grep -Fq 'install -d -m 0710 -o root -g "$AGENT_USER" "$ENROLLMENT_DIR"' "$bootstrap"
+grep -Fq 'token_temp="$(mktemp "$ENROLLMENT_DIR/.enroll-token.XXXXXXXX")"' "$bootstrap"
+if grep -Fq '$STATE_DIR/enrollment' "$bootstrap"; then
+    printf '%s\n' "enrollment directory is beneath Control-writable state" >&2
+    exit 1
+fi
+grep -Fq 'chmod 0400 "$token_temp"' "$bootstrap"
+grep -Fq 'mv -fT -- "$token_temp" "$token_file"' "$bootstrap"
+grep -Fq '"SMM_EnrollTokenFile=$token_file"' "$bootstrap"
+grep -Fq 'rm -f -- "$token_file"' "$bootstrap"
+grep -Fq 'rm -f -- "$ENROLLMENT_TOKEN_FILE"' "$bootstrap"
+grep -Fq 'rm -f -- "$ENROLLMENT_TOKEN_TEMP"' "$bootstrap"
+grep -Fq 'SMM_AgentUid=$(id -u "$AGENT_USER")' "$bootstrap"
 
 help_output="$(bash "$bootstrap" --help)"
 version_output="$(bash "$bootstrap" --version)"

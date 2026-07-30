@@ -44,12 +44,15 @@ jobs:
           bash -n deploy/ochenstarik-smm-emergency
           bash -n tests/bootstrap/run-native-systemd-smoke.sh
           bash -n tests/bootstrap/run-systemd-container-smoke.sh
+          bash -n tests/bootstrap/test-enrollment-token-argv.sh
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
           shellcheck --severity=error deploy/ochenstarik-smm-emergency
           shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
           shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
+          shellcheck --severity=error tests/bootstrap/test-enrollment-token-argv.sh
           bash tests/bootstrap/test-bootstrap-contract.sh
+          bash tests/bootstrap/test-enrollment-token-argv.sh
 
       - name: Publish agent amd64
         run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true

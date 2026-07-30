@@ -23,6 +23,11 @@ if (localNodeId is not { Length: >= 1 and <= 63 }
     Console.Error.WriteLine("SMM_NodeId must identify the local enrolled Node.");
     return 2;
 }
+if (!uint.TryParse(Environment.GetEnvironmentVariable("SMM_AgentUid"), out var agentUserId))
+{
+    Console.Error.WriteLine("SMM_AgentUid must identify the enrolled Agent user.");
+    return 2;
+}
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>
@@ -39,5 +44,5 @@ var timezoneExecutor = new TimezoneProvisioningExecutor(
     new ProvisioningProcessRunner(),
     TimeProvider.System,
     rollbackDirectory);
-await new ProvisioningHelperServer(socketPath, timezoneExecutor).RunAsync(shutdown.Token);
+await new ProvisioningHelperServer(socketPath, agentUserId, timezoneExecutor).RunAsync(shutdown.Token);
 return 0;

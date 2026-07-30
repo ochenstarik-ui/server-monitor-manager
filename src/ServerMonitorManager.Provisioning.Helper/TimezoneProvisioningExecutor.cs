@@ -17,7 +17,10 @@ public interface IProvisioningFileSystem
 
 public interface IProvisioningProcessRunner
 {
-    ProvisioningProcessResult Run(string fileName, IReadOnlyList<string> arguments);
+    Task<ProvisioningProcessResult> RunAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken);
 }
 
 public sealed record ProvisioningProcessResult(int ExitCode, string StandardOutput, string StandardError);
@@ -34,7 +37,13 @@ public sealed class TimezoneProvisioningExecutor(
     private const string ZoneinfoRoot = "/usr/share/zoneinfo";
 
     public ProvisioningBaseInstallExecutionResult Execute(ProvisioningHelperRequest request)
+        => ExecuteAsync(request, CancellationToken.None).GetAwaiter().GetResult();
+
+    public async Task<ProvisioningBaseInstallExecutionResult> ExecuteAsync(
+        ProvisioningHelperRequest request,
+        CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var authorization = request.Execution;
         if (authorization is null
             || request.ProtocolVersion != ProvisioningExecutionGrantCodec.ProtocolVersion
@@ -104,7 +113,11 @@ public sealed class TimezoneProvisioningExecutor(
         ProvisioningProcessResult observedBefore;
         try
         {
-            observedBefore = QueryTimezone();
+            observedBefore = await QueryTimezoneAsync(cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
         }
         catch
         {
@@ -141,11 +154,11 @@ public sealed class TimezoneProvisioningExecutor(
         var failureCode = "timezone.mutation-failed";
         try
         {
-            var mutation = SetTimezone(plan.Timezone);
+            var mutation = await SetTimezoneAsync(plan.Timezone, cancellationToken);
             if (mutation.ExitCode == 0)
             {
                 failureCode = "timezone.verification-failed";
-                var observedAfter = NormalizeTimezone(QueryTimezone());
+                var observedAfter = NormalizeTimezone(await QueryTimezoneAsync(cancellationToken));
                 if (string.Equals(observedAfter, plan.Timezone, StringComparison.Ordinal))
                 {
                     return new ProvisioningBaseInstallExecutionResult(
@@ -153,6 +166,10 @@ public sealed class TimezoneProvisioningExecutor(
                         true, true, false, false, observedAfter);
                 }
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return await RecoverAfterCancellationAsync(previousTimezone);
         }
         catch
         {
@@ -163,13 +180,17 @@ public sealed class TimezoneProvisioningExecutor(
         string? observedRollback = null;
         try
         {
-            var rollback = SetTimezone(previousTimezone);
+            var rollback = await SetTimezoneAsync(previousTimezone, cancellationToken);
             if (rollback.ExitCode == 0)
             {
-                observedRollback = NormalizeTimezone(QueryTimezone());
+                observedRollback = NormalizeTimezone(await QueryTimezoneAsync(cancellationToken));
                 rollbackSucceeded = string.Equals(
                     observedRollback, previousTimezone, StringComparison.Ordinal);
             }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            return await RecoverAfterCancellationAsync(previousTimezone);
         }
         catch
         {
@@ -189,13 +210,65 @@ public sealed class TimezoneProvisioningExecutor(
             observedRollback);
     }
 
-    private ProvisioningProcessResult QueryTimezone()
-        => processRunner.Run(
-            TimedatectlPath,
-            ["show", "--property=Timezone", "--value"]);
+    private async Task<ProvisioningBaseInstallExecutionResult> RecoverAfterCancellationAsync(
+        string previousTimezone)
+    {
+        using var recoveryTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        string? observedTimezone = null;
+        try
+        {
+            observedTimezone = NormalizeTimezone(
+                await QueryTimezoneAsync(recoveryTimeout.Token));
+            if (!string.Equals(observedTimezone, previousTimezone, StringComparison.Ordinal))
+            {
+                var rollback = await SetTimezoneAsync(previousTimezone, recoveryTimeout.Token);
+                if (rollback.ExitCode == 0)
+                {
+                    observedTimezone = NormalizeTimezone(
+                        await QueryTimezoneAsync(recoveryTimeout.Token));
+                }
+            }
+            var rollbackSucceeded = string.Equals(
+                observedTimezone, previousTimezone, StringComparison.Ordinal);
+            return new ProvisioningBaseInstallExecutionResult(
+                false,
+                "timezone.execution-cancelled",
+                rollbackSucceeded
+                    ? "Timezone execution was cancelled; prior state was verified."
+                    : "Timezone execution was cancelled; host state requires reconciliation.",
+                !rollbackSucceeded,
+                false,
+                true,
+                rollbackSucceeded,
+                observedTimezone);
+        }
+        catch
+        {
+            return new ProvisioningBaseInstallExecutionResult(
+                false,
+                "timezone.execution-cancelled",
+                "Timezone execution was cancelled; host state requires reconciliation.",
+                true,
+                false,
+                true,
+                false,
+                observedTimezone);
+        }
+    }
 
-    private ProvisioningProcessResult SetTimezone(string timezone)
-        => processRunner.Run(TimedatectlPath, ["set-timezone", timezone]);
+    private Task<ProvisioningProcessResult> QueryTimezoneAsync(CancellationToken cancellationToken)
+        => processRunner.RunAsync(
+            TimedatectlPath,
+            ["show", "--property=Timezone", "--value"],
+            cancellationToken);
+
+    private Task<ProvisioningProcessResult> SetTimezoneAsync(
+        string timezone,
+        CancellationToken cancellationToken)
+        => processRunner.RunAsync(
+            TimedatectlPath,
+            ["set-timezone", timezone],
+            cancellationToken);
 
     private bool HasSymlinkedManagedPath(string path)
     {
@@ -308,7 +381,10 @@ public sealed class ProvisioningFileSystem : IProvisioningFileSystem
 
 public sealed class ProvisioningProcessRunner : IProvisioningProcessRunner
 {
-    public ProvisioningProcessResult Run(string fileName, IReadOnlyList<string> arguments)
+    public async Task<ProvisioningProcessResult> RunAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        CancellationToken cancellationToken)
     {
         if (!string.Equals(fileName, "/usr/bin/timedatectl", StringComparison.Ordinal))
         {
@@ -330,16 +406,26 @@ public sealed class ProvisioningProcessRunner : IProvisioningProcessRunner
             ?? throw new InvalidOperationException("Provisioning process could not be started.");
         var standardOutput = process.StandardOutput.ReadToEndAsync();
         var standardError = process.StandardError.ReadToEndAsync();
-        if (!process.WaitForExit(30_000))
+        using var processTimeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        processTimeout.CancelAfter(TimeSpan.FromSeconds(30));
+        try
         {
-            process.Kill(entireProcessTree: true);
-            process.WaitForExit();
-            throw new TimeoutException("Provisioning process timed out.");
+            await process.WaitForExitAsync(processTimeout.Token);
+            await Task.WhenAll(standardOutput, standardError);
         }
-        Task.WaitAll(standardOutput, standardError);
+        catch (OperationCanceledException)
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+            }
+            await process.WaitForExitAsync(CancellationToken.None);
+            await Task.WhenAll(standardOutput, standardError);
+            throw;
+        }
         return new ProvisioningProcessResult(
             process.ExitCode,
-            standardOutput.GetAwaiter().GetResult(),
-            standardError.GetAwaiter().GetResult());
+            await standardOutput,
+            await standardError);
     }
 }

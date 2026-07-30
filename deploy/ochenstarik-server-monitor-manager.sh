@@ -7,6 +7,7 @@ readonly PROGRAM_VERSION="0.2.0-dev"
 readonly ETC_DIR="/etc/ochenstarik-server-monitor-manager"
 readonly LIB_DIR="/usr/local/lib/ochenstarik-server-monitor-manager"
 readonly STATE_DIR="/var/lib/ochenstarik-server-monitor-manager"
+readonly ENROLLMENT_DIR="${STATE_DIR}-enrollment"
 readonly BACKUP_DIR="${STATE_DIR}/bootstrap-backups"
 readonly CONTROL_USER="ochenstarik-smm-control"
 readonly AGENT_USER="ochenstarik-smm-agent"
@@ -24,11 +25,19 @@ readonly HUB_MESH_ADDRESS="10.77.0.1/24"
 
 TEMP_DIR=""
 MESH_PEER_CODE=""
+ENROLLMENT_TOKEN_FILE=""
+ENROLLMENT_TOKEN_TEMP=""
 
 log() { printf '%s\n' "[$PROGRAM] $*"; }
 fail() { printf '%s\n' "[$PROGRAM] ERROR: $*" >&2; exit 1; }
 
 cleanup() {
+    if [[ -n "$ENROLLMENT_TOKEN_FILE" ]]; then
+        rm -f -- "$ENROLLMENT_TOKEN_FILE"
+    fi
+    if [[ -n "$ENROLLMENT_TOKEN_TEMP" ]]; then
+        rm -f -- "$ENROLLMENT_TOKEN_TEMP"
+    fi
     if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
         rm -rf -- "$TEMP_DIR"
     fi
@@ -522,7 +531,7 @@ read_enrollment_token() {
 }
 
 install_agent() {
-    local archive="$1" node_id="$2" control_url="$3" ca_cert="$4" backup_id
+    local archive="$1" node_id="$2" control_url="$3" ca_cert="$4" backup_id token_file token_temp
     require_root
     validate_platform
     validate_node_id "$node_id"
@@ -541,6 +550,7 @@ install_agent() {
     ensure_system_user "$AGENT_USER"
     install -d -m 0750 -o root -g "$AGENT_USER" "$ETC_DIR"
     install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$STATE_DIR/agent"
+    install -d -m 0710 -o root -g "$AGENT_USER" "$ENROLLMENT_DIR"
     install -d -m 0700 -o root -g root "$STATE_DIR/provisioning/rollback"
     install_tree_atomic "$TEMP_DIR/agent" "$LIB_DIR/agent" "root:root"
     install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"
@@ -554,21 +564,41 @@ install_agent() {
     fi
     cat >"$ETC_DIR/agent.env" <<EOF
 SMM_NodeId=$node_id
+SMM_AgentUid=$(id -u "$AGENT_USER")
 SMM_ControlUrl=${control_url%/}
 SMM_StateDirectory=$STATE_DIR/agent
+SMM_EnrollmentTokenDirectory=$ENROLLMENT_DIR
 SMM_CertificateAuthorityPath=$ETC_DIR/control-ca.crt
 EOF
     chown root:"$AGENT_USER" "$ETC_DIR/agent.env"
     chmod 0640 "$ETC_DIR/agent.env"
     read_enrollment_token
-    runuser -u "$AGENT_USER" -- env \
+    token_file="$ENROLLMENT_DIR/enroll-token"
+    token_temp="$(mktemp "$ENROLLMENT_DIR/.enroll-token.XXXXXXXX")"
+    ENROLLMENT_TOKEN_TEMP="$token_temp"
+    if ! printf '%s' "$ENROLL_TOKEN" >"$token_temp"; then
+        ENROLL_TOKEN=""
+        fail "Could not write the enrollment token file."
+    fi
+    chown "$AGENT_USER:$AGENT_USER" "$token_temp"
+    chmod 0400 "$token_temp"
+    ENROLLMENT_TOKEN_FILE="$token_file"
+    mv -fT -- "$token_temp" "$token_file"
+    ENROLLMENT_TOKEN_TEMP=""
+    ENROLL_TOKEN=""
+    if ! runuser -u "$AGENT_USER" -- env \
         "SMM_NodeId=$node_id" \
         "SMM_ControlUrl=${control_url%/}" \
         "SMM_StateDirectory=$STATE_DIR/agent" \
+        "SMM_EnrollmentTokenDirectory=$ENROLLMENT_DIR" \
         "SMM_CertificateAuthorityPath=$ETC_DIR/control-ca.crt" \
-        "SMM_EnrollToken=$ENROLL_TOKEN" \
-        "$LIB_DIR/agent/ochenstarik-smm-agent"
-    ENROLL_TOKEN=""
+        "SMM_EnrollTokenFile=$token_file" \
+        "$LIB_DIR/agent/ochenstarik-smm-agent"; then
+        rm -f -- "$token_file"
+        fail "Agent enrollment failed."
+    fi
+    rm -f -- "$token_file"
+    ENROLLMENT_TOKEN_FILE=""
     chown root:"$AGENT_USER" "$ETC_DIR/control-ca.crt"
     chmod 0640 "$ETC_DIR/control-ca.crt"
     install_unit "$TEMP_DIR/deploy/$AGENT_UNIT" "$AGENT_UNIT"
@@ -855,7 +885,8 @@ uninstall_agent() {
     systemctl disable --now "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true
     rm -f -- "/etc/systemd/system/$AGENT_UNIT" "/etc/systemd/system/$PROVISIONING_HELPER_UNIT" "$ETC_DIR/agent.env"
     rm -rf -- "$LIB_DIR/agent" "$LIB_DIR/provisioning-helper"
-    [[ "$purge" == "--purge" ]] && rm -rf -- "$STATE_DIR/agent" "$ETC_DIR/control-ca.crt"
+    [[ "$purge" == "--purge" ]] && rm -rf -- \
+        "$STATE_DIR/agent" "$ENROLLMENT_DIR" "$ETC_DIR/control-ca.crt"
     systemctl daemon-reload
     log "Agent removed${purge:+ ($purge)}."
 }

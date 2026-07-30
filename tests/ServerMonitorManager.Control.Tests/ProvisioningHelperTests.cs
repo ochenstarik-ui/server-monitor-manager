@@ -1,5 +1,8 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Net.Sockets;
+using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.Json;
 using ServerMonitorManager.Agent;
 using ServerMonitorManager.Core;
@@ -422,6 +425,344 @@ public sealed class ProvisioningHelperTests
         }
     }
 
+    [Fact]
+    public async Task SilentClientDoesNotBlockASecondValidRequest()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+        var server = new ProvisioningHelperServer(
+            socketPath,
+            expectedPeerUserId: GetEffectiveUserId(),
+            connectionTimeout: TimeSpan.FromSeconds(1));
+        var serverTask = server.RunAsync(shutdown.Token);
+        using var silentClient = new Socket(
+            AddressFamily.Unix,
+            SocketType.Stream,
+            ProtocolType.Unspecified);
+        try
+        {
+            await WaitForSocketAsync(socketPath, shutdown.Token);
+            await silentClient.ConnectAsync(
+                new UnixDomainSocketEndPoint(socketPath),
+                shutdown.Token);
+
+            var response = await SendPreflightAsync(socketPath, shutdown.Token);
+
+            Assert.True(response.Success);
+            Assert.Equal("preflight.completed", response.Code);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            silentClient.Dispose();
+            try
+            {
+                await serverTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+        Assert.False(File.Exists(socketPath));
+    }
+
+    [Fact]
+    public async Task SynchronousExecutionCannotBlockAcceptLoopAndIsCancelledOnShutdown()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        using var authority = CreateAuthority(out var signingKey);
+        using (signingKey)
+        using (var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken))
+        {
+            shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+            var plan = CreateTimezoneOnlyPlan("Europe/Berlin");
+            var files = new FakeFileSystem([]);
+            files.Files.Add("/usr/share/zoneinfo/Europe/Berlin");
+            var process = new SynchronouslyBlockingProcessRunner();
+            var executor = new TimezoneProvisioningExecutor(
+                authority,
+                "home",
+                files,
+                process,
+                TimeProvider.System,
+                "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
+            var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+            var server = new ProvisioningHelperServer(
+                socketPath,
+                GetEffectiveUserId(),
+                executor,
+                connectionTimeout: TimeSpan.FromSeconds(5));
+            var serverTask = server.RunAsync(shutdown.Token);
+            Task<string?>? executionTask = null;
+            try
+            {
+                await WaitForSocketAsync(socketPath, shutdown.Token);
+                executionTask = SendRequestPayloadAsync(
+                    socketPath,
+                    CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)),
+                    shutdown.Token);
+                Assert.True(process.Started.Wait(
+                    TimeSpan.FromSeconds(2),
+                    TestContext.Current.CancellationToken));
+                using var secondRequest = CancellationTokenSource.CreateLinkedTokenSource(
+                    TestContext.Current.CancellationToken);
+                secondRequest.CancelAfter(TimeSpan.FromSeconds(1));
+
+                var response = await SendPreflightAsync(socketPath, secondRequest.Token);
+
+                Assert.True(response.Success);
+                Assert.Equal("preflight.completed", response.Code);
+            }
+            finally
+            {
+                shutdown.Cancel();
+                await serverTask;
+                if (executionTask is not null)
+                {
+                    try
+                    {
+                        await executionTask;
+                    }
+                    catch (OperationCanceledException) when (shutdown.IsCancellationRequested)
+                    {
+                    }
+                }
+            }
+            Assert.True(process.CancellationObserved);
+            Assert.True(process.RecoveryObserved);
+            Assert.False(File.Exists(socketPath));
+        }
+    }
+
+    [Fact]
+    public async Task UnexpectedPeerUserIdIsRejected()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+        var currentUserId = GetEffectiveUserId();
+        var expectedUserId = currentUserId == uint.MaxValue
+            ? uint.MaxValue - 1
+            : currentUserId + 1;
+        var server = new ProvisioningHelperServer(socketPath, expectedUserId);
+        var serverTask = server.RunAsync(shutdown.Token);
+        try
+        {
+            await WaitForSocketAsync(socketPath, shutdown.Token);
+
+            Assert.Null(await SendPreflightPayloadAsync(socketPath, shutdown.Token));
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await serverTask;
+        }
+    }
+
+    [Fact]
+    public async Task PartialConnectionIsClosedAfterTimeout()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+        var server = new ProvisioningHelperServer(
+            socketPath,
+            GetEffectiveUserId(),
+            connectionTimeout: TimeSpan.FromMilliseconds(100));
+        var serverTask = server.RunAsync(shutdown.Token);
+        try
+        {
+            await WaitForSocketAsync(socketPath, shutdown.Token);
+            using var client = new Socket(
+                AddressFamily.Unix,
+                SocketType.Stream,
+                ProtocolType.Unspecified);
+            await client.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), shutdown.Token);
+            await client.SendAsync(new byte[] { (byte)'{' }, shutdown.Token);
+            var buffer = new byte[1];
+
+            var count = await client.ReceiveAsync(buffer, shutdown.Token);
+
+            Assert.Equal(0, count);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await serverTask;
+        }
+    }
+
+    [Fact]
+    public async Task RequestRateLimitRejectsExcessConnections()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+        var server = new ProvisioningHelperServer(
+            socketPath,
+            GetEffectiveUserId(),
+            requestsPerMinute: 1);
+        var serverTask = server.RunAsync(shutdown.Token);
+        try
+        {
+            await WaitForSocketAsync(socketPath, shutdown.Token);
+
+            Assert.NotNull(await SendPreflightPayloadAsync(socketPath, shutdown.Token));
+            Assert.Null(await SendPreflightPayloadAsync(socketPath, shutdown.Token));
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await serverTask;
+        }
+    }
+
+    [Fact]
+    public async Task RequestFramingIsBoundedAndListenerSurvivesInvalidInput()
+    {
+        if (!OperatingSystem.IsLinux())
+        {
+            return;
+        }
+
+        var socketPath = Path.Combine(Path.GetTempPath(), $"smm-{Guid.NewGuid():N}.sock");
+        using var shutdown = CancellationTokenSource.CreateLinkedTokenSource(
+            TestContext.Current.CancellationToken);
+        shutdown.CancelAfter(TimeSpan.FromSeconds(5));
+        var server = new ProvisioningHelperServer(socketPath, GetEffectiveUserId());
+        var serverTask = server.RunAsync(shutdown.Token);
+        try
+        {
+            await WaitForSocketAsync(socketPath, shutdown.Token);
+
+            var exactPayload = await SendPayloadAsync(
+                socketPath,
+                new string(' ', 16 * 1024) + "\n",
+                shutdown.Token);
+            var oversizedPayload = await SendPayloadAsync(
+                socketPath,
+                new string('x', 16 * 1024 + 1),
+                shutdown.Token);
+            var validResponse = await SendPreflightAsync(socketPath, shutdown.Token);
+
+            var oversizedResponse = JsonSerializer.Deserialize(
+                oversizedPayload!,
+                SmmJsonContext.Default.ProvisioningHelperResponse)!;
+            Assert.DoesNotContain("too large", exactPayload, StringComparison.OrdinalIgnoreCase);
+            Assert.Equal("request.invalid-size", oversizedResponse.Code);
+            Assert.Equal("Invalid helper request size.", oversizedResponse.Message);
+            Assert.True(validResponse.Success);
+        }
+        finally
+        {
+            shutdown.Cancel();
+            await serverTask;
+        }
+    }
+
+    private static async Task WaitForSocketAsync(string path, CancellationToken cancellationToken)
+    {
+        while (!File.Exists(path))
+        {
+            await Task.Delay(10, cancellationToken);
+        }
+    }
+
+    private static async Task<ProvisioningHelperResponse> SendPreflightAsync(
+        string socketPath,
+        CancellationToken cancellationToken)
+    {
+        var responsePayload = await SendPreflightPayloadAsync(socketPath, cancellationToken);
+        return JsonSerializer.Deserialize(
+            responsePayload!,
+            SmmJsonContext.Default.ProvisioningHelperResponse)!;
+    }
+
+    private static async Task<string?> SendPreflightPayloadAsync(
+        string socketPath,
+        CancellationToken cancellationToken)
+    {
+        using var document = JsonDocument.Parse("{}");
+        var request = new ProvisioningHelperRequest(
+            "1", new string('e', 32), "preflight", 1,
+            ProvisioningActionCatalog.PreflightModuleHash,
+            document.RootElement.Clone());
+        return await SendRequestPayloadAsync(socketPath, request, cancellationToken);
+    }
+
+    private static Task<string?> SendRequestPayloadAsync(
+        string socketPath,
+        ProvisioningHelperRequest request,
+        CancellationToken cancellationToken)
+    {
+        var payload = JsonSerializer.Serialize(
+            request,
+            SmmJsonContext.Default.ProvisioningHelperRequest) + "\n";
+        return SendPayloadAsync(socketPath, payload, cancellationToken);
+    }
+
+    private static async Task<string?> SendPayloadAsync(
+        string socketPath,
+        string payload,
+        CancellationToken cancellationToken)
+    {
+        using var socket = new Socket(
+            AddressFamily.Unix,
+            SocketType.Stream,
+            ProtocolType.Unspecified);
+        await socket.ConnectAsync(new UnixDomainSocketEndPoint(socketPath), cancellationToken);
+        try
+        {
+            await using var stream = new NetworkStream(socket, ownsSocket: false);
+            await stream.WriteAsync(Encoding.UTF8.GetBytes(payload), cancellationToken);
+            using var reader = new StreamReader(stream, Encoding.UTF8);
+            return await reader.ReadLineAsync(cancellationToken);
+        }
+        catch (IOException)
+        {
+            return null;
+        }
+        catch (SocketException)
+        {
+            return null;
+        }
+    }
+
+    [DllImport("libc")]
+    private static extern uint geteuid();
+
+    private static uint GetEffectiveUserId() => geteuid();
+
     private static ProvisioningHelperRequest CreateExecutionRequest(
         SystemBaseInstallPlan plan,
         ProvisioningExecutionGrant grant)
@@ -498,13 +839,53 @@ public sealed class ProvisioningHelperTests
         private readonly Queue<ProvisioningProcessResult> _results = new(results);
         public List<(string FileName, IReadOnlyList<string> Arguments)> Calls { get; } = [];
 
-        public ProvisioningProcessResult Run(string fileName, IReadOnlyList<string> arguments)
+        public Task<ProvisioningProcessResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            CancellationToken cancellationToken)
         {
+            cancellationToken.ThrowIfCancellationRequested();
             Calls.Add((fileName, arguments.ToArray()));
             events.Add($"process:{string.Join(' ', arguments)}");
-            return _results.Count == 0
+            return Task.FromResult(_results.Count == 0
                 ? throw new InvalidOperationException("Unexpected process call.")
-                : _results.Dequeue();
+                : _results.Dequeue());
+        }
+    }
+
+    private sealed class SynchronouslyBlockingProcessRunner : IProvisioningProcessRunner
+    {
+        private int _calls;
+        public ManualResetEventSlim Started { get; } = new(false);
+        public bool CancellationObserved { get; private set; }
+        public bool RecoveryObserved { get; private set; }
+
+        public Task<ProvisioningProcessResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            CancellationToken cancellationToken)
+        {
+            var call = Interlocked.Increment(ref _calls);
+            if (call == 1)
+            {
+                return Task.FromResult(new ProvisioningProcessResult(0, "UTC\n", ""));
+            }
+            if (call == 2)
+            {
+                Started.Set();
+                cancellationToken.WaitHandle.WaitOne();
+                CancellationObserved = cancellationToken.IsCancellationRequested;
+                cancellationToken.ThrowIfCancellationRequested();
+                throw new InvalidOperationException("Cancellation was not observed.");
+            }
+            RecoveryObserved = true;
+            return Task.FromResult(call switch
+            {
+                3 => new ProvisioningProcessResult(0, "Europe/Berlin\n", ""),
+                4 => new ProvisioningProcessResult(0, "", ""),
+                5 => new ProvisioningProcessResult(0, "UTC\n", ""),
+                _ => throw new InvalidOperationException("Unexpected recovery process call.")
+            });
         }
     }
 }

@@ -7,6 +7,8 @@ public sealed class AgentOptions
     public string StateDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/agent";
     public string CertificateAuthorityPath { get; init; } = "/etc/ochenstarik-server-monitor-manager/control-ca.crt";
     public string ProvisioningSocketPath { get; init; } = "/run/ochenstarik-server-monitor-manager/provisioning.sock";
+    public string EnrollmentTokenDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager-enrollment";
+    public string? EnrollTokenFile { get; init; }
     public int HeartbeatSeconds { get; init; } = 30;
     public int BufferMaxSamples { get; init; } = 720;
     public int BufferRecentSamples { get; init; } = 120;

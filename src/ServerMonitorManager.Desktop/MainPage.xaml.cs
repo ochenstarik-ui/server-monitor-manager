@@ -424,6 +424,63 @@ public sealed partial class MainPage : Page
         return Task.CompletedTask;
     }
 
+    private async Task<string?> ConfirmHostKeyAsync(ServerProfileData profile)
+    {
+        try
+        {
+            SshHostKeyCandidate candidate;
+            using (var scanTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(15)))
+            {
+                candidate = await _ssh.ScanHostKeyAsync(profile, scanTimeout.Token);
+            }
+            var fingerprintBox = new TextBox
+            {
+                Text = candidate.Fingerprint,
+                IsReadOnly = true,
+                TextWrapping = TextWrapping.Wrap
+            };
+            AutomationProperties.SetName(fingerprintBox, "Fingerprint SSH host key");
+            var dialog = new ContentDialog
+            {
+                XamlRoot = XamlRoot,
+                Title = $"Подтвердите SSH host key: {profile.Name}",
+                Content = new StackPanel
+                {
+                    Spacing = 12,
+                    MinWidth = 480,
+                    Children =
+                    {
+                        new TextBlock
+                        {
+                            Text = $"Алгоритм: {candidate.KeyType}\nСверьте fingerprint через доверенную консоль сервера или панель провайдера. Не подтверждайте его только по данным текущего подключения.",
+                            TextWrapping = TextWrapping.Wrap
+                        },
+                        fingerprintBox
+                    }
+                },
+                PrimaryButtonText = "Fingerprint совпадает",
+                CloseButtonText = "Отмена",
+                DefaultButton = ContentDialogButton.Close
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return null;
+            }
+
+            using var persistTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            await _ssh.TrustHostKeyAsync(candidate, persistTimeout.Token);
+            return candidate.Fingerprint;
+        }
+        catch (Exception exception)
+        {
+            ShowInfo(
+                "Не удалось проверить SSH host key",
+                exception.Message,
+                InfoBarSeverity.Error);
+            return null;
+        }
+    }
+
     private async void AddServerButton_Click(object sender, RoutedEventArgs e)
     {
         try
@@ -497,6 +554,12 @@ public sealed partial class MainPage : Page
             checked((int)portBox.Value),
             userBox.Text.Trim(),
             hubBox.IsChecked == true);
+        var hostKeyFingerprint = await ConfirmHostKeyAsync(profile);
+        if (hostKeyFingerprint is null)
+        {
+            return;
+        }
+        profile = profile with { HostKeyFingerprint = hostKeyFingerprint };
         var server = new ServerViewModel(profile);
         Servers.Add(server);
         await SaveProfilesAsync();
@@ -558,13 +621,20 @@ public sealed partial class MainPage : Page
         }
 
         var index = Servers.IndexOf(selected);
-        var updated = new ServerViewModel(new ServerProfileData(
+        var updatedProfile = new ServerProfileData(
             selected.Profile.Id,
             nameBox.Text.Trim(),
             hostBox.Text.Trim(),
             checked((int)portBox.Value),
             userBox.Text.Trim(),
-            hubBox.IsChecked == true));
+            hubBox.IsChecked == true);
+        var hostKeyFingerprint = await ConfirmHostKeyAsync(updatedProfile);
+        if (hostKeyFingerprint is null)
+        {
+            return;
+        }
+        var updated = new ServerViewModel(
+            updatedProfile with { HostKeyFingerprint = hostKeyFingerprint });
         Servers[index] = updated;
         await SaveProfilesAsync();
         await RefreshServerAsync(updated);

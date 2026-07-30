@@ -9,7 +9,8 @@ public sealed record ServerProfileData(
     string Host,
     int Port,
     string User,
-    bool IsHub = false);
+    bool IsHub = false,
+    string? HostKeyFingerprint = null);
 
 public sealed class ServerViewModel : INotifyPropertyChanged
 {

@@ -82,10 +82,12 @@ control device-code DEVICE_ID
 control node-code NODE_ID
 control automation-token AUTOMATION_ID SOURCE_NODE_ID
 emergency status
-emergency vpn-disable
-emergency ssh-restore BACKUP_ID
-emergency firewall-restore BACKUP_ID
+emergency mesh-disable
+emergency mesh-enable
+emergency firewall-restore
 ```
+
+Текущая emergency-команда покрывает уже реализованные Mesh/WireGuard и project-owned nftables resources. Действия `vpn-disable` и `ssh-restore BACKUP_ID` добавляются вместе с соответствующими provisioning-модулями и их root-only backup format; до появления этих модулей команда намеренно их отклоняет.
 
 CLI является non-interactive, кроме локального ввода enrollment code и явных подтверждений опасного удаления. Машиночитаемый режим возвращает versioned JSON и стабильные exit codes.
 

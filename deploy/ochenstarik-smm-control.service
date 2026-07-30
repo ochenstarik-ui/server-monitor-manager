@@ -8,6 +8,7 @@ Type=simple
 User=ochenstarik-smm-control
 Group=ochenstarik-smm-control
 EnvironmentFile=/etc/ochenstarik-server-monitor-manager/control.env
+WorkingDirectory=/usr/local/lib/ochenstarik-server-monitor-manager/control
 ExecStart=/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control
 Restart=on-failure
 RestartSec=10s

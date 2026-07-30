@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
+using System.Text;
 using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Agent;
@@ -105,10 +106,159 @@ internal sealed class AgentClient(AgentOptions options)
                 }
             }
 
+            try
+            {
+                await ExecuteNextProvisioningJobAsync(client, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Console.Error.WriteLine($"Provisioning poll failed: {exception.Message}");
+            }
+
             var elapsed = DateTimeOffset.UtcNow - iterationStartedAt;
             var remaining = collectionDelay - elapsed;
             await Task.Delay(remaining > TimeSpan.Zero ? remaining : TimeSpan.FromSeconds(1), cancellationToken);
         }
+    }
+
+    private async Task ExecuteNextProvisioningJobAsync(
+        HttpClient client,
+        CancellationToken cancellationToken)
+    {
+        using var response = await client.GetAsync("api/v1/agents/provisioning/jobs/next", cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NoContent)
+        {
+            return;
+        }
+        response.EnsureSuccessStatusCode();
+        var job = await response.Content.ReadFromJsonAsync(
+            SmmJsonContext.Default.ProvisioningJob,
+            cancellationToken)
+            ?? throw new InvalidOperationException("Control service returned an empty provisioning job.");
+
+        if (job.SchemaVersion != 1)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                "dispatch", "action.unsupported", "Unsupported provisioning action.", cancellationToken);
+            return;
+        }
+
+        if (job.ActionType == "system.base-install"
+            && job.State == ProvisioningJobStates.Preflight)
+        {
+            try
+            {
+                var helper = new ProvisioningHelperClient(options.ProvisioningSocketPath);
+                var plan = await helper.CreateBaseInstallPlanAsync(job, cancellationToken);
+                await ReportBaseInstallPlanAsync(client, job, plan, cancellationToken);
+                Console.WriteLine($"Base installation plan {job.Id} is awaiting confirmation.");
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                await ReportProvisioningAsync(
+                    client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                    "preflight", "base-install.plan-failed",
+                    "Base installation plan generation failed.", cancellationToken);
+                Console.Error.WriteLine($"Base installation plan {job.Id} failed: {exception.Message}");
+            }
+            return;
+        }
+
+        if (job.ActionType != "preflight")
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                "dispatch", "action.unsupported", "Unsupported provisioning action.", cancellationToken);
+            return;
+        }
+
+        ProvisioningPreflightResult result;
+        try
+        {
+            var helper = new ProvisioningHelperClient(options.ProvisioningSocketPath);
+            result = await helper.RunPreflightAsync(job, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                "preflight", "preflight.failed", "Preflight helper failed.", cancellationToken);
+            Console.Error.WriteLine($"Preflight {job.Id} failed: {exception.Message}");
+            return;
+        }
+
+        await ReportPreflightFactsAsync(client, job, result, cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Running, 40,
+            "inspect-host", "preflight.inspected", "Host inspection completed.", cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Verifying, 80,
+            "verify-host", "preflight.verifying", "Verifying preflight result.", cancellationToken);
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.Completed, 100,
+            "completed", "preflight.completed", "Preflight completed.", cancellationToken);
+        Console.WriteLine(
+            $"Preflight {job.Id} completed: {result.OperatingSystem} "
+            + $"{result.OperatingSystemVersion} {result.Architecture}.");
+    }
+
+    private static async Task ReportProvisioningAsync(
+        HttpClient client,
+        ProvisioningJob job,
+        string state,
+        int progress,
+        string step,
+        string eventCode,
+        string message,
+        CancellationToken cancellationToken)
+    {
+        var request = new ProvisioningJobProgressRequest(
+            state, progress, step, eventCode, message, CreateOperationId(job.Id, state));
+        using var response = await client.PostAsJsonAsync(
+            $"api/v1/agents/provisioning/jobs/{job.Id}/progress",
+            request,
+            SmmJsonContext.Default.ProvisioningJobProgressRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task ReportPreflightFactsAsync(
+        HttpClient client,
+        ProvisioningJob job,
+        ProvisioningPreflightResult facts,
+        CancellationToken cancellationToken)
+    {
+        var request = new ProvisioningPreflightReportRequest(
+            facts, DateTimeOffset.UtcNow, CreateOperationId(job.Id, "facts"));
+        using var response = await client.PostAsJsonAsync(
+            $"api/v1/agents/provisioning/jobs/{job.Id}/preflight-facts",
+            request,
+            SmmJsonContext.Default.ProvisioningPreflightReportRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static async Task ReportBaseInstallPlanAsync(
+        HttpClient client,
+        ProvisioningJob job,
+        SystemBaseInstallPlan plan,
+        CancellationToken cancellationToken)
+    {
+        var request = new SystemBaseInstallPlanReportRequest(
+            plan, CreateOperationId(job.Id, "base-install-plan"));
+        using var response = await client.PostAsJsonAsync(
+            $"api/v1/agents/provisioning/jobs/{job.Id}/base-install-plan",
+            request,
+            SmmJsonContext.Default.SystemBaseInstallPlanReportRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+    }
+
+    private static string CreateOperationId(string jobId, string state)
+    {
+        var digest = SHA256.HashData(Encoding.UTF8.GetBytes($"{jobId}:{state}"));
+        return new Guid(digest.AsSpan(0, 16)).ToString();
     }
 
     private static async Task<AgentHeartbeatResponse> SendHeartbeatAsync(

@@ -10,6 +10,60 @@ permissions:
   contents: write
 
 jobs:
+  bootstrap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Validate bootstrap
+        run: |
+          bash -n deploy/ochenstarik-server-monitor-manager.sh
+          bash -n deploy/ochenstarik-smm-policy-apply
+          bash -n deploy/ochenstarik-smm-emergency
+          bash -n tests/bootstrap/run-native-systemd-smoke.sh
+          bash -n tests/bootstrap/run-systemd-container-smoke.sh
+          shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
+          shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
+          shellcheck --severity=error deploy/ochenstarik-smm-emergency
+          shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
+          shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
+          bash tests/bootstrap/test-bootstrap-contract.sh
+
+      - name: Package bootstrap
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          install -m 0755 deploy/ochenstarik-server-monitor-manager.sh ochenstarik-server-monitor-manager.sh
+          sha256sum ochenstarik-server-monitor-manager.sh > ochenstarik-server-monitor-manager.sh.sha256
+          bootstrap_sha="$(sha256sum ochenstarik-server-monitor-manager.sh | awk '{print $1}')"
+          jq -n \
+            --arg schema "smm-bootstrap-manifest/v1" \
+            --arg version "${GITHUB_REF_NAME}" \
+            --arg bootstrap "ochenstarik-server-monitor-manager.sh" \
+            --arg bootstrap_sha256 "$bootstrap_sha" \
+            '{schema: $schema, version: $version, bootstrap: $bootstrap, bootstrap_sha256: $bootstrap_sha256, supported_runtimes: ["linux-x64", "linux-arm64"]}' \
+            > server-monitor-manager-bootstrap-manifest.json
+
+      - name: Upload bootstrap artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: server-monitor-manager-bootstrap
+          path: |
+            ochenstarik-server-monitor-manager.sh
+            ochenstarik-server-monitor-manager.sh.sha256
+            server-monitor-manager-bootstrap-manifest.json
+
+      - name: Attach bootstrap to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            ochenstarik-server-monitor-manager.sh
+            ochenstarik-server-monitor-manager.sh.sha256
+            server-monitor-manager-bootstrap-manifest.json
+
   publish:
     runs-on: ubuntu-latest
     strategy:
@@ -30,12 +84,23 @@ jobs:
       - name: Publish control
         run: dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/control
 
+      - name: Publish provisioning helper
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/provisioning-helper
+
       - name: Package
         shell: bash
         run: |
           set -Eeuo pipefail
+          install -d out/deploy out/bootstrap
+          install -m 0644 deploy/ochenstarik-smm-control.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-agent.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-provisioning-helper.service out/deploy/
+          install -m 0644 deploy/ochenstarik-smm-firewall.service out/deploy/
+          install -m 0755 deploy/ochenstarik-smm-policy-apply out/deploy/
+          install -m 0755 deploy/ochenstarik-smm-emergency out/deploy/
+          install -m 0755 deploy/ochenstarik-server-monitor-manager.sh out/bootstrap/
           archive="server-monitor-manager-${{ matrix.runtime }}.tar.gz"
-          tar -C out -czf "$archive" agent control
+          tar -C out -czf "$archive" agent control provisioning-helper deploy bootstrap
           sha256sum "$archive" > "$archive.sha256"
 
       - name: Upload artifact

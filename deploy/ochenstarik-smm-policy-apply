@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+IFS=$'\n\t'
+
+readonly TABLE_FAMILY="inet"
+readonly TABLE_NAME="ochenstarik_smm"
+readonly CHAIN_NAME="links"
+
+fail() { printf '%s\n' "policy helper: $*" >&2; exit 78; }
+
+testing="${SMM_POLICY_TESTING:-0}"
+if [[ "$testing" != "1" ]]; then
+    [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "root is required"
+    readonly STATE_FILE="/var/lib/ochenstarik-server-monitor-manager/mesh/nodes.tsv"
+else
+    readonly STATE_FILE="${SMM_POLICY_STATE_FILE:?SMM_POLICY_STATE_FILE is required in testing mode}"
+fi
+
+node_pattern='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+ipv4_pattern='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
+
+validate_node_id() {
+    [[ "$1" =~ $node_pattern ]] || fail "invalid node id"
+}
+
+lookup_node_ip() {
+    local node_id="$1" ip
+    [[ -r "$STATE_FILE" ]] || fail "mesh node state is unavailable"
+    ip="$(awk -F '\t' -v node="$node_id" '$1 == node { print $2; exit }' "$STATE_FILE")"
+    [[ "$ip" =~ $ipv4_pattern ]] || fail "node has no valid mesh address: $node_id"
+    printf '%s\n' "$ip"
+}
+
+validate_rule() {
+    local action="$1"
+    case "$action" in
+        link-connect) [[ $# -eq 6 ]] || fail "invalid link-connect argument count" ;;
+        link-disconnect) [[ $# -eq 5 ]] || fail "invalid link-disconnect argument count" ;;
+        *) fail "unsupported action" ;;
+    esac
+    validate_node_id "$2"
+    validate_node_id "$3"
+    [[ "$2" != "$3" ]] || fail "source and destination must differ"
+    [[ "$4" == "tcp" || "$4" == "udp" ]] || fail "invalid protocol"
+    [[ "$5" =~ ^[0-9]+$ ]] && (( 10#$5 >= 1 && 10#$5 <= 65535 )) || fail "invalid port"
+    if [[ "$action" == "link-connect" ]]; then
+        [[ "$6" =~ ^[0-9]+$ ]] && (( 10#$6 >= 0 && 10#$6 <= 525600 )) || fail "invalid TTL"
+    fi
+}
+
+run_nft() {
+    if [[ "$testing" == "1" ]]; then
+        printf 'nft'
+        printf ' %q' "$@"
+        printf '\n'
+    else
+        /usr/sbin/nft "$@"
+    fi
+}
+
+rule_exists() {
+    local comment="$1"
+    if [[ "$testing" == "1" ]]; then
+        return 1
+    fi
+    /usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" \
+        | grep -Fq "comment \"$comment\""
+}
+
+connect_rule() {
+    local source_id="$1" target_id="$2" protocol="$3" port="$4"
+    local source_ip target_ip comment
+    source_ip="$(lookup_node_ip "$source_id")"
+    target_ip="$(lookup_node_ip "$target_id")"
+    comment="smm:${source_id}:${target_id}:${protocol}:${port}"
+    rule_exists "$comment" && return 0
+    run_nft add rule "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" \
+        ip saddr "$source_ip" ip daddr "$target_ip" "$protocol" dport "$port" \
+        counter accept comment "$comment"
+}
+
+disconnect_rule() {
+    local source_id="$1" target_id="$2" protocol="$3" port="$4" comment handle
+    # Resolve both identities before touching firewall state.
+    lookup_node_ip "$source_id" >/dev/null
+    lookup_node_ip "$target_id" >/dev/null
+    comment="smm:${source_id}:${target_id}:${protocol}:${port}"
+    if [[ "$testing" == "1" ]]; then
+        printf 'nft-delete-comment %q\n' "$comment"
+        return
+    fi
+    while IFS= read -r handle; do
+        [[ "$handle" =~ ^[0-9]+$ ]] || continue
+        run_nft delete rule "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" handle "$handle"
+    done < <(
+        /usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" \
+            | grep -F "comment \"$comment\"" \
+            | sed -n 's/.* # handle \([0-9][0-9]*\)$/\1/p'
+    )
+}
+
+action="${1:-}"
+validate_rule "$@"
+case "$action" in
+    link-connect) connect_rule "$2" "$3" "$4" "$5" ;;
+    link-disconnect) disconnect_rule "$2" "$3" "$4" "$5" ;;
+esac

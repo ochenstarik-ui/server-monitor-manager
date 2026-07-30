@@ -1,13 +1,15 @@
 [Unit]
 Description=Ochenstarik Server Monitor Manager Agent
-After=network-online.target
+After=network-online.target ochenstarik-smm-provisioning-helper.service
 Wants=network-online.target
+Requires=ochenstarik-smm-provisioning-helper.service
 
 [Service]
 Type=simple
 User=ochenstarik-smm-agent
 Group=ochenstarik-smm-agent
 EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env
+WorkingDirectory=/usr/local/lib/ochenstarik-server-monitor-manager/agent
 ExecStart=/usr/local/lib/ochenstarik-server-monitor-manager/agent/ochenstarik-smm-agent
 Restart=on-failure
 RestartSec=10s

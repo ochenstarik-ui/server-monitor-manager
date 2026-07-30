@@ -33,6 +33,9 @@ jobs:
         shell: pwsh
         run: ./tests/windows/Test-DesktopContracts.ps1
 
+      - name: Test Desktop security
+        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release
+
       - name: Build test-signed MSIX installer
         shell: pwsh
         run: |

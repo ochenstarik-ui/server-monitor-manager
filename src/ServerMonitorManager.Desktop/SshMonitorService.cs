@@ -117,34 +117,78 @@ public sealed partial class SshMonitorService
             throw new InvalidOperationException("Некорректная команда управления Mesh.");
         }
 
-        await EnsureKeyPairAsync(cancellationToken);
         var localFolder = ApplicationData.Current.LocalFolder.Path;
-        var privateKeyPath = await MaterializePrivateKeyAsync(cancellationToken);
-        var knownHostsPath = Path.Combine(localFolder, "ssh", "known_hosts");
+        var knownHostsPath = SshHostKeyTrust.GetPinPath(
+            Path.Combine(localFolder, "ssh", "known-hosts"),
+            profile.Host,
+            profile.Port);
+        if (!SshHostKeyTrust.IsTrusted(
+                knownHostsPath,
+                profile.Host,
+                profile.Port,
+                profile.HostKeyFingerprint))
+        {
+            throw new InvalidOperationException(
+                "SSH host key is not explicitly confirmed for this server profile.");
+        }
+
+        await EnsureKeyPairAsync(cancellationToken);
+        await using var privateKeySession = await MaterializePrivateKeyAsync(cancellationToken);
         var target = $"{profile.User}@{profile.Host}";
         var arguments = new[]
         {
-            "-i", privateKeyPath,
+            "-F", "none",
+            "-i", privateKeySession.Path,
             "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
             "-o", "BatchMode=yes",
             "-o", "ConnectTimeout=8",
             "-o", "IdentitiesOnly=yes",
-            "-o", "StrictHostKeyChecking=accept-new",
+            "-o", "IdentityAgent=none",
+            "-o", "StrictHostKeyChecking=yes",
             "-o", $"UserKnownHostsFile={knownHostsPath}",
+            "-o", "GlobalKnownHostsFile=none",
+            "-o", "KnownHostsCommand=none",
+            "-o", "UpdateHostKeys=no",
+            "-o", "VerifyHostKeyDNS=no",
+            "-o", "CanonicalizeHostname=no",
+            "-o", "CheckHostIP=no",
             target,
             command
         };
-        try
-        {
-            return await RunProcessAsync(
-                ResolveOpenSshTool("ssh.exe"),
-                arguments,
-                cancellationToken);
-        }
-        finally
-        {
-            File.Delete(privateKeyPath);
-        }
+        return await RunProcessAsync(
+            ResolveOpenSshTool("ssh.exe"),
+            arguments,
+            cancellationToken);
+    }
+
+    internal async Task<SshHostKeyCandidate> ScanHostKeyAsync(
+        ServerProfileData profile,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateProfile(profile);
+        var output = await RunProcessAsync(
+            ResolveOpenSshTool("ssh-keyscan.exe"),
+            [
+                "-T", "8",
+                "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
+                profile.Host
+            ],
+            cancellationToken);
+        return SshHostKeyTrust.ParseCandidate(profile.Host, profile.Port, output);
+    }
+
+    internal async Task TrustHostKeyAsync(
+        SshHostKeyCandidate candidate,
+        CancellationToken cancellationToken = default)
+    {
+        var knownHostsPath = SshHostKeyTrust.GetPinPath(
+            Path.Combine(
+                ApplicationData.Current.LocalFolder.Path,
+                "ssh",
+                "known-hosts"),
+            candidate.Host,
+            candidate.Port);
+        await SshHostKeyTrust.WriteAsync(knownHostsPath, candidate, cancellationToken);
     }
 
     public void OpenInteractiveTerminal(ServerProfileData profile, string terminalUser)
@@ -184,28 +228,31 @@ public sealed partial class SshMonitorService
             ?? throw new InvalidOperationException("Не удалось открыть SSH-терминал.");
     }
 
-    private static async Task<string> MaterializePrivateKeyAsync(CancellationToken cancellationToken)
+    private static async Task<SshPrivateKeySession> MaterializePrivateKeyAsync(
+        CancellationToken cancellationToken)
     {
         var localFolder = ApplicationData.Current.LocalFolder.Path;
         var protectedKeyPath = Path.Combine(localFolder, "ssh", KeyFileName + ProtectedKeySuffix);
         var protectedKey = await File.ReadAllBytesAsync(protectedKeyPath, cancellationToken);
-        var privateKey = ProtectedData.Unprotect(protectedKey, null, DataProtectionScope.CurrentUser);
-        var temporaryFile = await ApplicationData.Current.TemporaryFolder.CreateFileAsync(
-            $"{KeyFileName}-{Guid.NewGuid():N}",
-            CreationCollisionOption.FailIfExists);
+        byte[]? privateKey = null;
         try
         {
-            await File.WriteAllBytesAsync(temporaryFile.Path, privateKey, cancellationToken);
-            return temporaryFile.Path;
-        }
-        catch
-        {
-            File.Delete(temporaryFile.Path);
-            throw;
+            privateKey = ProtectedData.Unprotect(
+                protectedKey,
+                optionalEntropy: null,
+                DataProtectionScope.CurrentUser);
+            return await SshPrivateKeySession.CreateAsync(
+                ApplicationData.Current.TemporaryFolder.Path,
+                privateKey,
+                cancellationToken);
         }
         finally
         {
-            CryptographicOperations.ZeroMemory(privateKey);
+            if (privateKey is not null)
+            {
+                CryptographicOperations.ZeroMemory(privateKey);
+            }
+            CryptographicOperations.ZeroMemory(protectedKey);
         }
     }
 

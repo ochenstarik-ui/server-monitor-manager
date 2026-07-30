@@ -71,7 +71,7 @@ public sealed class CertificateAuthorityTests : IDisposable
             CertificateAuthorityPath = caPath
         }));
 
-        var now = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         var parameters = System.Text.Json.JsonSerializer.SerializeToElement(
             new SystemBaseInstallParameters(
                 "UTC", "en_US.UTF-8", true, false, 1, ["core"],

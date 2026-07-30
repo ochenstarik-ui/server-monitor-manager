@@ -12,6 +12,19 @@ public sealed class ControlStoreTests : IAsyncDisposable
     private readonly string _directory = Path.Combine(Path.GetTempPath(), $"smm-tests-{Guid.NewGuid():N}");
 
     [Fact]
+    public void VerifiedHelperRollbackCanBeReportedToControl()
+    {
+        Assert.True(ProvisioningStateMachine.CanReport(
+            ProvisioningJobStates.Running, ProvisioningJobStates.RollingBack, 40, 90));
+        Assert.True(ProvisioningStateMachine.CanReport(
+            ProvisioningJobStates.Verifying, ProvisioningJobStates.RollingBack, 90, 90));
+        Assert.True(ProvisioningStateMachine.CanReport(
+            ProvisioningJobStates.RollingBack, ProvisioningJobStates.RolledBack, 90, 100));
+        Assert.True(ProvisioningStateMachine.CanReport(
+            ProvisioningJobStates.RollingBack, ProvisioningJobStates.RollbackFailed, 90, 100));
+    }
+
+    [Fact]
     public async Task VersionOneDatabaseMigratesToProvisioningSchema()
     {
         Directory.CreateDirectory(_directory);
@@ -99,19 +112,38 @@ public sealed class ControlStoreTests : IAsyncDisposable
         Assert.Equal(ProvisioningJobStates.Queued, confirmed.State);
         Assert.Equal("confirmed-queued", confirmed.CurrentStep);
         Assert.NotNull(confirmed.ConfirmedAt);
+        var execution = await store.ClaimNextProvisioningJobAsync("home", cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Running, execution!.State);
+        Assert.Equal("execute", execution.CurrentStep);
         Assert.Null(await store.ClaimNextProvisioningJobAsync("home", cancellationToken));
 
-        var cancelled = await store.CancelProvisioningJobAsync(
+        var rollingBack = await store.ReportProvisioningProgressAsync(
+            "home",
             created.Id,
-            new ProvisioningJobCommandRequest("Test completed", Guid.NewGuid().ToString()),
-            "operator",
+            new ProvisioningJobProgressRequest(
+                ProvisioningJobStates.RollingBack, 90, "rollback",
+                "execution.rollback", "Restoring previous state.", Guid.NewGuid().ToString()),
             cancellationToken);
-        Assert.Equal(ProvisioningJobStates.Cancelled, cancelled!.State);
-        Assert.NotNull(cancelled.CancelledAt);
+        Assert.Equal(ProvisioningJobStates.RollingBack, rollingBack!.State);
+        var rolledBack = await store.ReportProvisioningProgressAsync(
+            "home",
+            created.Id,
+            new ProvisioningJobProgressRequest(
+                ProvisioningJobStates.RolledBack, 100, "rolled-back",
+                "execution.rolled-back", "Previous state restored.", Guid.NewGuid().ToString()),
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.RolledBack, rolledBack!.State);
 
         var next = await store.CreateProvisioningJobAsync(
             "home", request with { IdempotencyKey = Guid.NewGuid().ToString() }, "operator", cancellationToken);
         Assert.Equal(ProvisioningJobStates.Queued, next.State);
+        var cancelled = await store.CancelProvisioningJobAsync(
+            next.Id,
+            new ProvisioningJobCommandRequest("Cancel before execution", Guid.NewGuid().ToString()),
+            "operator",
+            cancellationToken);
+        Assert.Equal(ProvisioningJobStates.Cancelled, cancelled!.State);
+        Assert.NotNull(cancelled.CancelledAt);
     }
 
     [Fact]

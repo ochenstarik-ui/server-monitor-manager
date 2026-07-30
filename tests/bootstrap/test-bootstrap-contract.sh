@@ -6,6 +6,11 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 helper="$root/deploy/ochenstarik-smm-policy-apply"
 emergency="$root/deploy/ochenstarik-smm-emergency"
+provisioning_helper_unit="$root/deploy/ochenstarik-smm-provisioning-helper.service"
+
+grep -Fq 'EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env' "$provisioning_helper_unit"
+grep -Fq 'ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback' "$provisioning_helper_unit"
+grep -Fq 'install -d -m 0700 -o root -g root "$STATE_DIR/provisioning/rollback"' "$bootstrap"
 
 help_output="$(bash "$bootstrap" --help)"
 version_output="$(bash "$bootstrap" --version)"

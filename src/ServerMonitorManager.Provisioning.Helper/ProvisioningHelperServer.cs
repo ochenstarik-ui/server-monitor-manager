@@ -7,18 +7,28 @@ using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Provisioning.Helper;
 
-public sealed class ProvisioningHelperServer(string socketPath)
+public sealed class ProvisioningHelperServer
 {
     private const int MaximumRequestBytes = 16 * 1024;
+    private readonly string _socketPath;
+    private readonly TimezoneProvisioningExecutor? _timezoneExecutor;
+
+    public ProvisioningHelperServer(
+        string socketPath,
+        TimezoneProvisioningExecutor? timezoneExecutor = null)
+    {
+        _socketPath = socketPath;
+        _timezoneExecutor = timezoneExecutor;
+    }
 
     [SupportedOSPlatform("linux")]
     public async Task RunAsync(CancellationToken cancellationToken)
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(socketPath)!);
-        File.Delete(socketPath);
+        Directory.CreateDirectory(Path.GetDirectoryName(_socketPath)!);
+        File.Delete(_socketPath);
         using var listener = new Socket(AddressFamily.Unix, SocketType.Stream, ProtocolType.Unspecified);
-        listener.Bind(new UnixDomainSocketEndPoint(socketPath));
-        File.SetUnixFileMode(socketPath,
+        listener.Bind(new UnixDomainSocketEndPoint(_socketPath));
+        File.SetUnixFileMode(_socketPath,
             UnixFileMode.UserRead | UnixFileMode.UserWrite
             | UnixFileMode.GroupRead | UnixFileMode.GroupWrite);
         listener.Listen(8);
@@ -27,22 +37,39 @@ public sealed class ProvisioningHelperServer(string socketPath)
             while (!cancellationToken.IsCancellationRequested)
             {
                 var connection = await listener.AcceptAsync(cancellationToken);
-                await HandleAsync(connection, cancellationToken);
+                try
+                {
+                    await HandleAsync(connection, cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    throw;
+                }
+                catch (Exception)
+                {
+                    connection.Dispose();
+                    // A malformed or disconnected local client must not terminate the helper listener.
+                }
             }
         }
         finally
         {
-            File.Delete(socketPath);
+            File.Delete(_socketPath);
         }
     }
 
     public static ProvisioningHelperResponse Execute(ProvisioningHelperRequest request)
+        => Execute(request, null);
+
+    public static ProvisioningHelperResponse Execute(
+        ProvisioningHelperRequest request,
+        TimezoneProvisioningExecutor? timezoneExecutor)
     {
         if (request.ProtocolVersion != "1")
         {
             return Failure("protocol.unsupported", "Unsupported helper protocol version.");
         }
-        if (request.JobId.Length != 32 || !request.JobId.All(Uri.IsHexDigit))
+        if (request.JobId is not { Length: 32 } || !request.JobId.All(Uri.IsHexDigit))
         {
             return Failure("request.invalid-job", "Invalid provisioning job identifier.");
         }
@@ -54,9 +81,24 @@ public sealed class ProvisioningHelperServer(string socketPath)
         return request.ActionType switch
         {
             "preflight" => ExecutePreflight(request),
-            "system.base-install" => CreateBaseInstallPlan(request),
+            "system.base-install" => request.Execution is null
+                ? CreateBaseInstallPlan(request)
+                : ExecuteBaseInstall(request, timezoneExecutor),
             _ => Failure("action.denied", "The requested action is not allowed.")
         };
+    }
+
+    private static ProvisioningHelperResponse ExecuteBaseInstall(
+        ProvisioningHelperRequest request,
+        TimezoneProvisioningExecutor? timezoneExecutor)
+    {
+        if (timezoneExecutor is null)
+        {
+            return Failure("execution.unavailable", "Provisioning execution is unavailable.");
+        }
+        var result = timezoneExecutor.Execute(request);
+        return new ProvisioningHelperResponse(
+            result.Success, result.Code, result.Message, null, null, result);
     }
 
     private static ProvisioningHelperResponse ExecutePreflight(ProvisioningHelperRequest request)
@@ -114,7 +156,7 @@ public sealed class ProvisioningHelperServer(string socketPath)
             true, "system.base-install.plan-ready", "Base install plan is ready.", null, plan);
     }
 
-    private static async Task HandleAsync(Socket socket, CancellationToken cancellationToken)
+    private async Task HandleAsync(Socket socket, CancellationToken cancellationToken)
     {
         using (socket)
         await using (var stream = new NetworkStream(socket, ownsSocket: false))
@@ -125,9 +167,13 @@ public sealed class ProvisioningHelperServer(string socketPath)
                 var payload = await ReadRequestAsync(stream, cancellationToken);
                 var request = JsonSerializer.Deserialize(payload, SmmJsonContext.Default.ProvisioningHelperRequest)
                     ?? throw new JsonException("Empty request.");
-                response = Execute(request);
+                response = Execute(request, _timezoneExecutor);
             }
-            catch (Exception exception) when (exception is JsonException or InvalidDataException)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception)
             {
                 response = Failure("request.invalid", "Invalid helper request.");
             }

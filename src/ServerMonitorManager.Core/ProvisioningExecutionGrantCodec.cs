@@ -95,7 +95,8 @@ public static class ProvisioningExecutionGrantCodec
         {
             return false;
         }
-        if (signature.Length != 64)
+        if (signature.Length != 64
+            || !string.Equals(EncodeBase64Url(signature), grant.Signature, StringComparison.Ordinal))
         {
             return false;
         }

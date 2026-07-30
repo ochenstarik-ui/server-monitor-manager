@@ -112,11 +112,12 @@
 - [x] state machine, confirmations, cancellation, retry и rollback;
 - [x] создание, чтение, подтверждение и отмена через Operator API;
 - [ ] выполнение, retry, verification и rollback в полной state machine;
+- [x] безопасный частичный execution increment для `system.base-install`: timezone-only, factual verification и автоматический rollback;
 - [x] обязательные idempotency key, audit reason и job TTL;
 - [x] атомарный Agent job channel только для собственного `node_id`;
 - [x] начальные строгие JSON schemas v1 для `preflight` и `system.base-install`;
 - [ ] versioned JSON schemas для остальных action type;
-- [x] restricted root helper через Unix socket (`preflight` и non-mutating plan для `system.base-install`);
+- [x] restricted root helper через Unix socket (`preflight`, plan и подтверждённый timezone-only execution для `system.base-install`);
 - [x] двухфазный `system.base-install`: сохранённый проверенный plan до Operator confirmation;
 - [x] короткоживущий ECDSA execution grant, привязанный к Node, job и SHA-256 подтверждённого plan;
 - [x] structured redacted events, bounded Operator history и progress;

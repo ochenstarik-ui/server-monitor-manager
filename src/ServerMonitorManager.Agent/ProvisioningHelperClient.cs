@@ -39,6 +39,53 @@ public sealed class ProvisioningHelperClient(string socketPath)
         return response.BaseInstallPlan;
     }
 
+    public async Task<ProvisioningBaseInstallExecutionResult> ExecuteBaseInstallAsync(
+        ProvisioningJob job,
+        ProvisioningBaseInstallExecutionAuthorization authorization,
+        CancellationToken cancellationToken)
+    {
+        var response = await SendAsync(
+            CreateBaseInstallExecutionRequest(job, authorization), cancellationToken);
+        return ValidateBaseInstallExecutionResponse(response, authorization);
+    }
+
+    internal static ProvisioningBaseInstallExecutionResult ValidateBaseInstallExecutionResponse(
+        ProvisioningHelperResponse response,
+        ProvisioningBaseInstallExecutionAuthorization authorization)
+    {
+        if (response.BaseInstallExecution is null)
+        {
+            throw new InvalidOperationException(
+                $"Provisioning helper returned no execution result: {response.Code}");
+        }
+        var result = response.BaseInstallExecution;
+        if (response.Success != result.Success
+            || (result.Success && (!result.Verified
+                || result.RollbackAttempted
+                || result.RollbackSucceeded
+                || !string.Equals(
+                    result.ObservedTimezone,
+                    authorization.Plan.Timezone,
+                    StringComparison.Ordinal)))
+            || (result.RollbackSucceeded && !result.RollbackAttempted))
+        {
+            throw new InvalidDataException("Provisioning helper returned an inconsistent execution result.");
+        }
+        return result;
+    }
+
+    internal static ProvisioningHelperRequest CreateBaseInstallExecutionRequest(
+        ProvisioningJob job,
+        ProvisioningBaseInstallExecutionAuthorization authorization)
+        => new(
+            ProvisioningExecutionGrantCodec.ProtocolVersion,
+            job.Id,
+            job.ActionType,
+            job.SchemaVersion,
+            ProvisioningActionCatalog.SystemBaseInstallModuleHash,
+            job.Parameters,
+            authorization);
+
     private async Task<ProvisioningHelperResponse> SendAsync(
         ProvisioningHelperRequest request,
         CancellationToken cancellationToken)

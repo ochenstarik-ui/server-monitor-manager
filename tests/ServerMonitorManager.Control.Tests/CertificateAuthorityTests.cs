@@ -71,7 +71,7 @@ public sealed class CertificateAuthorityTests : IDisposable
             CertificateAuthorityPath = caPath
         }));
 
-        var now = DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.FromUnixTimeSeconds(DateTimeOffset.UtcNow.ToUnixTimeSeconds());
         var parameters = System.Text.Json.JsonSerializer.SerializeToElement(
             new SystemBaseInstallParameters(
                 "UTC", "en_US.UTF-8", true, false, 1, ["core"],
@@ -79,9 +79,9 @@ public sealed class CertificateAuthorityTests : IDisposable
             SmmJsonContext.Default.SystemBaseInstallParameters);
         var job = new ProvisioningJob(
             Guid.NewGuid().ToString("N"), "home", "system.base-install", 1, parameters,
-            ProvisioningJobStates.Queued, true, "test", "operator",
+            ProvisioningJobStates.Running, true, "test", "operator",
             now.AddMinutes(-1), now, now.AddMinutes(30), now, null, 4, 25,
-            "confirmed-queued", null);
+            "execute", null);
         var plan = new SystemBaseInstallPlan(
             "UTC", "en_US.UTF-8", true, false,
             SystemBaseInstallCatalogDefinition.ExpandGroups(["core"]),
@@ -99,6 +99,15 @@ public sealed class CertificateAuthorityTests : IDisposable
             plan with { Packages = [.. plan.Packages, "untrusted-package"] }, now));
         Assert.False(ProvisioningExecutionGrantCodec.Verify(
             grant, authority.PublicCertificate, job.Id, job.NodeId, plan, now.AddMinutes(3)));
+        var expiringJob = job with { ExpiresAt = now.AddSeconds(15) };
+        var clamped = authority.SignProvisioningExecutionGrant(
+            expiringJob, plan, now, TimeSpan.FromMinutes(2));
+        Assert.Equal(expiringJob.ExpiresAt.ToUnixTimeSeconds(), clamped.ExpiresAtUnixSeconds);
+        Assert.Throws<InvalidOperationException>(() => authority.SignProvisioningExecutionGrant(
+            job with { ExpiresAt = now }, plan, now, TimeSpan.FromMinutes(2)));
+        Assert.Throws<InvalidOperationException>(() => authority.SignProvisioningExecutionGrant(
+            job with { ExpiresAt = now.AddMilliseconds(100) },
+            plan, now, TimeSpan.FromMinutes(2)));
         Assert.Throws<InvalidOperationException>(() => authority.SignProvisioningExecutionGrant(
             job with { ConfirmedAt = null }, plan, now, TimeSpan.FromMinutes(2)));
     }

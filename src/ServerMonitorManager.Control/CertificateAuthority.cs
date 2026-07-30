@@ -74,16 +74,25 @@ public sealed class CertificateAuthority : IDisposable
     {
         if (job.ActionType != "system.base-install"
             || job.SchemaVersion != 1
-            || job.State != ProvisioningJobStates.Queued
+            || job.State != ProvisioningJobStates.Running
             || !job.ConfirmationRequired
             || job.ConfirmedAt is null
             || lifetime <= TimeSpan.Zero
             || lifetime > ProvisioningExecutionGrantCodec.MaximumLifetime)
         {
             throw new InvalidOperationException(
-                "Only a confirmed queued base installation job can receive an execution grant.");
+                "Only a confirmed running base installation job can receive an execution grant.");
         }
 
+        var expiresAt = issuedAt.Add(lifetime) < job.ExpiresAt
+            ? issuedAt.Add(lifetime)
+            : job.ExpiresAt;
+        var issuedAtUnixSeconds = issuedAt.ToUnixTimeSeconds();
+        var expiresAtUnixSeconds = expiresAt.ToUnixTimeSeconds();
+        if (expiresAtUnixSeconds <= issuedAtUnixSeconds)
+        {
+            throw new InvalidOperationException("Provisioning job expires before a grant can be issued.");
+        }
         var grant = new ProvisioningExecutionGrant(
             ProvisioningExecutionGrantCodec.ProtocolVersion,
             job.Id,
@@ -91,8 +100,8 @@ public sealed class CertificateAuthority : IDisposable
             job.ActionType,
             job.SchemaVersion,
             ProvisioningExecutionGrantCodec.ComputePlanSha256(plan),
-            issuedAt.ToUnixTimeSeconds(),
-            issuedAt.Add(lifetime).ToUnixTimeSeconds(),
+            issuedAtUnixSeconds,
+            expiresAtUnixSeconds,
             Convert.ToHexStringLower(RandomNumberGenerator.GetBytes(16)),
             ProvisioningExecutionGrantCodec.SignatureAlgorithm,
             string.Empty);

@@ -171,14 +171,16 @@ public sealed record ProvisioningHelperRequest(
     string ActionType,
     int SchemaVersion,
     string ModuleHash,
-    JsonElement Parameters);
+    JsonElement Parameters,
+    ProvisioningBaseInstallExecutionAuthorization? Execution = null);
 
 public sealed record ProvisioningHelperResponse(
     bool Success,
     string Code,
     string Message,
     ProvisioningPreflightResult? Preflight,
-    SystemBaseInstallPlan? BaseInstallPlan);
+    SystemBaseInstallPlan? BaseInstallPlan,
+    ProvisioningBaseInstallExecutionResult? BaseInstallExecution = null);
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProvisioningPreflightResult(
@@ -300,6 +302,37 @@ public sealed record ProvisioningExecutionGrant(
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ProvisioningExecutionGrantRequest(string IdempotencyKey);
+
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
+public sealed record ProvisioningBaseInstallExecutionAuthorization(
+    string NodeId,
+    SystemBaseInstallPlan Plan,
+    ProvisioningExecutionGrant Grant);
+
+public sealed record ProvisioningBaseInstallExecutionResult(
+    bool Success,
+    string Code,
+    string Message,
+    bool Changed,
+    bool Verified,
+    bool RollbackAttempted,
+    bool RollbackSucceeded,
+    string? ObservedTimezone);
+
+public sealed record ProvisioningTimezoneRollbackRecord(
+    int SchemaVersion,
+    string JobId,
+    string NodeId,
+    string PlanSha256,
+    string PreviousTimezone,
+    string RequestedTimezone);
+
+public sealed record ProvisioningExecutionConsumptionRecord(
+    int SchemaVersion,
+    string JobId,
+    string NodeId,
+    string Nonce,
+    DateTimeOffset ConsumedAt);
 
 public static class PreflightDriftStatuses
 {
@@ -430,7 +463,7 @@ public static class SystemBaseInstallSchema
            && parameters.PackageGroupIds.Distinct(StringComparer.Ordinal).Count()
                == parameters.PackageGroupIds.Length
            && parameters.PackageGroupIds.All(SystemBaseInstallCatalogDefinition.ContainsGroup)
-           && parameters.SwapMode is "disabled" or "automatic" or "explicit"
+           && parameters.SwapMode is "unchanged" or "disabled" or "automatic" or "explicit"
            && (parameters.SwapMode == "explicit"
                ? parameters.SwapSizeMiB is >= 128 and <= 1_048_576
                : parameters.SwapSizeMiB is null)

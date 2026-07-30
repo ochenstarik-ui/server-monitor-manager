@@ -107,8 +107,13 @@ public sealed partial class ControlStore
         command.Transaction = transaction;
         command.CommandText = """
             UPDATE provisioning_jobs SET
-                state = CASE WHEN state = $queued THEN $preflight ELSE $rolling_back END,
+                state = CASE
+                    WHEN state = $queued AND confirmed_at IS NOT NULL THEN $running
+                    WHEN state = $queued THEN $preflight
+                    ELSE $rolling_back
+                END,
                 current_step = CASE
+                    WHEN state = $queued AND confirmed_at IS NOT NULL THEN 'execute'
                     WHEN state = $queued THEN 'preflight'
                     ELSE 'rollback'
                 END,
@@ -117,22 +122,22 @@ public sealed partial class ControlStore
             WHERE id = (
                 SELECT id FROM provisioning_jobs
                 WHERE node_id = $node
-                  AND ((state = $queued
-                        AND (confirmation_required = 0 OR confirmed_at IS NULL))
+                  AND (state = $queued
                        OR (state = $rolling_back AND current_step = 'rollback-queued'))
                   AND expires_at > $now
                 ORDER BY CASE WHEN state = $rolling_back THEN 0 ELSE 1 END, created_at, id
                 LIMIT 1)
-              AND ((state = $queued
-                    AND (confirmation_required = 0 OR confirmed_at IS NULL))
+              AND (state = $queued
                    OR (state = $rolling_back AND current_step = 'rollback-queued'))
             RETURNING *;
             """;
         command.Parameters.AddWithValue("$node", nodeId);
         command.Parameters.AddWithValue("$queued", ProvisioningJobStates.Queued);
         command.Parameters.AddWithValue("$preflight", ProvisioningJobStates.Preflight);
+        command.Parameters.AddWithValue("$running", ProvisioningJobStates.Running);
         command.Parameters.AddWithValue("$rolling_back", ProvisioningJobStates.RollingBack);
         command.Parameters.AddWithValue("$now", now.ToString("O"));
+
         ProvisioningJob? job;
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
@@ -656,7 +661,9 @@ internal static class ProvisioningStateMachine
             (ProvisioningJobStates.Preflight, ProvisioningJobStates.Running) => true,
             (ProvisioningJobStates.Running, ProvisioningJobStates.Running) => true,
             (ProvisioningJobStates.Running, ProvisioningJobStates.Verifying) => true,
+            (ProvisioningJobStates.Running, ProvisioningJobStates.RollingBack) => true,
             (ProvisioningJobStates.Verifying, ProvisioningJobStates.Verifying) => true,
+            (ProvisioningJobStates.Verifying, ProvisioningJobStates.RollingBack) => true,
             (ProvisioningJobStates.Verifying, ProvisioningJobStates.Completed) => targetProgress == 100,
             (ProvisioningJobStates.RollingBack, ProvisioningJobStates.RollingBack) => true,
             (ProvisioningJobStates.RollingBack, ProvisioningJobStates.RolledBack) => targetProgress == 100,

@@ -165,6 +165,13 @@ internal sealed class AgentClient(AgentOptions options)
             return;
         }
 
+        if (job.ActionType == "system.base-install"
+            && job.State == ProvisioningJobStates.Running)
+        {
+            await ExecuteBaseInstallAsync(client, job, cancellationToken);
+            return;
+        }
+
         if (job.ActionType != "preflight")
         {
             await ReportProvisioningAsync(
@@ -201,6 +208,99 @@ internal sealed class AgentClient(AgentOptions options)
         Console.WriteLine(
             $"Preflight {job.Id} completed: {result.OperatingSystem} "
             + $"{result.OperatingSystemVersion} {result.Architecture}.");
+    }
+
+    private async Task ExecuteBaseInstallAsync(
+        HttpClient client,
+        ProvisioningJob job,
+        CancellationToken cancellationToken)
+    {
+        ProvisioningBaseInstallExecutionAuthorization authorization;
+        try
+        {
+            authorization = await RequestBaseInstallExecutionAuthorizationAsync(
+                client, job, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                "authorize", "base-install.authorization-failed",
+                "Base installation authorization failed before mutation.", cancellationToken);
+            Console.Error.WriteLine($"Base installation {job.Id} authorization failed: {exception.Message}");
+            return;
+        }
+
+        ProvisioningBaseInstallExecutionResult result;
+        try
+        {
+            var helper = new ProvisioningHelperClient(options.ProvisioningSocketPath);
+            result = await helper.ExecuteBaseInstallAsync(job, authorization, cancellationToken);
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.NeedsReconciliation, job.ProgressPercent,
+                "reconcile", "base-install.execution-uncertain",
+                "Base installation outcome is uncertain and requires reconciliation.", cancellationToken);
+            Console.Error.WriteLine($"Base installation {job.Id} outcome is uncertain: {exception.Message}");
+            return;
+        }
+
+        if (result.Success)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Verifying, 90,
+                "verify", "base-install.verifying", "Verifying applied configuration.", cancellationToken);
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Completed, 100,
+                "completed", "base-install.completed", "Base installation change verified.", cancellationToken);
+            Console.WriteLine($"Base installation {job.Id} completed and verified.");
+            return;
+        }
+
+        if (!result.RollbackAttempted)
+        {
+            await ReportProvisioningAsync(
+                client, job, ProvisioningJobStates.Failed, job.ProgressPercent,
+                "execute", result.Code, "Base installation was rejected before mutation.", cancellationToken);
+            return;
+        }
+
+        await ReportProvisioningAsync(
+            client, job, ProvisioningJobStates.RollingBack, 90,
+            "rollback", "base-install.rollback", "Restoring the previous configuration.", cancellationToken);
+        await ReportProvisioningAsync(
+            client, job,
+            result.RollbackSucceeded ? ProvisioningJobStates.RolledBack : ProvisioningJobStates.RollbackFailed,
+            100,
+            result.RollbackSucceeded ? "rolled-back" : "rollback-failed",
+            result.RollbackSucceeded ? "base-install.rolled-back" : "base-install.rollback-failed",
+            result.RollbackSucceeded
+                ? "Previous configuration restored and verified."
+                : "Previous configuration could not be verified after rollback.",
+            cancellationToken);
+    }
+
+    private static async Task<ProvisioningBaseInstallExecutionAuthorization>
+        RequestBaseInstallExecutionAuthorizationAsync(
+            HttpClient client,
+            ProvisioningJob job,
+            CancellationToken cancellationToken)
+    {
+        var request = new ProvisioningExecutionGrantRequest(
+            CreateOperationId(job.Id, "execution-grant"));
+        using var response = await client.PostAsJsonAsync(
+            $"api/v1/agents/provisioning/jobs/{job.Id}/execution-grant",
+            request,
+            SmmJsonContext.Default.ProvisioningExecutionGrantRequest,
+            cancellationToken);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadFromJsonAsync(
+            SmmJsonContext.Default.ProvisioningBaseInstallExecutionAuthorization,
+            cancellationToken)
+            ?? throw new InvalidOperationException(
+                "Control service returned an empty execution authorization.");
     }
 
     private static async Task ReportProvisioningAsync(

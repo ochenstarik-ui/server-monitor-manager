@@ -133,7 +133,7 @@ public sealed partial class ControlStore
             DateTimeOffset.Parse(reader.GetString(2)));
     }
 
-    public async Task<ProvisioningExecutionGrant?> IssueBaseInstallExecutionGrantAsync(
+    public async Task<ProvisioningBaseInstallExecutionAuthorization?> IssueBaseInstallExecutionGrantAsync(
         string nodeId,
         string jobId,
         ProvisioningExecutionGrantRequest request,
@@ -148,7 +148,7 @@ public sealed partial class ControlStore
             request, SmmJsonContext.Default.ProvisioningExecutionGrantRequest);
         var cached = await ReadIdempotentAsync(
             connection, transaction, operationKey, requestHash,
-            SmmJsonContext.Default.ProvisioningExecutionGrant, cancellationToken);
+            SmmJsonContext.Default.ProvisioningBaseInstallExecutionAuthorization, cancellationToken);
         if (cached is not null)
         {
             await transaction.CommitAsync(cancellationToken);
@@ -163,7 +163,7 @@ public sealed partial class ControlStore
         }
         if (job.ActionType != "system.base-install"
             || job.SchemaVersion != 1
-            || job.State != ProvisioningJobStates.Queued
+            || job.State != ProvisioningJobStates.Running
             || !job.ConfirmationRequired
             || job.ConfirmedAt is null
             || job.ExpiresAt <= DateTimeOffset.UtcNow)
@@ -187,9 +187,10 @@ public sealed partial class ControlStore
             planJson, SmmJsonContext.Default.SystemBaseInstallPlan)
             ?? throw new InvalidDataException("Stored base installation plan is invalid.");
         var grant = issueGrant(job, plan);
+        var authorization = new ProvisioningBaseInstallExecutionAuthorization(nodeId, plan, grant);
         await WriteIdempotentAsync(
-            connection, transaction, operationKey, requestHash, grant,
-            SmmJsonContext.Default.ProvisioningExecutionGrant, cancellationToken);
+            connection, transaction, operationKey, requestHash, authorization,
+            SmmJsonContext.Default.ProvisioningBaseInstallExecutionAuthorization, cancellationToken);
         await WriteAuditAsync(
             connection, transaction, nodeId, "provisioning.execution-grant.issued", jobId,
             JsonSerializer.Serialize(new
@@ -201,7 +202,7 @@ public sealed partial class ControlStore
             }),
             cancellationToken);
         await transaction.CommitAsync(cancellationToken);
-        return grant;
+        return authorization;
     }
 }
 

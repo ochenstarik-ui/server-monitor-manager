@@ -9,7 +9,109 @@ namespace ServerMonitorManager.Agent;
 
 internal sealed class AgentClient(AgentOptions options)
 {
+    private const int MaximumEnrollmentTokenBytes = 4096;
     private readonly string _certificatePath = Path.Combine(options.StateDirectory, "agent.pfx");
+
+    public async Task EnrollFromFileAsync(string path, CancellationToken cancellationToken)
+    {
+        var expectedPath = Path.GetFullPath(Path.Combine(options.EnrollmentTokenDirectory, "enroll-token"));
+        var suppliedPath = Path.GetFullPath(path);
+        var comparison = OperatingSystem.IsWindows()
+            ? StringComparison.OrdinalIgnoreCase
+            : StringComparison.Ordinal;
+        if (!string.Equals(suppliedPath, expectedPath, comparison))
+        {
+            throw new InvalidDataException(
+                "Enrollment token file must be the dedicated file in the enrollment directory.");
+        }
+
+        var bytes = await ReadAndDeleteEnrollmentTokenAsync(path, cancellationToken);
+        try
+        {
+            await EnrollAsync(Encoding.UTF8.GetString(bytes), cancellationToken);
+        }
+        finally
+        {
+            CryptographicOperations.ZeroMemory(bytes);
+        }
+    }
+
+    internal static async Task<byte[]> ReadAndDeleteEnrollmentTokenAsync(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        byte[]? bytes = null;
+        var deleteTokenFile = false;
+        try
+        {
+            if (!Path.IsPathFullyQualified(path))
+            {
+                throw new InvalidDataException("Enrollment token file path must be absolute.");
+            }
+            deleteTokenFile = true;
+
+            if (OperatingSystem.IsLinux() || OperatingSystem.IsMacOS())
+            {
+                const UnixFileMode forbidden = UnixFileMode.GroupRead | UnixFileMode.GroupWrite
+                    | UnixFileMode.GroupExecute | UnixFileMode.OtherRead | UnixFileMode.OtherWrite
+                    | UnixFileMode.OtherExecute;
+                if ((File.GetUnixFileMode(path) & forbidden) != 0)
+                {
+                    throw new UnauthorizedAccessException(
+                        "Enrollment token file must not be accessible by group or other users.");
+                }
+            }
+
+            await using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.None,
+                bufferSize: 4096,
+                useAsync: true);
+            if (stream.Length is <= 0 or > MaximumEnrollmentTokenBytes)
+            {
+                throw new InvalidDataException("Enrollment token file has an invalid size.");
+            }
+
+            bytes = new byte[stream.Length];
+            await stream.ReadExactlyAsync(bytes, cancellationToken);
+            if (bytes.Any(static value => value is not (
+                    >= (byte)'A' and <= (byte)'Z'
+                    or >= (byte)'a' and <= (byte)'z'
+                    or >= (byte)'0' and <= (byte)'9'
+                    or (byte)'-'
+                    or (byte)'_')))
+            {
+                throw new InvalidDataException("Enrollment token file is not valid base64url data.");
+            }
+
+            return bytes;
+        }
+        catch
+        {
+            if (bytes is not null)
+            {
+                CryptographicOperations.ZeroMemory(bytes);
+            }
+            throw;
+        }
+        finally
+        {
+            if (deleteTokenFile)
+            {
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (UnauthorizedAccessException)
+                {
+                    // Production handoff lives in a root-owned directory. The root
+                    // bootstrap owns final path cleanup on every exit path.
+                }
+            }
+        }
+    }
 
     public async Task EnrollAsync(string token, CancellationToken cancellationToken)
     {

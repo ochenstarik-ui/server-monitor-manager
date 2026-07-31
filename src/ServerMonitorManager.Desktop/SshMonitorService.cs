@@ -122,39 +122,16 @@ public sealed partial class SshMonitorService
             Path.Combine(localFolder, "ssh", "known-hosts"),
             profile.Host,
             profile.Port);
-        if (!SshHostKeyTrust.IsTrusted(
-                knownHostsPath,
-                profile.Host,
-                profile.Port,
-                profile.HostKeyFingerprint))
-        {
-            throw new InvalidOperationException(
-                "SSH host key is not explicitly confirmed for this server profile.");
-        }
-
         await EnsureKeyPairAsync(cancellationToken);
         await using var privateKeySession = await MaterializePrivateKeyAsync(cancellationToken);
-        var target = $"{profile.User}@{profile.Host}";
-        var arguments = new[]
-        {
-            "-F", "none",
-            "-i", privateKeySession.Path,
-            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
-            "-o", "BatchMode=yes",
-            "-o", "ConnectTimeout=8",
-            "-o", "IdentitiesOnly=yes",
-            "-o", "IdentityAgent=none",
-            "-o", "StrictHostKeyChecking=yes",
-            "-o", $"UserKnownHostsFile={knownHostsPath}",
-            "-o", "GlobalKnownHostsFile=none",
-            "-o", "KnownHostsCommand=none",
-            "-o", "UpdateHostKeys=no",
-            "-o", "VerifyHostKeyDNS=no",
-            "-o", "CanonicalizeHostname=no",
-            "-o", "CheckHostIP=no",
-            target,
-            command
-        };
+        var arguments = SshConnectionArguments.BuildRestricted(
+            profile.Host,
+            profile.Port,
+            profile.User,
+            knownHostsPath,
+            profile.HostKeyFingerprint,
+            privateKeySession.Path,
+            command);
         return await RunProcessAsync(
             ResolveOpenSshTool("ssh.exe"),
             arguments,
@@ -200,11 +177,19 @@ public sealed partial class SshMonitorService
         }
 
         var ssh = ResolveOpenSshTool("ssh.exe");
-        var sshArguments = new[]
-        {
-            "-p", profile.Port.ToString(CultureInfo.InvariantCulture),
-            $"{terminalUser}@{profile.Host}"
-        };
+        var knownHostsPath = SshHostKeyTrust.GetPinPath(
+            Path.Combine(
+                ApplicationData.Current.LocalFolder.Path,
+                "ssh",
+                "known-hosts"),
+            profile.Host,
+            profile.Port);
+        var sshArguments = SshConnectionArguments.BuildInteractive(
+            profile.Host,
+            profile.Port,
+            terminalUser,
+            knownHostsPath,
+            profile.HostKeyFingerprint);
         var windowsTerminal = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Microsoft",
@@ -213,11 +198,12 @@ public sealed partial class SshMonitorService
         var startInfo = new ProcessStartInfo
         {
             FileName = File.Exists(windowsTerminal) ? windowsTerminal : ssh,
-            UseShellExecute = true
+            UseShellExecute = false
         };
         if (File.Exists(windowsTerminal))
         {
             startInfo.ArgumentList.Add("new-tab");
+            startInfo.ArgumentList.Add("--");
             startInfo.ArgumentList.Add(ssh);
         }
         foreach (var argument in sshArguments)

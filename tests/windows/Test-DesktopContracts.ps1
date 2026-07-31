@@ -23,8 +23,12 @@ $appCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\App.xaml.cs')
 $sshCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\SshMonitorService.cs')
+$sshConnectionCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $root 'src\ServerMonitorManager.Desktop\SshConnectionArguments.cs')
 $serverViewModelCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\ServerViewModel.cs')
+$serversXaml = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $root 'src\ServerMonitorManager.Desktop\Pages\ServersPage.xaml')
 $windowsWorkflow = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root '.github\workflows\windows-build.yml')
 
@@ -65,9 +69,9 @@ if ($windowsWorkflow.IndexOf(
         [StringComparison]::Ordinal) -lt 0) {
     throw 'Windows CI must execute the Desktop security tests.'
 }
-if ($sshCode.IndexOf('StrictHostKeyChecking=yes', [StringComparison]::Ordinal) -lt 0 -or
-    $sshCode.IndexOf('StrictHostKeyChecking=accept-new', [StringComparison]::Ordinal) -ge 0) {
-    throw 'Restricted SSH must use only explicitly pinned host keys.'
+if ($sshConnectionCode.IndexOf('StrictHostKeyChecking=yes', [StringComparison]::Ordinal) -lt 0 -or
+    $sshConnectionCode.IndexOf('StrictHostKeyChecking=accept-new', [StringComparison]::Ordinal) -ge 0) {
+    throw 'SSH connections must use only explicitly pinned host keys.'
 }
 $isolatedSshOptions = @(
     '"-F", "none"',
@@ -79,8 +83,8 @@ $isolatedSshOptions = @(
     '"CheckHostIP=no"'
 )
 foreach ($option in $isolatedSshOptions) {
-    if ($sshCode.IndexOf($option, [StringComparison]::Ordinal) -lt 0) {
-        throw "Restricted SSH is missing trust-isolation option: $option"
+    if ($sshConnectionCode.IndexOf($option, [StringComparison]::Ordinal) -lt 0) {
+        throw "SSH trust policy is missing isolation option: $option"
     }
 }
 $ssh = Join-Path $env:SystemRoot 'System32\OpenSSH\ssh.exe'
@@ -127,6 +131,10 @@ if ($serverViewModelCode.IndexOf(
 }
 if ($mainCode.IndexOf('ConfirmHostKeyAsync(', [StringComparison]::Ordinal) -lt 0) {
     throw 'Add/edit flow must require explicit host-key fingerprint confirmation.'
+}
+if ($serversXaml.IndexOf('Click="ConfirmHostKeyButton_Click"', [StringComparison]::Ordinal) -lt 0 -or
+    $serverViewModelCode.IndexOf('HostKeyPendingConfirmation', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Legacy profiles must expose direct host-key confirmation in the server card.'
 }
 
 Write-Host 'Windows desktop contracts passed.'

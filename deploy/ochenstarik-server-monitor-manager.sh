@@ -689,6 +689,31 @@ install_node_from_code() {
     fi
 }
 
+refresh_agent_uid() {
+    local env_file="$ETC_DIR/agent.env" agent_uid temp line found=0
+    [[ -f "$env_file" && ! -L "$env_file" ]] \
+        || fail "Agent environment is missing or unsafe: $env_file"
+    agent_uid="$(id -u "$AGENT_USER")"
+    temp="$(mktemp "$ETC_DIR/.agent.env.XXXXXXXX")"
+    if ! while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == SMM_AgentUid=* ]]; then
+            printf 'SMM_AgentUid=%s\n' "$agent_uid"
+            found=1
+        else
+            printf '%s\n' "$line"
+        fi
+    done <"$env_file" >"$temp"; then
+        rm -f -- "$temp"
+        fail "Could not refresh SMM_AgentUid in agent.env."
+    fi
+    if [[ "$found" == "0" ]]; then
+        printf 'SMM_AgentUid=%s\n' "$agent_uid" >>"$temp"
+    fi
+    chown root:"$AGENT_USER" "$temp"
+    chmod 0640 "$temp"
+    mv -fT -- "$temp" "$env_file"
+}
+
 update_role() {
     local role="$1" archive="$2" binary unit user backup_id
     require_root
@@ -700,6 +725,9 @@ update_role() {
         *) fail "Unknown role: $role" ;;
     esac
     [[ -x "$TEMP_DIR/$role/$binary" ]] || fail "$role binary is missing."
+    if [[ "$role" == "agent" ]]; then
+        refresh_agent_uid
+    fi
     systemctl stop "$unit"
     if [[ "$role" == "agent" ]]; then
         systemctl stop "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true

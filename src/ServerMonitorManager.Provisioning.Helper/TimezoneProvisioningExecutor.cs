@@ -36,9 +36,6 @@ public sealed class TimezoneProvisioningExecutor(
     private const string TimedatectlPath = "/usr/bin/timedatectl";
     private const string ZoneinfoRoot = "/usr/share/zoneinfo";
 
-    public ProvisioningBaseInstallExecutionResult Execute(ProvisioningHelperRequest request)
-        => ExecuteAsync(request, CancellationToken.None).GetAwaiter().GetResult();
-
     public async Task<ProvisioningBaseInstallExecutionResult> ExecuteAsync(
         ProvisioningHelperRequest request,
         CancellationToken cancellationToken)

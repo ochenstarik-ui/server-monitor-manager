@@ -26,6 +26,9 @@ public sealed partial class ServersPage : Page
 
     private void DeleteButton_Click(object sender, RoutedEventArgs e) => _host.DeleteServerFromPage(SelectedServer);
 
+    private async void ConfirmHostKeyButton_Click(object sender, RoutedEventArgs e)
+        => await _host.ConfirmHostKeyFromPageAsync((sender as FrameworkElement)?.DataContext as ServerViewModel);
+
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         => await _host.RefreshServersFromPageAsync();
 

@@ -58,6 +58,33 @@ public sealed partial class MainPage : Page
         DeleteServerButton_Click(this, new RoutedEventArgs());
     }
 
+    internal async Task ConfirmHostKeyFromPageAsync(ServerViewModel? server)
+    {
+        if (server is null)
+        {
+            ShowInfo("Сервер не выбран", "Выберите профиль для подтверждения host key.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        var fingerprint = await ConfirmHostKeyAsync(server.Profile);
+        if (fingerprint is null)
+        {
+            return;
+        }
+
+        var index = Servers.IndexOf(server);
+        if (index < 0)
+        {
+            return;
+        }
+        var confirmed = new ServerViewModel(server.Profile with { HostKeyFingerprint = fingerprint });
+        Servers[index] = confirmed;
+        ServerList.SelectedItem = confirmed;
+        await SaveProfilesAsync();
+        await RefreshServerAsync(confirmed);
+        ShowInfo("SSH host key подтверждён", confirmed.Name, InfoBarSeverity.Success);
+    }
+
     internal void OpenTerminalFromPage(ServerViewModel? server)
     {
         ServerList.SelectedItem = server;
@@ -119,6 +146,18 @@ public sealed partial class MainPage : Page
         {
             ServerList.SelectedIndex = 0;
             RenderHistory();
+        }
+
+        var pendingNames = Servers
+            .Where(server => server.HostKeyPendingConfirmation)
+            .Select(server => server.Name)
+            .ToArray();
+        if (pendingNames.Length > 0)
+        {
+            ShowInfo(
+                "Требуется подтверждение SSH host key",
+                $"Нажмите «Подтвердить host key» в карточке: {string.Join(", ", pendingNames)}.",
+                InfoBarSeverity.Warning);
         }
 
         if (Servers.Count > 0)
@@ -628,7 +667,16 @@ public sealed partial class MainPage : Page
             checked((int)portBox.Value),
             userBox.Text.Trim(),
             hubBox.IsChecked == true);
-        var hostKeyFingerprint = await ConfirmHostKeyAsync(updatedProfile);
+        var knownHostsDirectory = Path.Combine(
+            ApplicationData.Current.LocalFolder.Path,
+            "ssh",
+            "known-hosts");
+        var hostKeyFingerprint = SshHostKeyTrust.CanReusePin(
+            knownHostsDirectory,
+            selected.Profile,
+            updatedProfile)
+            ? selected.Profile.HostKeyFingerprint
+            : await ConfirmHostKeyAsync(updatedProfile);
         if (hostKeyFingerprint is null)
         {
             return;
@@ -698,7 +746,8 @@ public sealed partial class MainPage : Page
             WarningValueText.Text = warnings.ToString(CultureInfo.InvariantCulture);
             WarningDetailText.Text = warnings == 0 ? "Нет предупреждений" : "Проверьте доступность и ресурсы";
             HeaderStatusText.Text = $"SSH monitoring · {Servers.Count} сервер(а) · обновлено {DateTime.Now:HH:mm:ss}";
-            if (Servers.Any(server => server.IsHub) || _control.IsConfigured)
+            if (Servers.Any(server => server.IsHub && !server.HostKeyPendingConfirmation)
+                || _control.IsConfigured)
             {
                 await RefreshMeshAsync(showSuccess: false);
             }
@@ -711,6 +760,14 @@ public sealed partial class MainPage : Page
 
     private async Task RefreshServerAsync(ServerViewModel server)
     {
+        if (server.HostKeyPendingConfirmation)
+        {
+            server.Status = "Требуется подтверждение host key";
+            server.IsOnline = false;
+            server.HasWarning = true;
+            return;
+        }
+
         server.Status = "Подключение…";
         try
         {

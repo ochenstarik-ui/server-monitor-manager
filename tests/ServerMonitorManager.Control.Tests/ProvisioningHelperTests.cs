@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Net.Sockets;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
@@ -13,6 +14,26 @@ namespace ServerMonitorManager.Control.Tests;
 
 public sealed class ProvisioningHelperTests
 {
+    [Fact]
+    public async Task ConfiguredAgentUidMustMatchTheInstalledAgentUser()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"smm-passwd-{Guid.NewGuid():N}");
+        await File.WriteAllTextAsync(
+            path,
+            "root:x:0:0:root:/root:/bin/bash\n"
+            + "ochenstarik-smm-agent:x:1234:1234::/var/lib/ochenstarik-server-monitor-manager:/usr/sbin/nologin\n",
+            TestContext.Current.CancellationToken);
+        try
+        {
+            Assert.True(ProvisioningAgentIdentity.MatchesConfiguredUid(path, 1234));
+            Assert.False(ProvisioningAgentIdentity.MatchesConfiguredUid(path, 1235));
+        }
+        finally
+        {
+            File.Delete(path);
+        }
+    }
+
     [Fact]
     public void HelperRejectsEveryActionOutsideFixedAllowlist()
     {
@@ -108,7 +129,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void ConfirmedTimezoneOnlyPlanUsesAllowlistedBinaryCreatesBackupAndVerifies()
+    public async Task ConfirmedTimezoneOnlyPlanUsesAllowlistedBinaryCreatesBackupAndVerifies()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -125,7 +146,8 @@ public sealed class ProvisioningHelperTests
             var executor = new TimezoneProvisioningExecutor(
                 authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-            var result = executor.Execute(CreateExecutionRequest(plan, grant));
+            var result = await executor.ExecuteAsync(
+                CreateExecutionRequest(plan, grant), TestContext.Current.CancellationToken);
 
             Assert.True(result.Success);
             Assert.True(result.Changed);
@@ -145,8 +167,49 @@ public sealed class ProvisioningHelperTests
         }
     }
 
+    [Theory]
+    [InlineData("null")]
+    [InlineData("[]")]
+    public async Task ExecutionDispatchRejectsNonObjectParametersBeforeMutation(string parametersJson)
+    {
+        using var authority = CreateAuthority(out var signingKey);
+        using (signingKey)
+        using (var parameters = JsonDocument.Parse(parametersJson))
+        {
+            var plan = CreateTimezoneOnlyPlan("Europe/Berlin");
+            var events = new List<string>();
+            var files = new FakeFileSystem(events);
+            files.Files.Add("/usr/share/zoneinfo/Europe/Berlin");
+            var process = new FakeProcessRunner(events,
+                new(0, "UTC\n", ""),
+                new(0, "", ""),
+                new(0, "Europe/Berlin\n", ""));
+            var executor = new TimezoneProvisioningExecutor(
+                authority, "home", files, process, TimeProvider.System,
+                "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
+            var server = new ProvisioningHelperServer("unused", 0, executor);
+            var request = CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)) with
+            {
+                Parameters = parameters.RootElement.Clone()
+            };
+            var dispatch = typeof(ProvisioningHelperServer).GetMethod(
+                "ExecuteRequestAsync",
+                BindingFlags.Instance | BindingFlags.NonPublic)!;
+
+            var task = (Task<ProvisioningHelperResponse>)dispatch.Invoke(
+                server,
+                [request, TestContext.Current.CancellationToken])!;
+            var response = await task;
+
+            Assert.False(response.Success);
+            Assert.Equal("action.denied", response.Code);
+            Assert.Empty(files.Writes);
+            Assert.Empty(process.Calls);
+        }
+    }
+
     [Fact]
-    public void ValidNoOpTimezoneCompletesOnlyAfterFactualVerification()
+    public async Task ValidNoOpTimezoneCompletesOnlyAfterFactualVerification()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -159,7 +222,9 @@ public sealed class ProvisioningHelperTests
             var executor = new TimezoneProvisioningExecutor(
                 authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-            var result = executor.Execute(CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)));
+            var result = await executor.ExecuteAsync(
+                CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)),
+                TestContext.Current.CancellationToken);
 
             Assert.True(result.Success);
             Assert.False(result.Changed);
@@ -170,7 +235,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void ConsumedGrantCannotBeReplayedEvenAfterVerifiedNoOp()
+    public async Task ConsumedGrantCannotBeReplayedEvenAfterVerifiedNoOp()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -185,12 +250,14 @@ public sealed class ProvisioningHelperTests
                 authority, "home", files, firstProcess, TimeProvider.System,
                 "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-            var first = executor.Execute(CreateExecutionRequest(plan, grant));
+            var first = await executor.ExecuteAsync(
+                CreateExecutionRequest(plan, grant), TestContext.Current.CancellationToken);
             var secondProcess = new FakeProcessRunner([]);
             var replayExecutor = new TimezoneProvisioningExecutor(
                 authority, "home", files, secondProcess, TimeProvider.System,
                 "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
-            var replay = replayExecutor.Execute(CreateExecutionRequest(plan, grant));
+            var replay = await replayExecutor.ExecuteAsync(
+                CreateExecutionRequest(plan, grant), TestContext.Current.CancellationToken);
 
             Assert.True(first.Success);
             Assert.False(replay.Success);
@@ -200,7 +267,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void ForgedMismatchedAndExpiredGrantsCauseZeroMutation()
+    public async Task ForgedMismatchedAndExpiredGrantsCauseZeroMutation()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -224,7 +291,8 @@ public sealed class ProvisioningHelperTests
                 var executor = new TimezoneProvisioningExecutor(
                     authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-                var result = executor.Execute(CreateExecutionRequest(plan, grant));
+                var result = await executor.ExecuteAsync(
+                    CreateExecutionRequest(plan, grant), TestContext.Current.CancellationToken);
 
                 Assert.False(result.Success);
                 Assert.Equal("execution.authorization-denied", result.Code);
@@ -235,7 +303,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void ValidGrantForAnotherNodeIsRejectedBeforeMutation()
+    public async Task ValidGrantForAnotherNodeIsRejectedBeforeMutation()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -266,7 +334,8 @@ public sealed class ProvisioningHelperTests
                     authority, "home", files, process, TimeProvider.System,
                     "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-                var result = executor.Execute(request);
+                var result = await executor.ExecuteAsync(
+                    request, TestContext.Current.CancellationToken);
 
                 Assert.False(result.Success);
                 Assert.Equal("execution.authorization-denied", result.Code);
@@ -277,7 +346,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void UnsupportedBaseInstallFieldsCauseZeroMutation()
+    public async Task UnsupportedBaseInstallFieldsCauseZeroMutation()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -303,7 +372,9 @@ public sealed class ProvisioningHelperTests
                 var executor = new TimezoneProvisioningExecutor(
                     authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-                var result = executor.Execute(CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)));
+                var result = await executor.ExecuteAsync(
+                    CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)),
+                    TestContext.Current.CancellationToken);
 
                 Assert.False(result.Success);
                 Assert.Equal("system.base-install.unsupported-fields", result.Code);
@@ -366,7 +437,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void SymlinkedBackupPathIsRejectedBeforeTimezoneMutation()
+    public async Task SymlinkedBackupPathIsRejectedBeforeTimezoneMutation()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -380,8 +451,9 @@ public sealed class ProvisioningHelperTests
             var executor = new TimezoneProvisioningExecutor(
                 authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-            var result = executor.Execute(CreateExecutionRequest(
-                plan, SignGrant(authority, signingKey, plan)));
+            var result = await executor.ExecuteAsync(
+                CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)),
+                TestContext.Current.CancellationToken);
 
             Assert.False(result.Success);
             Assert.Equal("backup.unsafe-path", result.Code);
@@ -392,7 +464,7 @@ public sealed class ProvisioningHelperTests
     }
 
     [Fact]
-    public void VerificationFailureAttemptsAndFactuallyVerifiesRollback()
+    public async Task VerificationFailureAttemptsAndFactuallyVerifiesRollback()
     {
         using var authority = CreateAuthority(out var signingKey);
         using (signingKey)
@@ -410,8 +482,9 @@ public sealed class ProvisioningHelperTests
             var executor = new TimezoneProvisioningExecutor(
                 authority, "home", files, process, TimeProvider.System, "/var/lib/ochenstarik-server-monitor-manager/provisioning/rollback");
 
-            var result = executor.Execute(CreateExecutionRequest(
-                plan, SignGrant(authority, signingKey, plan)));
+            var result = await executor.ExecuteAsync(
+                CreateExecutionRequest(plan, SignGrant(authority, signingKey, plan)),
+                TestContext.Current.CancellationToken);
 
             Assert.False(result.Success);
             Assert.Equal("timezone.verification-failed", result.Code);

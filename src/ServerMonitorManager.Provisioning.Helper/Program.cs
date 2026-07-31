@@ -28,6 +28,12 @@ if (!uint.TryParse(Environment.GetEnvironmentVariable("SMM_AgentUid"), out var a
     Console.Error.WriteLine("SMM_AgentUid must identify the enrolled Agent user.");
     return 2;
 }
+if (!ProvisioningAgentIdentity.MatchesConfiguredUid("/etc/passwd", agentUserId))
+{
+    Console.Error.WriteLine(
+        $"SMM_AgentUid={agentUserId} does not match the installed ochenstarik-smm-agent user; update agent.env before starting the provisioning helper.");
+    return 2;
+}
 
 using var shutdown = new CancellationTokenSource();
 Console.CancelKeyPress += (_, eventArgs) =>

@@ -14,7 +14,7 @@ public sealed record ServerProfileData(
 
 public sealed class ServerViewModel : INotifyPropertyChanged
 {
-    private string _status = "Ожидает проверки";
+    private string _status;
     private string _cpuText = "—";
     private double _cpuPercent;
     private string _memoryText = "—";
@@ -24,12 +24,22 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     private bool _isOnline;
     private bool _hasWarning;
 
-    public ServerViewModel(ServerProfileData profile) => Profile = profile;
+    public ServerViewModel(ServerProfileData profile)
+    {
+        Profile = profile;
+        _status = HostKeyPendingConfirmation
+            ? "Требуется подтверждение host key"
+            : "Ожидает проверки";
+    }
 
     public ServerProfileData Profile { get; }
     public string Name => Profile.Name;
     public string Endpoint => $"{Profile.User}@{Profile.Host}:{Profile.Port}";
     public bool IsHub => Profile.IsHub;
+    public bool HostKeyPendingConfirmation => string.IsNullOrWhiteSpace(Profile.HostKeyFingerprint);
+    public string HostKeyConfirmationAction => HostKeyPendingConfirmation
+        ? "Подтвердить host key"
+        : "Подтвердить заново";
     public string Status { get => _status; set => Set(ref _status, value); }
     public string CpuText { get => _cpuText; set => Set(ref _cpuText, value); }
     public double CpuPercent { get => _cpuPercent; set => Set(ref _cpuPercent, value); }

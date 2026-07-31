@@ -8,6 +8,8 @@
   <ItemGroup>
     <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshPrivateKeySession.cs" Link="SshPrivateKeySession.cs" />
     <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshHostKeyTrust.cs" Link="SshHostKeyTrust.cs" />
+    <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshConnectionArguments.cs" Link="SshConnectionArguments.cs" />
+    <Compile Include="..\..\src\ServerMonitorManager.Desktop\ServerViewModel.cs" Link="ServerViewModel.cs" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageReference Include="xunit.v3" Version="3.2.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="3.1.5" />

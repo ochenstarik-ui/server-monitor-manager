@@ -130,39 +130,65 @@ internal static class SshHostKeyTrust
             return false;
         }
 
-        var endpoint = FormatEndpoint(host, port);
+        string? pin = null;
         foreach (var line in File.ReadLines(path))
         {
-            var parts = SplitFields(line);
-            if (parts.Length < 3
-                || !string.Equals(parts[0], endpoint, StringComparison.Ordinal)
-                || !PreferredKeyTypes.Contains(parts[1], StringComparer.Ordinal))
+            var trimmed = line.Trim();
+            if (trimmed.Length == 0 || trimmed.StartsWith('#'))
             {
                 continue;
             }
-
-            try
-            {
-                var keyBlob = Convert.FromBase64String(parts[2]);
-                try
-                {
-                    var actual = $"SHA256:{Convert.ToBase64String(SHA256.HashData(keyBlob)).TrimEnd('=')}";
-                    if (string.Equals(actual, expectedFingerprint, StringComparison.Ordinal))
-                    {
-                        return true;
-                    }
-                }
-                finally
-                {
-                    CryptographicOperations.ZeroMemory(keyBlob);
-                }
-            }
-            catch (FormatException)
+            if (pin is not null)
             {
                 return false;
             }
+            pin = trimmed;
         }
-        return false;
+
+        var parts = pin is null ? [] : SplitFields(pin);
+        if (parts.Length != 3
+            || !string.Equals(parts[0], FormatEndpoint(host, port), StringComparison.Ordinal)
+            || !PreferredKeyTypes.Contains(parts[1], StringComparer.Ordinal))
+        {
+            return false;
+        }
+
+        try
+        {
+            var keyBlob = Convert.FromBase64String(parts[2]);
+            try
+            {
+                var actual = $"SHA256:{Convert.ToBase64String(SHA256.HashData(keyBlob)).TrimEnd('=')}";
+                return string.Equals(actual, expectedFingerprint, StringComparison.Ordinal);
+            }
+            finally
+            {
+                CryptographicOperations.ZeroMemory(keyBlob);
+            }
+        }
+        catch (FormatException)
+        {
+            return false;
+        }
+    }
+
+    internal static bool CanReusePin(
+        string directory,
+        ServerProfileData current,
+        ServerProfileData updated)
+    {
+        if (!string.Equals(current.Host, updated.Host, StringComparison.Ordinal)
+            || current.Port != updated.Port)
+        {
+            return false;
+        }
+
+        var path = GetPinPath(directory, current.Host, current.Port);
+        return IsTrusted(
+            path,
+            current.Host,
+            current.Port,
+            current.HostKeyFingerprint);
     }
 
 

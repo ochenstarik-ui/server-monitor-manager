@@ -68,6 +68,40 @@ public sealed class SshHostKeyTrustTests : IDisposable
     }
 
     [Fact]
+    public async Task IsTrustedRejectsAnAdditionalEndpointKey()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "known_hosts");
+        await File.WriteAllTextAsync(
+            path,
+            "server.example ssh-ed25519 AQIDBA==\nserver.example ssh-rsa BQYHCA==\n",
+            TestContext.Current.CancellationToken);
+
+        Assert.False(SshHostKeyTrust.IsTrusted(
+            path,
+            "server.example",
+            22,
+            "SHA256:n2SnR+G5fxMfq7a0Rylsm28CAeefs8U1bmx36JtqgGo"));
+    }
+
+    [Fact]
+    public async Task IsTrustedRejectsAnAdditionalCertificateAuthority()
+    {
+        Directory.CreateDirectory(_directory);
+        var path = Path.Combine(_directory, "known_hosts");
+        await File.WriteAllTextAsync(
+            path,
+            "server.example ssh-ed25519 AQIDBA==\n@cert-authority server.example ssh-ed25519 BQYHCA==\n",
+            TestContext.Current.CancellationToken);
+
+        Assert.False(SshHostKeyTrust.IsTrusted(
+            path,
+            "server.example",
+            22,
+            "SHA256:n2SnR+G5fxMfq7a0Rylsm28CAeefs8U1bmx36JtqgGo"));
+    }
+
+    [Fact]
     public void GetPinPathIsEndpointScopedAndDoesNotExposeHostname()
     {
         var first = SshHostKeyTrust.GetPinPath(_directory, "server.example", 22);

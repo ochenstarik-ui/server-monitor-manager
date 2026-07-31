@@ -267,11 +267,42 @@ public sealed class ProvisioningHelperServer
     }
 
     public static ProvisioningHelperResponse Execute(ProvisioningHelperRequest request)
-        => Execute(request, null);
+    {
+        var validationFailure = ValidateEnvelope(request);
+        return validationFailure ?? ExecuteValidated(request);
+    }
 
-    public static ProvisioningHelperResponse Execute(
+    private static ProvisioningHelperResponse ExecuteValidated(ProvisioningHelperRequest request)
+        => request.ActionType switch
+        {
+            "preflight" => ExecutePreflight(request),
+            "system.base-install" => request.Execution is null
+                ? CreateBaseInstallPlan(request)
+                : Failure("execution.unavailable", "Provisioning execution is unavailable."),
+            _ => Failure("action.denied", "The requested action is not allowed.")
+        };
+
+    private async Task<ProvisioningHelperResponse> ExecuteRequestAsync(
         ProvisioningHelperRequest request,
-        TimezoneProvisioningExecutor? timezoneExecutor)
+        CancellationToken cancellationToken)
+    {
+        var validationFailure = ValidateEnvelope(request);
+        if (validationFailure is not null)
+        {
+            return validationFailure;
+        }
+        if (request.Execution is null
+            || !string.Equals(request.ActionType, "system.base-install", StringComparison.Ordinal)
+            || _timezoneExecutor is null)
+        {
+            return ExecuteValidated(request);
+        }
+        var result = await _timezoneExecutor.ExecuteAsync(request, cancellationToken);
+        return new ProvisioningHelperResponse(
+            result.Success, result.Code, result.Message, null, null, result);
+    }
+
+    private static ProvisioningHelperResponse? ValidateEnvelope(ProvisioningHelperRequest request)
     {
         if (request.ProtocolVersion != "1")
         {
@@ -281,46 +312,9 @@ public sealed class ProvisioningHelperServer
         {
             return Failure("request.invalid-job", "Invalid provisioning job identifier.");
         }
-        if (request.SchemaVersion != 1 || request.Parameters.ValueKind != JsonValueKind.Object)
-        {
-            return Failure("action.denied", "The requested action is not allowed.");
-        }
-
-        return request.ActionType switch
-        {
-            "preflight" => ExecutePreflight(request),
-            "system.base-install" => request.Execution is null
-                ? CreateBaseInstallPlan(request)
-                : ExecuteBaseInstall(request, timezoneExecutor),
-            _ => Failure("action.denied", "The requested action is not allowed.")
-        };
-    }
-
-    private static ProvisioningHelperResponse ExecuteBaseInstall(
-        ProvisioningHelperRequest request,
-        TimezoneProvisioningExecutor? timezoneExecutor)
-    {
-        if (timezoneExecutor is null)
-        {
-            return Failure("execution.unavailable", "Provisioning execution is unavailable.");
-        }
-        var result = timezoneExecutor.Execute(request);
-        return new ProvisioningHelperResponse(
-            result.Success, result.Code, result.Message, null, null, result);
-    }
-
-    private async Task<ProvisioningHelperResponse> ExecuteRequestAsync(
-        ProvisioningHelperRequest request,
-        CancellationToken cancellationToken)
-    {
-        var response = Execute(request, timezoneExecutor: null);
-        if (response.Code != "execution.unavailable" || _timezoneExecutor is null)
-        {
-            return response;
-        }
-        var result = await _timezoneExecutor.ExecuteAsync(request, cancellationToken);
-        return new ProvisioningHelperResponse(
-            result.Success, result.Code, result.Message, null, null, result);
+        return request.SchemaVersion == 1 && request.Parameters.ValueKind == JsonValueKind.Object
+            ? null
+            : Failure("action.denied", "The requested action is not allowed.");
     }
 
     private static ProvisioningHelperResponse ExecutePreflight(ProvisioningHelperRequest request)

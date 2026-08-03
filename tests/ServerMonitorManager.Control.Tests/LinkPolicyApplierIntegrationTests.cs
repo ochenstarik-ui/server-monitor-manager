@@ -110,15 +110,16 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         Assert.Equal("Disabled", persisted.ActualState);
 
         var invocations = await File.ReadAllLinesAsync(invocationLogPath, cancellationToken);
-        Assert.Equal(8, invocations.Length);
+        Assert.Equal(9, invocations.Length);
         Assert.Equal("link-connect ai-agent home tcp 22 60", invocations[0]);
         Assert.Equal("link-status ai-agent home tcp 22", invocations[1]);
-        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[2]);
-        Assert.Equal("link-status ai-agent home tcp 22", invocations[3]);
-        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[4]);
-        Assert.Equal("link-status ai-agent home tcp 22", invocations[5]);
-        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[6]);
-        Assert.Equal("link-status ai-agent home tcp 22", invocations[7]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[2]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[3]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[4]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[5]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[6]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[7]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[8]);
     }
 
     public ValueTask DisposeAsync()

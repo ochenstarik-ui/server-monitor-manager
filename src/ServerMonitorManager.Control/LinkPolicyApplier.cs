@@ -9,6 +9,17 @@ public interface ILinkPolicyApplier
     Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken);
     Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken);
     Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken);
+    Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
+        => Task.FromResult<string?>(null);
+    Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
+        => Task.CompletedTask;
+}
+
+public sealed class MeshFirewallUnavailableException : InvalidOperationException
+{
+    public MeshFirewallUnavailableException(string message) : base(message)
+    {
+    }
 }
 
 public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkPolicyApplier
@@ -55,6 +66,24 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
         };
     }
 
+    public async Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
+        => await RunAsync(["reconcile-status"], cancellationToken) switch
+        {
+            "complete" => null,
+            var status when status.StartsWith("requested:", StringComparison.Ordinal)
+                && Guid.TryParseExact(status[10..], "D", out _) => status[10..],
+            _ => throw new InvalidOperationException("Hub policy helper returned an invalid reconciliation marker status.")
+        };
+
+    public async Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
+    {
+        if (!Guid.TryParseExact(generation, "D", out _))
+        {
+            throw new ArgumentException("Invalid reconciliation generation.", nameof(generation));
+        }
+        _ = await RunAsync(["reconcile-complete", generation], cancellationToken);
+    }
+
     private async Task<string> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo
@@ -80,6 +109,11 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
         if (process.ExitCode != 0)
         {
             var message = (await error).Trim();
+            if (process.ExitCode == 79
+                && string.Equals(message, LinkService.FirewallUnavailableCode, StringComparison.Ordinal))
+            {
+                throw new MeshFirewallUnavailableException(LinkService.FirewallUnavailableCode);
+            }
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
                 ? $"Hub policy helper exited with code {process.ExitCode}."
                 : message);

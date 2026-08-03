@@ -46,9 +46,10 @@ builder.Services.AddOptions<ControlOptions>()
             && options.AuditRetentionDays is >= 1 and <= 3650
             && options.MaintenanceIntervalMinutes is >= 1 and <= 1440
             && options.LinkExpirationPollSeconds is >= 1 and <= 300
+            && options.LinkReconciliationSeconds is >= 30 and <= 3600
             && options.BackupIntervalHours is >= 1 and <= 720
             && options.BackupRetentionCount is >= 1 and <= 100,
-        "Invalid Control paths, heartbeat, retention, maintenance, expiration, or backup settings.")
+        "Invalid Control paths, heartbeat, retention, maintenance, expiration, reconciliation, or backup settings.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ControlStore>();
@@ -59,6 +60,7 @@ builder.Services.AddSingleton<LinkService>();
 builder.Services.AddSingleton<CertificateLifecycleService>();
 builder.Services.AddSingleton<ControlBackupService>();
 builder.Services.AddHostedService<LinkExpirationBackgroundService>();
+builder.Services.AddHostedService<LinkReconciliationBackgroundService>();
 builder.Services.AddHostedService<ControlMaintenanceBackgroundService>();
 builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
     .AddCertificate(options =>

@@ -26,6 +26,7 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         var sudoPath = Path.Combine(_directory, "sudo");
         var helperPath = Path.Combine(_directory, "policy-helper");
         var failureMarkerPath = Path.Combine(_directory, "fail-disconnect");
+        var firewallUnavailableMarkerPath = Path.Combine(_directory, "firewall-unavailable");
         var connectedMarkerPath = Path.Combine(_directory, "connected");
         var invocationLogPath = Path.Combine(_directory, "helper.log");
         await WriteExecutableAsync(
@@ -58,6 +59,10 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
                 rm -f '{{ShellQuote(connectedMarkerPath)}}'
             fi
             if [ "${1:-}" = "link-status" ]; then
+                if [ -f '{{ShellQuote(firewallUnavailableMarkerPath)}}' ]; then
+                    echo "mesh.firewall-unavailable" >&2
+                    exit 79
+                fi
                 if [ -f '{{ShellQuote(connectedMarkerPath)}}' ]; then
                     printf '%s\n' active
                 else
@@ -78,6 +83,28 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
             "windows-pc",
             cancellationToken);
         Assert.Equal("Active", active.ActualState);
+
+        File.Delete(connectedMarkerPath);
+        await File.WriteAllTextAsync(invocationLogPath, string.Empty, cancellationToken);
+        var restored = await service.ReconcileAllAsync(cancellationToken);
+        Assert.False(restored.FirewallUnavailable);
+        Assert.Equal("Active", (await store.GetLinkAsync(active.Id, cancellationToken))!.ActualState);
+        Assert.Equal(
+            [
+                "link-status ai-agent home tcp 22",
+                "link-connect ai-agent home tcp 22 60",
+                "link-status ai-agent home tcp 22"
+            ],
+            await File.ReadAllLinesAsync(invocationLogPath, cancellationToken));
+
+        await File.WriteAllTextAsync(firewallUnavailableMarkerPath, "fail", cancellationToken);
+        var unavailable = await service.ReconcileAllAsync(cancellationToken);
+        Assert.True(unavailable.FirewallUnavailable);
+        Assert.Equal(LinkService.FirewallUnavailableCode,
+            (await store.GetLinkAsync(active.Id, cancellationToken))!.LastError);
+        File.Delete(firewallUnavailableMarkerPath);
+        Assert.False((await service.ReconcileAllAsync(cancellationToken)).FirewallUnavailable);
+        await File.WriteAllTextAsync(invocationLogPath, string.Empty, cancellationToken);
 
         await File.WriteAllTextAsync(failureMarkerPath, "fail", cancellationToken);
         var partial = await service.DisableAsync(
@@ -110,16 +137,14 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         Assert.Equal("Disabled", persisted.ActualState);
 
         var invocations = await File.ReadAllLinesAsync(invocationLogPath, cancellationToken);
-        Assert.Equal(9, invocations.Length);
-        Assert.Equal("link-connect ai-agent home tcp 22 60", invocations[0]);
-        Assert.Equal("link-status ai-agent home tcp 22", invocations[1]);
+        Assert.Equal(7, invocations.Length);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[0]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[1]);
         Assert.Equal("link-status ai-agent home tcp 22", invocations[2]);
         Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[3]);
         Assert.Equal("link-status ai-agent home tcp 22", invocations[4]);
         Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[5]);
         Assert.Equal("link-status ai-agent home tcp 22", invocations[6]);
-        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[7]);
-        Assert.Equal("link-status ai-agent home tcp 22", invocations[8]);
     }
 
     public ValueTask DisposeAsync()

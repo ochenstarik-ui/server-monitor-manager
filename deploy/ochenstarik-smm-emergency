@@ -1,11 +1,14 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 IFS=$'\n\t'
+umask 077
 
 readonly PROGRAM="ochenstarik-smm-emergency"
 readonly STATE_DIR="/var/lib/ochenstarik-server-monitor-manager"
 readonly ETC_DIR="/etc/ochenstarik-server-monitor-manager"
 readonly MARKER="$STATE_DIR/mesh/emergency-disabled"
+readonly RECONCILE_MARKER="$STATE_DIR/mesh/reconcile-requested"
+readonly RECONCILE_LOCK="$STATE_DIR/mesh/reconcile-requested.lock"
 readonly CONTROL_UNIT="ochenstarik-smm-control.service"
 readonly AGENT_UNIT="ochenstarik-smm-agent.service"
 readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
@@ -71,6 +74,25 @@ delete_project_firewall() {
     fi
 }
 
+request_reconciliation() {
+    local marker_directory temporary_marker generation
+    marker_directory="$(dirname "$RECONCILE_MARKER")"
+    install -d -o root -g root -m 0700 "$marker_directory"
+    exec 9>"$RECONCILE_LOCK"
+    chown root:root "$RECONCILE_LOCK"
+    chmod 0600 "$RECONCILE_LOCK"
+    /usr/bin/flock -x 9
+    generation="$(</proc/sys/kernel/random/uuid)"
+    temporary_marker="$(mktemp "$marker_directory/.reconcile-requested.XXXXXXXX")"
+    if ! printf '%s\n' "$generation" >"$temporary_marker" \
+        || ! chown root:root "$temporary_marker" \
+        || ! chmod 0600 "$temporary_marker" \
+        || ! mv -f -- "$temporary_marker" "$RECONCILE_MARKER"; then
+        rm -f -- "$temporary_marker"
+        fail "could not create the Link reconciliation request"
+    fi
+}
+
 mesh_disable() {
     require_root
     systemctl disable --now "$WIREGUARD_UNIT" 2>/dev/null || true
@@ -97,6 +119,7 @@ restore_project_firewall() {
     if systemctl list-unit-files "$FIREWALL_UNIT" --no-legend 2>/dev/null | grep -q "^$FIREWALL_UNIT"; then
         systemctl enable "$FIREWALL_UNIT" >/dev/null
     fi
+    request_reconciliation
     log "Base deny-by-default Mesh firewall restored; Control must reconcile active Links."
 }
 
@@ -108,6 +131,7 @@ mesh_enable() {
     fi
     systemctl enable "$WIREGUARD_UNIT" >/dev/null
     systemctl restart "$WIREGUARD_UNIT"
+    request_reconciliation
     rm -f -- "$MARKER"
     log "Mesh enabled locally."
 }

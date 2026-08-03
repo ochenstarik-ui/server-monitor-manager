@@ -6,11 +6,13 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 helper="$root/deploy/ochenstarik-smm-policy-apply"
 emergency="$root/deploy/ochenstarik-smm-emergency"
+acceptance="$root/tests/acceptance/three-server-mesh.sh"
 
-grep -Fq 'if ! listing="$(/usr/sbin/nft -a list chain' "$helper" || {
+grep -Fq 'listing="$(/usr/sbin/nft -a list chain' "$helper" || {
     printf '%s\n' "policy status probe must fail closed when nftables cannot be inspected" >&2
     exit 1
 }
+grep -Fq "grep -Eiq 'No such file or directory|does not exist'" "$helper"
 provisioning_helper_unit="$root/deploy/ochenstarik-smm-provisioning-helper.service"
 
 grep -Fq 'EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env' "$provisioning_helper_unit"
@@ -61,6 +63,13 @@ grep -Eq '^ochenstarik-server-monitor-manager [0-9]+\.[0-9]+\.[0-9]+-' <<<"$vers
 emergency_help="$(bash "$emergency" --help)"
 grep -Fq 'mesh-disable' <<<"$emergency_help"
 grep -Fq 'firewall-restore' <<<"$emergency_help"
+grep -Fq 'readonly RECONCILE_MARKER="$STATE_DIR/mesh/reconcile-requested"' "$emergency"
+grep -Fq 'chown root:root "$temporary_marker"' "$emergency"
+grep -Fq 'chmod 0600 "$temporary_marker"' "$emergency"
+grep -Fq 'mv -f -- "$temporary_marker" "$RECONCILE_MARKER"' "$emergency"
+grep -Fq '/usr/bin/flock -x 9' "$emergency"
+grep -Fq 'generation="$(</proc/sys/kernel/random/uuid)"' "$emergency"
+[[ "$(grep -Fc '    request_reconciliation' "$emergency")" -ge 2 ]]
 
 if bash "$bootstrap" unsupported-action >/dev/null 2>&1; then
     printf '%s\n' "unsupported bootstrap action unexpectedly succeeded" >&2
@@ -97,7 +106,82 @@ if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
     printf '%s\n' "policy helper unexpectedly accepted extra link-status arguments" >&2
     exit 1
 fi
+
+generation_a='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+generation_b='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+reconcile_marker="$(mktemp -t smm-reconcile-marker.XXXXXXXX)"
+printf '%s\n' "$generation_a" >"$reconcile_marker"
+[[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-status)" == "requested:$generation_a" ]]
+printf '%s\n' "$generation_b" >"$reconcile_marker"
+SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-complete "$generation_a" >/dev/null
+[[ "$(<"$reconcile_marker")" == "$generation_b" ]]
+SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-complete "$generation_b" >/dev/null
+[[ ! -e "$reconcile_marker" ]]
+[[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-status)" == 'complete' ]]
+if SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-complete unexpected extra >/dev/null 2>&1; then
+    printf '%s\n' "policy helper unexpectedly accepted extra reconcile-complete arguments" >&2
+    exit 1
+fi
+
+firewall_error="$(mktemp -t smm-firewall-error.XXXXXXXX)"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    SMM_POLICY_FIREWALL_UNAVAILABLE=1 bash "$helper" \
+    link-status source target tcp 22 >/dev/null 2>"$firewall_error"; then
+    printf '%s\n' "missing firewall unexpectedly produced a factual Link status" >&2
+    exit 1
+else
+    [[ $? -eq 79 ]]
+fi
+[[ "$(<"$firewall_error")" == 'mesh.firewall-unavailable' ]]
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    SMM_POLICY_FIREWALL_ERROR='permission denied' bash "$helper" \
+    link-status source target tcp 22 >/dev/null 2>"$firewall_error"; then
+    printf '%s\n' "unknown nft inspection error unexpectedly produced a factual Link status" >&2
+    exit 1
+else
+    [[ $? -eq 78 ]]
+fi
+grep -Fq 'permission denied' "$firewall_error"
+if grep -Fq 'mesh.firewall-unavailable' "$firewall_error"; then
+    printf '%s\n' "unknown nft inspection error was misclassified as missing firewall" >&2
+    exit 1
+fi
+rm -f -- "$firewall_error" "$reconcile_marker"
 rm -f -- "$policy_state"
+
+extract_shell_function() {
+    local name="$1"
+    awk -v signature="$name() {" '
+        $0 == signature { emitting = 1 }
+        emitting { print }
+        emitting && $0 == "}" { exit }
+    ' "$acceptance"
+}
+eval "$(extract_shell_function probe_factual_status)"
+SOURCE_NODE_ID=source
+TARGET_PORT=22
+probe_counter="$(mktemp -t smm-factual-probe.XXXXXXXX)"
+printf '%s\n' 0 >"$probe_counter"
+hub_ssh() {
+    local count
+    count="$(( $(<"$probe_counter") + 1 ))"
+    printf '%s\n' "$count" >"$probe_counter"
+    [[ "$count" -eq 1 ]] && printf '%s\n' disabled || printf '%s\n' active
+}
+if probe_factual_status target active; then
+    printf '%s\n' "initial factual mismatch unexpectedly passed" >&2
+    exit 1
+fi
+probe_factual_status target active || {
+    printf '%s\n' "factual probe did not allow convergence after an initial mismatch" >&2
+    exit 1
+}
+rm -f -- "$probe_counter" "${reconcile_marker}.lock"
 
 fixture="$(mktemp -d -t smm-bootstrap-test.XXXXXXXX)"
 trap 'rm -rf -- "$fixture"' EXIT

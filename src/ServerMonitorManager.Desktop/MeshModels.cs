@@ -19,6 +19,8 @@ public sealed class MeshNodeViewModel
 
 public sealed class MeshLinkViewModel
 {
+    public const string FirewallUnavailableErrorCode = "mesh.firewall-unavailable";
+
     public MeshLinkViewModel(
         string source,
         string target,
@@ -63,7 +65,8 @@ public sealed class MeshLinkViewModel
     public string DesiredStatusText => $"Желаемое состояние: {DesiredState}";
     public string ActualStatusText => $"Фактическое состояние: {ActualState}";
     public string DriftText => HasDrift ? "Расхождение: требуется сверка политики" : "Расхождение: нет";
-    public string ErrorText => string.IsNullOrWhiteSpace(LastError) ? "Ошибка: нет" : $"Ошибка: {LastError}";
+    public string ErrorText => LastError == FirewallUnavailableErrorCode ? string.Empty
+        : string.IsNullOrWhiteSpace(LastError) ? "Ошибка: нет" : $"Ошибка: {LastError}";
     public string VersionText => $"Версия политики: {Version}";
     public string ExpirationText => ExpiresUnix == 0
         ? "вручную"

@@ -9,6 +9,8 @@ public sealed class LinkService(
     ILinkPolicyApplier applier,
     ControlEventBroker events)
 {
+    public const string FirewallUnavailableCode = "mesh.firewall-unavailable";
+    public const string FirewallAvailableCode = "mesh.firewall-available";
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconciliationLocks = new();
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _nodeLocks = new();
 
@@ -25,35 +27,20 @@ public sealed class LinkService(
         {
             return link;
         }
-        var gate = _reconciliationLocks.GetOrAdd(link.Id, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
+        var gate = await AcquireLinkGateAsync(link.Id, cancellationToken);
         try
         {
-            var current = (await store.ListLinksAsync(cancellationToken))
-                .SingleOrDefault(candidate => candidate.Id == link.Id)
+            var current = await store.GetLinkAsync(link.Id, cancellationToken)
                 ?? throw new InvalidOperationException("The persisted Link disappeared.");
-            if (current.DesiredState != "Active")
+            if (current.DesiredState != "Active" || !await store.IsEffectiveLinkAsync(current, cancellationToken))
             {
                 return current;
             }
-            link = current;
-            Publish("link.connecting", link);
-            try
+            if (!mutation.IsReplay)
             {
-                await applier.ApplyConnectAsync(link, cancellationToken);
-                await VerifyFactualStateAsync(link, expectedConnected: true, cancellationToken);
-                link = await store.SetLinkActualStateAsync(link.Id, "Active", null, actor, cancellationToken)
-                    ?? throw new InvalidOperationException("The persisted Link disappeared.");
-                Publish("link.active", link);
+                Publish("link.connecting", current);
             }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                link = await store.SetLinkActualStateAsync(
-                        link.Id, "Failed", CompactError(exception), actor, cancellationToken)
-                    ?? link;
-                Publish("link.failed", link);
-            }
-            return link;
+            return await ConvergeAsync(current, expectedConnected: true, actor, cancellationToken);
         }
         finally
         {
@@ -67,8 +54,7 @@ public sealed class LinkService(
         string actor,
         CancellationToken cancellationToken)
     {
-        var gate = _reconciliationLocks.GetOrAdd(id, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
+        var gate = await AcquireLinkGateAsync(id, cancellationToken);
         try
         {
             return await DisableCoreAsync(id, request, actor, cancellationToken);
@@ -99,7 +85,7 @@ public sealed class LinkService(
         {
             Publish("link.disconnecting", link);
         }
-        return await ConvergeDisabledCoreAsync(link, actor, cancellationToken);
+        return await ConvergeAsync(link, expectedConnected: false, actor, cancellationToken);
     }
 
     internal async Task<LinkPolicy> ConvergeDisabledAsync(
@@ -107,11 +93,10 @@ public sealed class LinkService(
         string actor,
         CancellationToken cancellationToken)
     {
-        var gate = _reconciliationLocks.GetOrAdd(link.Id, static _ => new SemaphoreSlim(1, 1));
-        await gate.WaitAsync(cancellationToken);
+        var gate = await AcquireLinkGateAsync(link.Id, cancellationToken);
         try
         {
-            return await ConvergeDisabledCoreAsync(link, actor, cancellationToken);
+            return await ConvergeAsync(link, expectedConnected: false, actor, cancellationToken);
         }
         finally
         {
@@ -130,54 +115,24 @@ public sealed class LinkService(
         {
             using var nodeLease = await AcquireNodeLocksAsync(
                 [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
-            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync(cancellationToken);
+            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
             try
             {
-                var current = (await store.ListEffectiveLinksForNodeAsync(nodeId, cancellationToken))
-                    .SingleOrDefault(link => link.Id == candidate.Id);
-                if (current is null)
+                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
+                if (current is null || (current.SourceNodeId != nodeId && current.TargetNodeId != nodeId))
                 {
                     continue;
                 }
-
-                var actor = $"system:reconnect:{nodeId}";
-                var expectedConnected = current.DesiredState == "Active";
-                var pendingState = expectedConnected ? "Connecting" : "Disconnecting";
-                var completedState = expectedConnected ? "Active" : "Disabled";
-                var completedEvent = expectedConnected ? "link.active" : "link.disabled";
-                var failureState = expectedConnected ? "Failed" : "Partial";
-                var failureEvent = expectedConnected ? "link.failed" : "link.partial";
-                var link = await store.SetLinkActualStateAsync(
-                    current.Id, pendingState, null, actor, cancellationToken) ?? current;
-                Publish("link.reconciling", link);
-                try
+                var result = await ConvergeAsync(
+                    current,
+                    current.DesiredState == "Active",
+                    $"system:reconnect:{nodeId}",
+                    cancellationToken);
+                reconciled++;
+                if (result.ActualState is "Failed" or "Partial")
                 {
-                    var isConnected = await applier.IsConnectedAsync(link, cancellationToken);
-                    if (isConnected != expectedConnected)
-                    {
-                        if (expectedConnected)
-                        {
-                            await applier.ApplyConnectAsync(link, cancellationToken);
-                        }
-                        else
-                        {
-                            await applier.ApplyDisconnectAsync(link, cancellationToken);
-                        }
-                        await VerifyFactualStateAsync(link, expectedConnected, cancellationToken);
-                    }
-                    link = await store.SetLinkActualStateAsync(
-                        link.Id, completedState, null, actor, cancellationToken) ?? link;
-                    Publish(completedEvent, link);
-                }
-                catch (Exception exception) when (exception is not OperationCanceledException)
-                {
-                    link = await store.SetLinkActualStateAsync(
-                        link.Id, failureState, CompactError(exception), actor, cancellationToken) ?? link;
-                    Publish(failureEvent, link);
                     failed++;
                 }
-                reconciled++;
             }
             finally
             {
@@ -185,6 +140,69 @@ public sealed class LinkService(
             }
         }
         return new LinkReconciliationResult(reconciled, failed);
+    }
+
+    public async Task<LinkFullReconciliationResult> ReconcileAllAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var candidates = await store.ListEffectiveLinksAsync(cancellationToken);
+        var recoveringFirewall = candidates.Any(candidate =>
+            string.Equals(candidate.LastError, FirewallUnavailableCode, StringComparison.Ordinal));
+        var examined = 0;
+        var failed = 0;
+        var firewallUnavailable = false;
+        foreach (var candidate in candidates)
+        {
+            using var nodeLease = await AcquireNodeLocksAsync(
+                [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
+            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
+            try
+            {
+                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
+                if (current is null || !IsEligibleForFullReconciliation(current))
+                {
+                    continue;
+                }
+                var result = await ConvergeAsync(
+                    current, current.DesiredState == "Active", "system:reconcile", cancellationToken);
+                examined++;
+                if (result.LastError == FirewallUnavailableCode)
+                {
+                    firewallUnavailable = true;
+                }
+                else if (result.ActualState is "Failed" or "Partial")
+                {
+                    failed++;
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+            if (firewallUnavailable)
+            {
+                break;
+            }
+        }
+        if (firewallUnavailable)
+        {
+            await MarkFirewallUnavailableAsync(candidates, cancellationToken);
+            events.Publish(
+                FirewallUnavailableCode,
+                "mesh",
+                JsonSerializer.Serialize(
+                    new ControlError(FirewallUnavailableCode), SmmJsonContext.Default.ControlError));
+            return new LinkFullReconciliationResult(examined, candidates.Count, true);
+        }
+        if (recoveringFirewall)
+        {
+            events.Publish(
+                FirewallAvailableCode,
+                "mesh",
+                JsonSerializer.Serialize(
+                    new ControlError(FirewallAvailableCode), SmmJsonContext.Default.ControlError));
+        }
+        return new LinkFullReconciliationResult(examined, failed, false);
     }
 
     public async Task<LinkExpirationResult> ExpireDueLinksAsync(
@@ -196,53 +214,36 @@ public sealed class LinkService(
         var links = await store.ListExpiredLinksAsync(now, cancellationToken);
         foreach (var candidate in links)
         {
-            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
-            await gate.WaitAsync(cancellationToken);
+            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
             try
             {
-                var current = (await store.ListExpiredLinksAsync(now, cancellationToken))
-                    .SingleOrDefault(link => link.Id == candidate.Id);
-                if (current is null)
+                var current = await store.GetLinkAsync(candidate.Id, cancellationToken);
+                if (current is null || current.ExpiresAt is null || current.ExpiresAt > now
+                    || !await store.IsEffectiveLinkAsync(current, cancellationToken))
                 {
                     continue;
                 }
-
+                LinkPolicy? result;
                 if (current.DesiredState == "Active")
                 {
-                    var result = await DisableCoreAsync(
+                    result = await DisableCoreAsync(
                         current.Id,
                         new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
                         "system:ttl",
                         cancellationToken);
-                    if (result?.ActualState == "Disabled")
-                    {
-                        disabled++;
-                    }
-                    else
-                    {
-                        failed++;
-                    }
-                    continue;
                 }
-
-                var retrying = await store.SetLinkActualStateAsync(
-                    current.Id, "Disconnecting", null, "system:ttl-retry", cancellationToken) ?? current;
-                Publish("link.disconnecting", retrying);
-                try
+                else
                 {
-                    await applier.ApplyDisconnectAsync(retrying, cancellationToken);
-                    await VerifyFactualStateAsync(retrying, expectedConnected: false, cancellationToken);
-                    var completed = await store.SetLinkActualStateAsync(
-                        retrying.Id, "Disabled", null, "system:ttl-retry", cancellationToken) ?? retrying;
-                    Publish("link.disabled", completed);
+                    Publish("link.disconnecting", current);
+                    result = await ConvergeAsync(
+                        current, expectedConnected: false, "system:ttl-retry", cancellationToken);
+                }
+                if (result?.ActualState == "Disabled")
+                {
                     disabled++;
                 }
-                catch (Exception exception) when (exception is not OperationCanceledException)
+                else
                 {
-                    var partial = await store.SetLinkActualStateAsync(
-                        retrying.Id, "Partial", CompactError(exception), "system:ttl-retry", cancellationToken)
-                        ?? retrying;
-                    Publish("link.partial", partial);
                     failed++;
                 }
             }
@@ -253,6 +254,119 @@ public sealed class LinkService(
         }
         return new LinkExpirationResult(disabled, failed);
     }
+
+    private async Task<LinkPolicy> ConvergeAsync(
+        LinkPolicy link,
+        bool expectedConnected,
+        string actor,
+        CancellationToken cancellationToken)
+    {
+        var current = await store.GetLinkAsync(link.Id, cancellationToken) ?? link;
+        if ((current.DesiredState == "Active") != expectedConnected
+            || !await store.IsEffectiveLinkAsync(current, cancellationToken))
+        {
+            return current;
+        }
+
+        var completedState = expectedConnected ? "Active" : "Disabled";
+        var failureState = expectedConnected ? "Failed" : "Partial";
+        var completedEvent = expectedConnected ? "link.active" : "link.disabled";
+        var failureEvent = expectedConnected ? "link.failed" : "link.partial";
+        try
+        {
+            var isConnected = await applier.IsConnectedAsync(current, cancellationToken);
+            var changedFact = isConnected != expectedConnected;
+            if (changedFact)
+            {
+                var pendingState = expectedConnected ? "Connecting" : "Disconnecting";
+                if (current.ActualState != pendingState || current.LastError is not null)
+                {
+                    current = await store.SetLinkActualStateAsync(
+                        current.Id, pendingState, null, actor, cancellationToken) ?? current;
+                }
+                if (actor.StartsWith("system:", StringComparison.Ordinal))
+                {
+                    Publish("link.reconciling", current);
+                }
+                if (expectedConnected)
+                {
+                    await applier.ApplyConnectAsync(current, cancellationToken);
+                }
+                else
+                {
+                    await applier.ApplyDisconnectAsync(current, cancellationToken);
+                }
+                await VerifyFactualStateAsync(current, expectedConnected, cancellationToken);
+            }
+            if (current.ActualState != completedState || current.LastError is not null)
+            {
+                current = await store.SetLinkActualStateAsync(
+                    current.Id, completedState, null, actor, cancellationToken) ?? current;
+                Publish(completedEvent, current);
+            }
+            if (changedFact && actor == "system:reconcile")
+            {
+                Publish(expectedConnected ? "link.reapplied" : "link.orphan-removed", current);
+            }
+        }
+        catch (MeshFirewallUnavailableException)
+        {
+            current = await store.SetLinkActualStateAsync(
+                current.Id, failureState, FirewallUnavailableCode, actor, cancellationToken) ?? current;
+            if (actor != "system:reconcile")
+            {
+                Publish(failureEvent, current);
+            }
+        }
+        catch (Exception exception) when (exception is not OperationCanceledException)
+        {
+            current = await store.SetLinkActualStateAsync(
+                current.Id, failureState, CompactError(exception), actor, cancellationToken) ?? current;
+            Publish(failureEvent, current);
+        }
+        return current;
+    }
+
+    private async Task<LinkPolicy?> GetCurrentEffectiveAsync(
+        string id,
+        CancellationToken cancellationToken)
+    {
+        var current = await store.GetLinkAsync(id, cancellationToken);
+        if (current is null || !await store.IsEffectiveLinkAsync(current, cancellationToken))
+        {
+            return null;
+        }
+        return current;
+    }
+
+    private async Task MarkFirewallUnavailableAsync(
+        IReadOnlyList<LinkPolicy> candidates,
+        CancellationToken cancellationToken)
+    {
+        foreach (var candidate in candidates)
+        {
+            using var nodeLease = await AcquireNodeLocksAsync(
+                [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
+            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
+            try
+            {
+                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
+                if (current is not null && IsEligibleForFullReconciliation(current))
+                {
+                    await store.SetLinkActualStateAsync(
+                        current.Id, "Partial", FirewallUnavailableCode, "system:reconcile", cancellationToken);
+                }
+            }
+            finally
+            {
+                gate.Release();
+            }
+        }
+    }
+
+    private static bool IsEligibleForFullReconciliation(LinkPolicy link)
+        => link.DesiredState == "Active"
+            || (link.DesiredState == "Disabled" && link.ActualState != "Disabled");
 
     private void Publish(string type, LinkPolicy link)
         => events.Publish(
@@ -289,38 +403,13 @@ public sealed class LinkService(
         }
     }
 
-    private async Task<LinkPolicy> ConvergeDisabledCoreAsync(
-        LinkPolicy link,
-        string actor,
+    private async Task<SemaphoreSlim> AcquireLinkGateAsync(
+        string id,
         CancellationToken cancellationToken)
     {
-        var current = (await store.ListLinksAsync(cancellationToken))
-            .SingleOrDefault(candidate => candidate.Id == link.Id) ?? link;
-        if (current.DesiredState != "Disabled")
-        {
-            return current;
-        }
-        try
-        {
-            if (await applier.IsConnectedAsync(current, cancellationToken))
-            {
-                await applier.ApplyDisconnectAsync(current, cancellationToken);
-                await VerifyFactualStateAsync(current, expectedConnected: false, cancellationToken);
-            }
-            if (current.ActualState != "Disabled" || current.LastError is not null)
-            {
-                current = await store.SetLinkActualStateAsync(
-                    current.Id, "Disabled", null, actor, cancellationToken) ?? current;
-                Publish("link.disabled", current);
-            }
-        }
-        catch (Exception exception) when (exception is not OperationCanceledException)
-        {
-            current = await store.SetLinkActualStateAsync(
-                current.Id, "Partial", CompactError(exception), actor, cancellationToken) ?? current;
-            Publish("link.partial", current);
-        }
-        return current;
+        var gate = _reconciliationLocks.GetOrAdd(id, static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        return gate;
     }
 
     private async Task VerifyFactualStateAsync(
@@ -336,7 +425,7 @@ public sealed class LinkService(
     }
 
     private static string CompactError(Exception exception)
-        => exception.Message.Split([(char)13, '\n'], StringSplitOptions.RemoveEmptyEntries)
+        => exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
             .FirstOrDefault() ?? "Policy application failed.";
 
     private sealed class LockLease(SemaphoreSlim[] gates) : IDisposable
@@ -352,3 +441,4 @@ public sealed class LinkService(
 }
 
 public sealed record LinkExpirationResult(int Disabled, int Failed);
+public sealed record LinkFullReconciliationResult(int Examined, int Failed, bool FirewallUnavailable);

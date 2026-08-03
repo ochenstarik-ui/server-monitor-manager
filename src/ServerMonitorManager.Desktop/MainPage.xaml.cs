@@ -28,6 +28,7 @@ public sealed partial class MainPage : Page
     private SettingsPage? _settingsPage;
     private bool _loaded;
     private bool _controlListening;
+    private bool _meshFirewallUnavailable;
 
     public MainPage()
     {
@@ -160,7 +161,7 @@ public sealed partial class MainPage : Page
                 InfoBarSeverity.Warning);
         }
 
-        if (Servers.Count > 0)
+        if (Servers.Count > 0 || _control.IsConfigured)
         {
             await RefreshAllAsync();
         }
@@ -449,6 +450,18 @@ public sealed partial class MainPage : Page
     {
         DispatcherQueue.TryEnqueue(() =>
         {
+            if (controlEvent.Type == MeshLinkViewModel.FirewallUnavailableErrorCode)
+            {
+                SetMeshFirewallUnavailable(true);
+                _ = RefreshMeshAsync(showSuccess: false);
+                return;
+            }
+            if (controlEvent.Type == "mesh.firewall-available")
+            {
+                SetMeshFirewallUnavailable(false);
+                _ = RefreshMeshAsync(showSuccess: false);
+                return;
+            }
             if (controlEvent.Type.StartsWith("link.", StringComparison.Ordinal))
             {
                 ShowInfo(
@@ -730,6 +743,11 @@ public sealed partial class MainPage : Page
         {
             if (Servers.Count == 0)
             {
+                if (_control.IsConfigured)
+                {
+                    await RefreshControlMeshAsync(showSuccess: false);
+                    return;
+                }
                 ShowInfo("Серверы не добавлены", "Сначала создайте SSH-ключ и установите его на сервере.", InfoBarSeverity.Informational);
                 return;
             }
@@ -916,6 +934,12 @@ public sealed partial class MainPage : Page
         LinkActionInfo.IsOpen = true;
     }
 
+    private void SetMeshFirewallUnavailable(bool unavailable)
+    {
+        _meshFirewallUnavailable = unavailable;
+        _linksPage?.SetFirewallUnavailable(unavailable);
+    }
+
     private ServerViewModel? FindHub()
         => Servers.FirstOrDefault(server => server.IsHub);
 
@@ -1030,6 +1054,11 @@ public sealed partial class MainPage : Page
                     link.ActualState,
                     link.LastError));
             }
+
+            SetMeshFirewallUnavailable(links
+                .GroupBy(link => new { link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port })
+                .Select(group => group.MaxBy(link => link.Version)!)
+                .Any(link => link.LastError == MeshLinkViewModel.FirewallUnavailableErrorCode));
 
             var activeLinks = MeshLinks.Count(link => link.ActualState == "Active");
             ActiveLinksValueText.Text = activeLinks.ToString(CultureInfo.InvariantCulture);
@@ -1289,6 +1318,7 @@ public sealed partial class MainPage : Page
                 break;
             case "links":
                 _linksPage ??= new LinksPage(this);
+                _linksPage.SetFirewallUnavailable(_meshFirewallUnavailable);
                 ShowNavigationPage(_linksPage);
                 break;
             case "sessions":

@@ -1353,6 +1353,17 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         return link;
     }
 
+    public async Task<LinkPolicy?> GetLinkAsync(
+        string id,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var link = await ReadLinkAsync(connection, transaction, id, cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+        return link;
+    }
+
     public async Task<IReadOnlyList<LinkPolicy>> ListLinksAsync(CancellationToken cancellationToken = default)
     {
         var result = new List<LinkPolicy>();
@@ -1365,6 +1376,57 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             result.Add(ReadLink(reader));
         }
         return result;
+    }
+
+    public async Task<IReadOnlyList<LinkPolicy>> ListEffectiveLinksAsync(
+        CancellationToken cancellationToken = default)
+    {
+        var result = new List<LinkPolicy>();
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT current.*
+            FROM links AS current
+            WHERE (current.desired_state = 'Active'
+                   OR (current.desired_state = 'Disabled' AND current.actual_state != 'Disabled'))
+              AND NOT EXISTS (
+                  SELECT 1 FROM links AS newer
+                  WHERE newer.source_node_id = current.source_node_id
+                    AND newer.target_node_id = current.target_node_id
+                    AND newer.protocol = current.protocol
+                    AND newer.port = current.port
+                    AND newer.version > current.version)
+            ORDER BY current.version;
+            """;
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(ReadLink(reader));
+        }
+        return result;
+    }
+
+    public async Task<bool> IsEffectiveLinkAsync(
+        LinkPolicy link,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT NOT EXISTS(
+                SELECT 1 FROM links
+                WHERE source_node_id = $source
+                  AND target_node_id = $target
+                  AND protocol = $protocol
+                  AND port = $port
+                  AND version > $version);
+            """;
+        command.Parameters.AddWithValue("$source", link.SourceNodeId);
+        command.Parameters.AddWithValue("$target", link.TargetNodeId);
+        command.Parameters.AddWithValue("$protocol", link.Protocol);
+        command.Parameters.AddWithValue("$port", link.Port);
+        command.Parameters.AddWithValue("$version", link.Version);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 
     public async Task<IReadOnlyList<LinkPolicy>> ListExpiredLinksAsync(

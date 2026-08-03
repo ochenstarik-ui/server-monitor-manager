@@ -22,6 +22,7 @@ SOURCE_NODE_ID="${SOURCE_NODE_ID:-ai-agent}"
 HOME_NODE_ID="${HOME_NODE_ID:-home}"
 SECOND_NODE_ID="${SECOND_NODE_ID:-second}"
 TARGET_PORT="${TARGET_PORT:-22}"
+LINK_RECONCILIATION_SECONDS="${LINK_RECONCILIATION_SECONDS:-300}"
 CONTROL_DEVICE_ID="acceptance-$(date +%s)"
 INSTALLER_COMMAND="${INSTALLER_COMMAND:-sudo /usr/local/sbin/ochenstarik-server-monitor-manager.sh}"
 WORK_DIRECTORY="$(mktemp -d)"
@@ -48,31 +49,54 @@ source_ssh() {
     "$SOURCE_SSH_USER@$SOURCE_SSH_HOST" "$@"
 }
 
+probe_reachable() {
+    local ip="$1"
+    source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"
+}
+
 expect_reachable() {
-  local ip="$1"
-  source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"
+    local ip="$1"
+    probe_reachable "$ip" || {
+        echo "Expected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
+        exit 1
+    }
+}
+
+probe_blocked() {
+    local ip="$1"
+    ! probe_reachable "$ip"
 }
 
 expect_blocked() {
-  local ip="$1"
-  if source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"; then
-    echo "Unexpected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
-    exit 1
-  fi
+    local ip="$1"
+    if ! probe_blocked "$ip"; then
+        echo "Unexpected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
+        exit 1
+    fi
 }
 
-expect_factual_status() {
-  local target="$1"
-  local expected="$2"
-  local command output
+probe_factual_status() {
+    local target="$1"
+    local expected="$2"
+    local command output
   printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
     link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
   output="$(hub_ssh "$command")"
-  [[ "$output" == "$expected" ]] || {
-    echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
-    exit 1
+  [[ "$output" == "$expected" ]]
   }
-}
+
+  expect_factual_status() {
+  local target="$1"
+  local expected="$2"
+  if ! probe_factual_status "$target" "$expected"; then
+      local command output
+      printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
+          link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
+      output="$(hub_ssh "$command")"
+      echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
+      exit 1
+  fi
+  }
 
 decode_base64url() {
   local value="${1//-/+}"
@@ -85,11 +109,11 @@ decode_base64url() {
   printf '%s' "$value" | base64 --decode
 }
 
-echo '[1/11] Checking installed services on all three nodes'
+echo '[1/12] Checking installed services on all three nodes'
 hub_ssh "sudo systemctl is-active ochenstarik-smm-control.service >/dev/null"
 source_ssh "sudo systemctl is-active ochenstarik-smm-agent.service >/dev/null"
 
-echo '[2/11] Creating an isolated operator identity for this acceptance run'
+echo '[2/12] Creating an isolated operator identity for this acceptance run'
 device_code="$(hub_ssh "$INSTALLER_COMMAND control-device-code '$CONTROL_DEVICE_ID'" | tr -d '\r' | grep -o 'SMMDEV1-[A-Za-z0-9_-]*' | tail -n1)"
 [[ -n "$device_code" ]] || { echo 'Hub did not return SMMDEV1 code' >&2; exit 1; }
 decode_base64url "${device_code#SMMDEV1-}" >"$WORK_DIRECTORY/device.env"
@@ -147,7 +171,7 @@ disable_link() {
     "$(jq -cn --arg key "$(cat /proc/sys/kernel/random/uuid)" '{idempotencyKey:$key}')"
 }
 
-echo '[3/11] Confirming all expected Agent identities are online'
+echo '[3/12] Confirming all expected Agent identities are online'
 agents="$(api_get '/api/v1/control/agents')"
 for node in "$SOURCE_NODE_ID" "$HOME_NODE_ID" "$SECOND_NODE_ID"; do
   jq -e --arg node "$node" '.[] | select(.nodeId == $node)' <<<"$agents" >/dev/null || {
@@ -156,7 +180,7 @@ for node in "$SOURCE_NODE_ID" "$HOME_NODE_ID" "$SECOND_NODE_ID"; do
   }
 done
 
-echo '[4/11] Creating independent Links to home and second server'
+echo '[4/12] Creating independent Links to home and second server'
 home_link="$(create_link "$HOME_NODE_ID" 0)"
 second_link="$(create_link "$SECOND_NODE_ID" 0)"
 LINK_HOME_ID="$(jq -r '.id' <<<"$home_link")"
@@ -166,18 +190,18 @@ jq -e '.desiredState == "Active" and .actualState == "Active" and .lastError == 
 expect_factual_status "$HOME_NODE_ID" active
 expect_factual_status "$SECOND_NODE_ID" active
 
-echo '[5/11] Verifying routed access through both Links'
+echo '[5/12] Verifying routed access through both Links'
 expect_reachable "$HOME_WG_IP"
 expect_reachable "$SECOND_WG_IP"
 
-echo '[6/11] Disabling only the second Link'
+echo '[6/12] Disabling only the second Link'
 disable_link "$LINK_SECOND_ID" | jq -e \
   '.desiredState == "Disabled" and .actualState == "Disabled" and .lastError == null' >/dev/null
 expect_factual_status "$SECOND_NODE_ID" disabled
 expect_reachable "$HOME_WG_IP"
 expect_blocked "$SECOND_WG_IP"
 
-echo '[7/11] Verifying automatic TTL expiration'
+echo '[7/12] Verifying automatic TTL expiration'
 ttl_link="$(create_link "$SECOND_NODE_ID" 1)"
 ttl_id="$(jq -r '.id' <<<"$ttl_link")"
 expect_reachable "$SECOND_WG_IP"
@@ -196,13 +220,34 @@ expect_factual_status "$SECOND_NODE_ID" disabled
 expect_blocked "$SECOND_WG_IP"
 expect_reachable "$HOME_WG_IP"
 
-echo '[8/11] Creating and validating a Control backup'
+if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
+  echo '[8/12] Restoring the base firewall without restarting any Node'
+  hub_ssh 'sudo /usr/local/sbin/ochenstarik-smm-emergency firewall-restore'
+  deadline=$((SECONDS + LINK_RECONCILIATION_SECONDS + 30))
+  while ((SECONDS < deadline)); do
+    if probe_factual_status "$HOME_NODE_ID" active \
+        && probe_factual_status "$SECOND_NODE_ID" disabled \
+        && probe_reachable "$HOME_WG_IP" \
+        && probe_blocked "$SECOND_WG_IP"; then
+      break
+    fi
+    sleep 5
+  done
+  expect_factual_status "$HOME_NODE_ID" active
+  expect_factual_status "$SECOND_NODE_ID" disabled
+  expect_reachable "$HOME_WG_IP"
+  expect_blocked "$SECOND_WG_IP"
+else
+  echo '[8/12] Firewall restore reconciliation skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
+fi
+
+echo '[9/12] Creating and validating a Control backup'
 backup_path="$(hub_ssh "sudo systemd-run --wait --pipe --quiet --collect --uid=ochenstarik-smm-control --gid=ochenstarik-smm-control -p EnvironmentFile=/etc/ochenstarik-server-monitor-manager/control.env /usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control backup-create" | grep '/backup-' | tail -n1)"
 [[ "$backup_path" == */backup-* ]] || { echo 'Backup command did not return a backup path' >&2; exit 1; }
 hub_ssh "sudo test -s '$backup_path/manifest.json' && sudo test -s '$backup_path/control.db' && sudo test -s '$backup_path/control-ca.pfx'"
 
 if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
-  echo '[9/11] Restoring the verified backup and restarting Control'
+  echo '[10/12] Restoring the verified backup and restarting Control'
   hub_ssh "sudo sh -c 'set -a; . /etc/ochenstarik-server-monitor-manager/control.env; set +a; systemctl stop ochenstarik-smm-control.service; /usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control backup-restore \"\$1\"; status=\$?; systemctl start ochenstarik-smm-control.service; exit \$status' sh '$backup_path'"
   for _ in {1..30}; do
     if api_get '/healthz' >/dev/null 2>&1; then
@@ -216,11 +261,11 @@ if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
   expect_factual_status "$HOME_NODE_ID" active
   expect_factual_status "$SECOND_NODE_ID" disabled
 else
-  echo '[9/11] Restore check skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
+  echo '[10/12] Restore check skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
 fi
 
 if [[ "${SMM_ACCEPT_REBOOT:-0}" == '1' ]]; then
-  echo '[10/11] Rebooting the Hub and source Node and rechecking policy state'
+  echo '[11/12] Rebooting the Hub and source Node and rechecking policy state'
   hub_ssh 'sudo systemctl reboot' || true
   source_ssh 'sudo systemctl reboot' || true
   sleep 15
@@ -235,10 +280,10 @@ if [[ "${SMM_ACCEPT_REBOOT:-0}" == '1' ]]; then
   expect_factual_status "$HOME_NODE_ID" active
   expect_factual_status "$SECOND_NODE_ID" disabled
 else
-  echo '[10/11] Reboot check skipped; set SMM_ACCEPT_REBOOT=1 to enable it'
+  echo '[11/12] Reboot check skipped; set SMM_ACCEPT_REBOOT=1 to enable it'
 fi
 
-echo '[11/11] Revoking the temporary Operator certificate'
+echo '[12/12] Revoking the temporary Operator certificate'
 api_post "/api/v1/control/devices/$CONTROL_DEVICE_ID/reenroll" \
   "$(jq -cn --arg key "$(cat /proc/sys/kernel/random/uuid)" \
     '{reason:"three-server acceptance completed",idempotencyKey:$key}')" \

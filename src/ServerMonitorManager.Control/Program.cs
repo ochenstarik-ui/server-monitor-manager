@@ -353,7 +353,7 @@ agents.MapPost("/heartbeat", async (
             cancellationToken);
         if (mutation.RequiresReconciliation)
         {
-            var reconciliation = await linkService.ReconcileDisabledLinksForNodeAsync(
+            var reconciliation = await linkService.ReconcileLinksForNodeAsync(
                 heartbeat.NodeId, cancellationToken);
             if (reconciliation.Failed == 0)
             {

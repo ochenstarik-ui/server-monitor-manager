@@ -36,7 +36,12 @@ $requiredXamlContracts = @(
     'x:Name="LinksList"',
     'AutomationProperties.Name=',
     'Click="ConnectButton_Click"',
-    'Click="DisconnectButton_Click"'
+    'Click="DisconnectButton_Click"',
+    'Text="{x:Bind DesiredStatusText}"',
+    'Text="{x:Bind ActualStatusText}"',
+    'Text="{x:Bind DriftText}"',
+    'Text="{x:Bind ErrorText}"',
+    'Text="{x:Bind VersionText}"'
 )
 foreach ($contract in $requiredXamlContracts) {
     if ($linksXaml.IndexOf($contract, [StringComparison]::Ordinal) -lt 0) {

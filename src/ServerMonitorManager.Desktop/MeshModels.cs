@@ -28,7 +28,10 @@ public sealed class MeshLinkViewModel
         long expiresUnix,
         string state,
         long version,
-        string? id = null)
+        string? id = null,
+        string? desiredState = null,
+        string? actualState = null,
+        string? lastError = null)
     {
         Source = source;
         Target = target;
@@ -39,6 +42,9 @@ public sealed class MeshLinkViewModel
         State = state;
         Version = version;
         Id = id;
+        DesiredState = desiredState ?? state;
+        ActualState = actualState ?? state;
+        LastError = lastError;
     }
 
     public string Source { get; set; }
@@ -50,8 +56,17 @@ public sealed class MeshLinkViewModel
     public string State { get; set; }
     public long Version { get; set; }
     public string? Id { get; set; }
+    public string DesiredState { get; set; }
+    public string ActualState { get; set; }
+    public string? LastError { get; set; }
+    public bool HasDrift => !string.Equals(DesiredState, ActualState, StringComparison.Ordinal);
+    public string DesiredStatusText => $"Желаемое состояние: {DesiredState}";
+    public string ActualStatusText => $"Фактическое состояние: {ActualState}";
+    public string DriftText => HasDrift ? "Расхождение: требуется сверка политики" : "Расхождение: нет";
+    public string ErrorText => string.IsNullOrWhiteSpace(LastError) ? "Ошибка: нет" : $"Ошибка: {LastError}";
+    public string VersionText => $"Версия политики: {Version}";
     public string ExpirationText => ExpiresUnix == 0
         ? "вручную"
         : $"до {DateTimeOffset.FromUnixTimeSeconds(ExpiresUnix).ToLocalTime():dd.MM HH:mm}";
-    public string Label => $"{Source} → {Target} · {Protocol.ToUpperInvariant()}/{Port} · {Cidr} · {ExpirationText} · {State} v{Version}";
+    public string Label => $"{Source} → {Target} · {Protocol.ToUpperInvariant()}/{Port} · {Cidr} · {ExpirationText}";
 }

@@ -61,6 +61,19 @@ expect_blocked() {
   fi
 }
 
+expect_factual_status() {
+  local target="$1"
+  local expected="$2"
+  local command output
+  printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
+    link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
+  output="$(hub_ssh "$command")"
+  [[ "$output" == "$expected" ]] || {
+    echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
+    exit 1
+  }
+}
+
 decode_base64url() {
   local value="${1//-/+}"
   value="${value//_/\/}"
@@ -148,15 +161,19 @@ home_link="$(create_link "$HOME_NODE_ID" 0)"
 second_link="$(create_link "$SECOND_NODE_ID" 0)"
 LINK_HOME_ID="$(jq -r '.id' <<<"$home_link")"
 LINK_SECOND_ID="$(jq -r '.id' <<<"$second_link")"
-jq -e '.actualState == "Active"' <<<"$home_link" >/dev/null
-jq -e '.actualState == "Active"' <<<"$second_link" >/dev/null
+jq -e '.desiredState == "Active" and .actualState == "Active" and .lastError == null' <<<"$home_link" >/dev/null
+jq -e '.desiredState == "Active" and .actualState == "Active" and .lastError == null' <<<"$second_link" >/dev/null
+expect_factual_status "$HOME_NODE_ID" active
+expect_factual_status "$SECOND_NODE_ID" active
 
 echo '[5/11] Verifying routed access through both Links'
 expect_reachable "$HOME_WG_IP"
 expect_reachable "$SECOND_WG_IP"
 
 echo '[6/11] Disabling only the second Link'
-disable_link "$LINK_SECOND_ID" | jq -e '.actualState == "Disabled"' >/dev/null
+disable_link "$LINK_SECOND_ID" | jq -e \
+  '.desiredState == "Disabled" and .actualState == "Disabled" and .lastError == null' >/dev/null
+expect_factual_status "$SECOND_NODE_ID" disabled
 expect_reachable "$HOME_WG_IP"
 expect_blocked "$SECOND_WG_IP"
 
@@ -166,11 +183,16 @@ ttl_id="$(jq -r '.id' <<<"$ttl_link")"
 expect_reachable "$SECOND_WG_IP"
 deadline=$((SECONDS + 120))
 while ((SECONDS < deadline)); do
-  state="$(api_get '/api/v1/control/links' | jq -r --arg id "$ttl_id" '.[] | select(.id == $id) | .actualState')"
-  [[ "$state" == 'Disabled' ]] && break
+  state="$(api_get '/api/v1/control/links' | jq -r --arg id "$ttl_id" \
+    '.[] | select(.id == $id) | [.desiredState, .actualState, (.lastError // "")] | @tsv')"
+  [[ "$state" == $'Disabled\tDisabled\t' ]] && break
   sleep 5
 done
-[[ "${state:-}" == 'Disabled' ]] || { echo 'TTL Link did not become Disabled' >&2; exit 1; }
+[[ "${state:-}" == $'Disabled\tDisabled\t' ]] || {
+  echo "TTL Link did not factually converge to Disabled: ${state:-missing}" >&2
+  exit 1
+}
+expect_factual_status "$SECOND_NODE_ID" disabled
 expect_blocked "$SECOND_WG_IP"
 expect_reachable "$HOME_WG_IP"
 
@@ -191,6 +213,8 @@ if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
   api_get '/healthz' >/dev/null
   expect_reachable "$HOME_WG_IP"
   expect_blocked "$SECOND_WG_IP"
+  expect_factual_status "$HOME_NODE_ID" active
+  expect_factual_status "$SECOND_NODE_ID" disabled
 else
   echo '[9/11] Restore check skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
 fi
@@ -208,6 +232,8 @@ if [[ "${SMM_ACCEPT_REBOOT:-0}" == '1' ]]; then
   done
   expect_reachable "$HOME_WG_IP"
   expect_blocked "$SECOND_WG_IP"
+  expect_factual_status "$HOME_NODE_ID" active
+  expect_factual_status "$SECOND_NODE_ID" disabled
 else
   echo '[10/11] Reboot check skipped; set SMM_ACCEPT_REBOOT=1 to enable it'
 fi

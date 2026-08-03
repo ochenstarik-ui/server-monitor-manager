@@ -6,6 +6,11 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 helper="$root/deploy/ochenstarik-smm-policy-apply"
 emergency="$root/deploy/ochenstarik-smm-emergency"
+
+grep -Fq 'if ! listing="$(/usr/sbin/nft -a list chain' "$helper" || {
+    printf '%s\n' "policy status probe must fail closed when nftables cannot be inspected" >&2
+    exit 1
+}
 provisioning_helper_unit="$root/deploy/ochenstarik-smm-provisioning-helper.service"
 
 grep -Fq 'EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env' "$provisioning_helper_unit"
@@ -81,6 +86,17 @@ grep -Fq 'smm:source:target:tcp:22' <<<"$connect_output"
 disconnect_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
     bash "$helper" link-disconnect source target tcp 22)"
 grep -Fq 'smm:source:target:tcp:22' <<<"$disconnect_output"
+status_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    bash "$helper" link-status source target tcp 22)"
+[[ "$status_output" == 'disabled' ]] || {
+    printf '%s\n' "policy helper returned an invalid factual status" >&2
+    exit 1
+}
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+    bash "$helper" link-status source target tcp 22 unexpected >/dev/null 2>&1; then
+    printf '%s\n' "policy helper unexpectedly accepted extra link-status arguments" >&2
+    exit 1
+fi
 rm -f -- "$policy_state"
 
 fixture="$(mktemp -d -t smm-bootstrap-test.XXXXXXXX)"

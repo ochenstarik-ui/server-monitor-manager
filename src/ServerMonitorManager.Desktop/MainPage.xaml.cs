@@ -1014,8 +1014,7 @@ public sealed partial class MainPage : Page
             }
 
             MeshLinks.Clear();
-            foreach (var link in links.Where(link =>
-                         link.DesiredState != "Disabled" || link.ActualState == "Partial"))
+            foreach (var link in links)
             {
                 MeshLinks.Add(new MeshLinkViewModel(
                     link.SourceNodeId,
@@ -1026,11 +1025,15 @@ public sealed partial class MainPage : Page
                     link.ExpiresAt?.ToUnixTimeSeconds() ?? 0,
                     link.ActualState,
                     link.Version,
-                    link.Id));
+                    link.Id,
+                    link.DesiredState,
+                    link.ActualState,
+                    link.LastError));
             }
 
-            ActiveLinksValueText.Text = MeshLinks.Count.ToString(CultureInfo.InvariantCulture);
-            MeshStatusText.Text = $"Control · {MeshNodes.Count} узлов · {MeshLinks.Count} активных связей";
+            var activeLinks = MeshLinks.Count(link => link.ActualState == "Active");
+            ActiveLinksValueText.Text = activeLinks.ToString(CultureInfo.InvariantCulture);
+            MeshStatusText.Text = $"Control · {MeshNodes.Count} узлов · {activeLinks} активных · {MeshLinks.Count} политик";
             if (showSuccess)
             {
                 ShowInfo("Control Hub обновлён", MeshStatusText.Text, InfoBarSeverity.Success);

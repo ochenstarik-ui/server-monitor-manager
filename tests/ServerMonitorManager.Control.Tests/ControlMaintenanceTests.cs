@@ -228,14 +228,25 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
         public int DisconnectCalls { get; private set; }
 
         public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
-            => Task.CompletedTask;
+        {
+            IsConnected = true;
+            return Task.CompletedTask;
+        }
 
         public Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         {
             DisconnectCalls++;
-            return FailDisconnect
-                ? Task.FromException(new InvalidOperationException("simulated firewall failure"))
-                : Task.CompletedTask;
+            if (FailDisconnect)
+            {
+                return Task.FromException(new InvalidOperationException("simulated firewall failure"));
+            }
+            IsConnected = false;
+            return Task.CompletedTask;
         }
+
+        private bool IsConnected { get; set; }
+
+        public Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken)
+            => Task.FromResult(IsConnected);
     }
 }

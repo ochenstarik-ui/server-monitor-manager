@@ -8,6 +8,7 @@ public interface ILinkPolicyApplier
 {
     Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken);
     Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken);
+    Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken);
 }
 
 public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkPolicyApplier
@@ -35,7 +36,26 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
             ],
             cancellationToken);
 
-    private async Task RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+    public async Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken)
+    {
+        var output = await RunAsync(
+            [
+                "link-status",
+                link.SourceNodeId,
+                link.TargetNodeId,
+                link.Protocol,
+                link.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            ],
+            cancellationToken);
+        return output switch
+        {
+            "active" => true,
+            "disabled" => false,
+            _ => throw new InvalidOperationException("Hub policy helper returned an invalid link status.")
+        };
+    }
+
+    private async Task<string> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
     {
         var startInfo = new ProcessStartInfo
         {
@@ -64,6 +84,6 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
                 ? $"Hub policy helper exited with code {process.ExitCode}."
                 : message);
         }
-        _ = await output;
+        return (await output).Trim();
     }
 }

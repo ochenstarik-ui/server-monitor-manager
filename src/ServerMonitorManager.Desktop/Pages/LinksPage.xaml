@@ -68,7 +68,7 @@
 
             <Grid x:Name="LinksListPanel" Grid.Row="1" RowSpacing="10">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Разрешённые направления" />
+                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Политики направлений" />
                 <ListView x:Name="LinksList" Grid.Row="1" AutomationProperties.Name="Список связей" ItemsSource="{x:Bind Links}" SelectionMode="Single">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:MeshLinkViewModel">
@@ -76,7 +76,11 @@
                                 <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                                 <StackPanel VerticalAlignment="Center">
                                     <TextBlock FontWeight="SemiBold" Text="{x:Bind Label}" TextWrapping="Wrap" />
-                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="Направленная политика доступа" />
+                                    <TextBlock Text="{x:Bind DesiredStatusText}" TextWrapping="Wrap" />
+                                    <TextBlock Text="{x:Bind ActualStatusText}" TextWrapping="Wrap" />
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind DriftText}" TextWrapping="Wrap" />
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind ErrorText}" TextWrapping="Wrap" />
+                                    <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind VersionText}" />
                                 </StackPanel>
                                 <FontIcon Grid.Column="1" VerticalAlignment="Center" Glyph="&#xE72A;" />
                             </Grid>

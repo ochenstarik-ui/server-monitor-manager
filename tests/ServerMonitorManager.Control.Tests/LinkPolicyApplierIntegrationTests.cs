@@ -26,6 +26,7 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         var sudoPath = Path.Combine(_directory, "sudo");
         var helperPath = Path.Combine(_directory, "policy-helper");
         var failureMarkerPath = Path.Combine(_directory, "fail-disconnect");
+        var connectedMarkerPath = Path.Combine(_directory, "connected");
         var invocationLogPath = Path.Combine(_directory, "helper.log");
         await WriteExecutableAsync(
             sudoPath,
@@ -46,9 +47,22 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
             #!/bin/sh
             set -eu
             printf '%s\n' "$*" >> '{{ShellQuote(invocationLogPath)}}'
+            if [ "${1:-}" = "link-connect" ]; then
+                touch '{{ShellQuote(connectedMarkerPath)}}'
+            fi
             if [ "${1:-}" = "link-disconnect" ] && [ -f '{{ShellQuote(failureMarkerPath)}}' ]; then
                 echo "nftables validation failed" >&2
                 exit 23
+            fi
+            if [ "${1:-}" = "link-disconnect" ]; then
+                rm -f '{{ShellQuote(connectedMarkerPath)}}'
+            fi
+            if [ "${1:-}" = "link-status" ]; then
+                if [ -f '{{ShellQuote(connectedMarkerPath)}}' ]; then
+                    printf '%s\n' active
+                else
+                    printf '%s\n' disabled
+                fi
             fi
             """,
             cancellationToken);
@@ -79,7 +93,7 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         var restartedStore = CreateStore();
         await restartedStore.InitializeAsync(cancellationToken);
         var restartedService = CreateLinkService(restartedStore, sudoPath, helperPath);
-        var failedReconciliation = await restartedService.ReconcileDisabledLinksForNodeAsync(
+        var failedReconciliation = await restartedService.ReconcileLinksForNodeAsync(
             "home", cancellationToken);
         Assert.Equal(new LinkReconciliationResult(1, 1), failedReconciliation);
 
@@ -87,7 +101,7 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         var secondRestartStore = CreateStore();
         await secondRestartStore.InitializeAsync(cancellationToken);
         var secondRestartService = CreateLinkService(secondRestartStore, sudoPath, helperPath);
-        var successfulReconciliation = await secondRestartService.ReconcileDisabledLinksForNodeAsync(
+        var successfulReconciliation = await secondRestartService.ReconcileLinksForNodeAsync(
             "home", cancellationToken);
         Assert.Equal(new LinkReconciliationResult(1, 0), successfulReconciliation);
         var persisted = Assert.Single(await secondRestartStore.ListEffectiveLinksForNodeAsync(
@@ -96,10 +110,15 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
         Assert.Equal("Disabled", persisted.ActualState);
 
         var invocations = await File.ReadAllLinesAsync(invocationLogPath, cancellationToken);
-        Assert.Equal(4, invocations.Length);
+        Assert.Equal(8, invocations.Length);
         Assert.Equal("link-connect ai-agent home tcp 22 60", invocations[0]);
-        Assert.All(invocations.Skip(1), invocation =>
-            Assert.Equal("link-disconnect ai-agent home tcp 22", invocation));
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[1]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[2]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[3]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[4]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[5]);
+        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[6]);
+        Assert.Equal("link-status ai-agent home tcp 22", invocations[7]);
     }
 
     public ValueTask DisposeAsync()

@@ -5,7 +5,7 @@ namespace ServerMonitorManager.Control;
 
 public sealed class CertificateLifecycleService(
     ControlStore store,
-    ILinkPolicyApplier applier,
+    LinkService links,
     ControlEventBroker events)
 {
     private static readonly TimeSpan TicketLifetime = TimeSpan.FromMinutes(10);
@@ -16,6 +16,7 @@ public sealed class CertificateLifecycleService(
         string actor,
         CancellationToken cancellationToken)
     {
+        using var nodeLease = await links.AcquireNodeLocksAsync([nodeId], cancellationToken);
         var mutation = await store.BeginAgentReenrollmentAsync(
             nodeId, request, actor, TicketLifetime, cancellationToken);
         if (mutation is null)
@@ -23,35 +24,17 @@ public sealed class CertificateLifecycleService(
             return null;
         }
 
-        if (mutation.IsReplay)
+        if (!mutation.IsReplay)
         {
-            return mutation.Ticket;
+            PublishCertificate("agent.revoked", mutation.Ticket);
         }
-
-        PublishCertificate("agent.revoked", mutation.Ticket);
-        foreach (var pendingLink in mutation.Links)
+        var pendingLinks = mutation.IsReplay
+            ? (await store.ListEffectiveLinksForNodeAsync(nodeId, cancellationToken))
+                .Where(link => link.DesiredState == "Disabled")
+            : mutation.Links;
+        foreach (var pendingLink in pendingLinks)
         {
-            PublishLink("link.disconnecting", pendingLink);
-            LinkPolicy actual;
-            try
-            {
-                await applier.ApplyDisconnectAsync(pendingLink, cancellationToken);
-                actual = await store.SetLinkActualStateAsync(
-                        pendingLink.Id, "Disabled", null, actor, cancellationToken)
-                    ?? pendingLink;
-                PublishLink("link.disabled", actual);
-            }
-            catch (Exception exception) when (exception is not OperationCanceledException)
-            {
-                actual = await store.SetLinkActualStateAsync(
-                        pendingLink.Id,
-                        "Partial",
-                        CompactError(exception),
-                        actor,
-                        cancellationToken)
-                    ?? pendingLink;
-                PublishLink("link.partial", actual);
-            }
+            await links.ConvergeDisabledAsync(pendingLink, actor, cancellationToken);
         }
 
         return mutation.Ticket;
@@ -85,13 +68,4 @@ public sealed class CertificateLifecycleService(
                     ticket.DisabledLinks),
                 SmmJsonContext.Default.CertificateStatusEvent));
 
-    private void PublishLink(string type, LinkPolicy link)
-        => events.Publish(
-            type,
-            link.Id,
-            JsonSerializer.Serialize(link, SmmJsonContext.Default.LinkPolicy));
-
-    private static string CompactError(Exception exception)
-        => exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
-            .FirstOrDefault() ?? "Policy application failed.";
 }

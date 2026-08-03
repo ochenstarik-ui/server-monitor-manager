@@ -36,6 +36,7 @@ validate_rule() {
     case "$action" in
         link-connect) [[ $# -eq 6 ]] || fail "invalid link-connect argument count" ;;
         link-disconnect) [[ $# -eq 5 ]] || fail "invalid link-disconnect argument count" ;;
+        link-status) [[ $# -eq 5 ]] || fail "invalid link-status argument count" ;;
         *) fail "unsupported action" ;;
     esac
     validate_node_id "$2"
@@ -59,12 +60,14 @@ run_nft() {
 }
 
 rule_exists() {
-    local comment="$1"
+    local comment="$1" listing
     if [[ "$testing" == "1" ]]; then
         return 1
     fi
-    /usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" \
-        | grep -Fq "comment \"$comment\""
+    if ! listing="$(/usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME")"; then
+        fail "could not inspect nftables Link policy"
+    fi
+    grep -Fq "comment \"$comment\"" <<<"$listing"
 }
 
 connect_rule() {
@@ -99,9 +102,23 @@ disconnect_rule() {
     )
 }
 
+status_rule() {
+    local source_id="$1" target_id="$2" protocol="$3" port="$4" comment
+    # A status is meaningful only for identities currently known to the mesh.
+    lookup_node_ip "$source_id" >/dev/null
+    lookup_node_ip "$target_id" >/dev/null
+    comment="smm:${source_id}:${target_id}:${protocol}:${port}"
+    if rule_exists "$comment"; then
+        printf '%s\n' active
+    else
+        printf '%s\n' disabled
+    fi
+}
+
 action="${1:-}"
 validate_rule "$@"
 case "$action" in
     link-connect) connect_rule "$2" "$3" "$4" "$5" ;;
     link-disconnect) disconnect_rule "$2" "$3" "$4" "$5" ;;
+    link-status) status_rule "$2" "$3" "$4" "$5" ;;
 esac

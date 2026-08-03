@@ -19,6 +19,8 @@ $linksCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\Pages\LinksPage.xaml.cs')
 $mainCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\MainPage.xaml.cs')
+$meshModelsCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+    Join-Path $root 'src\ServerMonitorManager.Desktop\MeshModels.cs')
 $appCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
     Join-Path $root 'src\ServerMonitorManager.Desktop\App.xaml.cs')
 $sshCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
@@ -51,6 +53,22 @@ foreach ($contract in $requiredXamlContracts) {
 if ($linksCode.IndexOf(
         'LinksList.SelectedItem as MeshLinkViewModel', [StringComparison]::Ordinal) -lt 0) {
     throw 'Links page must pass its selected Link to the command handler.'
+}
+if ($linksXaml.IndexOf('x:Name="FirewallUnavailableInfo"', [StringComparison]::Ordinal) -lt 0 -or
+    $linksXaml.IndexOf('Message="Mesh firewall ', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Links page must expose one persistent Mesh firewall unavailable banner.'
+}
+if ($linksCode.IndexOf('SetFirewallUnavailable', [StringComparison]::Ordinal) -lt 0 -or
+    $mainCode.IndexOf('MeshLinkViewModel.FirewallUnavailableErrorCode', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Desktop must project both event and persisted Mesh firewall unavailable state.'
+}
+if ($meshModelsCode.IndexOf('LastError == FirewallUnavailableErrorCode ? string.Empty',
+        [StringComparison]::Ordinal) -lt 0) {
+    throw 'Shared Mesh firewall errors must be suppressed from individual Link rows.'
+}
+if ($mainCode.IndexOf('Servers.Count > 0 || _control.IsConfigured', [StringComparison]::Ordinal) -lt 0 -or
+    $mainCode.IndexOf('await RefreshControlMeshAsync(showSuccess: false);', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Configured Control state must refresh even when no SSH profiles exist.'
 }
 if ($mainCode.IndexOf(
         'MeshLinksList.SelectedItem = selectedLink;', [StringComparison]::Ordinal) -lt 0) {

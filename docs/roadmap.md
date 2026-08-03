@@ -57,6 +57,8 @@
 - [x] обязательное восстановление disabled policy после reconnect;
 - [x] append-only audit операций Link;
 - [x] интеграционные тесты kill switch, process restart и helper failure;
+- [x] B-2: независимая фоновая и emergency-triggered реконсиляция, агрегированное состояние недоступного Mesh firewall и Desktop banner;
+- [ ] B-3: развести результат реконсиляции на `Examined` / `Converged` / `Failed` (M2), выбрать фильтр или retention завершённых Disabled-политик (M4) и типизировать ещё не активированный Mesh Node (M5). Эти изменения вынесены отдельно, потому что меняют API/UI semantics и helper classification, тогда как B-2 ограничен восстановлением фактических правил и общим firewall failure;
 - [ ] выполнить физический acceptance Hub + source Node + два destination Node с WireGuard/nftables/reboot.
 
 ## Этап 4 — мониторинг и терминал

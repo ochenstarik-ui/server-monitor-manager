@@ -18,6 +18,9 @@ public sealed partial class LinksPage : Page
 
     public ObservableCollection<MeshLinkViewModel> Links => _host.MeshLinks;
 
+    internal void SetFirewallUnavailable(bool unavailable)
+        => FirewallUnavailableInfo.IsOpen = unavailable;
+
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         => await _host.RefreshLinksFromPageAsync();
 

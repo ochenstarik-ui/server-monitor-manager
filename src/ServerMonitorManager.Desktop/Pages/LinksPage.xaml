@@ -8,6 +8,7 @@
     <Grid RowSpacing="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
         <Grid ColumnSpacing="12">
@@ -27,7 +28,15 @@
             </CommandBar>
         </Grid>
 
-        <Grid x:Name="LinksWorkspace" Grid.Row="1" ColumnSpacing="20" RowSpacing="20">
+        <InfoBar
+            x:Name="FirewallUnavailableInfo"
+            Grid.Row="1"
+            IsClosable="False"
+            IsOpen="False"
+            Message="Mesh firewall не загружен"
+            Severity="Error" />
+
+        <Grid x:Name="LinksWorkspace" Grid.Row="2" ColumnSpacing="20" RowSpacing="20">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition x:Name="EditorColumn" Width="*" />
                 <ColumnDefinition x:Name="ListColumn" Width="0" />

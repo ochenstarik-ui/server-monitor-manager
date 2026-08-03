@@ -24,6 +24,8 @@ public sealed class ControlOptions
 
     public int LinkExpirationPollSeconds { get; init; } = 15;
 
+    public int LinkReconciliationSeconds { get; init; } = 300;
+
     public string BackupDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/backups";
 
     public int BackupIntervalHours { get; init; } = 24;

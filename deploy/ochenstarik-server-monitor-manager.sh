@@ -494,6 +494,7 @@ Control__CertificateAuthorityPath=$ETC_DIR/control-ca.pfx
 Control__BackupDirectory=$STATE_DIR/backups
 Control__HubHelperPath=$POLICY_HELPER
 Control__PrivilegeEscalationPath=/usr/bin/sudo
+Control__LinkReconciliationSeconds=300
 EOF
     printf '%s\n' "https://$public_host:$port" >"$ETC_DIR/control-public-url"
     chown root:"$CONTROL_USER" "$ETC_DIR/control.env"

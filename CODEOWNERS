@@ -1,0 +1,25 @@
+# CODEOWNERS
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owner for everything
+* @ochenstarik
+
+# Workflow and CI configuration
+.github/ @ochenstarik
+
+# Security-sensitive deployment and provisioning
+deploy/ @ochenstarik
+src/ServerMonitorManager.Provisioning.Helper/ @ochenstarik
+
+# Core server components
+src/ServerMonitorManager.Agent/ @ochenstarik
+src/ServerMonitorManager.Control/ @ochenstarik
+src/ServerMonitorManager.Core/ @ochenstarik
+
+# Desktop client
+src/ServerMonitorManager.Desktop/ @ochenstarik
+
+# Security policy and documentation
+SECURITY.md @ochenstarik
+docs/security-model.md @ochenstarik
+

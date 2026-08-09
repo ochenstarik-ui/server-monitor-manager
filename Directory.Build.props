@@ -1,0 +1,22 @@
+<Project>
+  <PropertyGroup>
+    <!-- Analysis -->
+    <Nullable>enable</Nullable>
+    <EnableNETAnalyzers>true</EnableNETAnalyzers>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!-- Lock files — restore must match exactly what is committed -->
+    <RestorePackagesWithLockFile>true</RestorePackagesWithLockFile>
+    <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64</RuntimeIdentifiers>
+
+    <!-- Deterministic / reproducible build -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+    <JsonSerializerIsReflectionDisabledByDefault>false</JsonSerializerIsReflectionDisabledByDefault>
+  </PropertyGroup>
+
+  <!-- Include ILLink package reference across all projects so lockfiles match publish when trimmed -->
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.ILLink.Tasks" VersionOverride="10.0.10" PrivateAssets="all" />
+  </ItemGroup>
+</Project>

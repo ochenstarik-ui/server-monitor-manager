@@ -21,20 +21,22 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj -p:Platform=x64 -p:PublishReadyToRun=true -r win-x64
+        run: dotnet restore src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj -p:Platform=x64 -p:PublishReadyToRun=true -p:RestoreLockedMode=true
 
       - name: Build x64 Release
         run: dotnet build src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --configuration Release -p:Platform=x64 -p:PublishReadyToRun=true -r win-x64 --no-restore
 
       - name: Verify formatting
-        run: dotnet format src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore
+        run: |
+          dotnet format whitespace src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore
+          dotnet format style src/ServerMonitorManager.Desktop/ServerMonitorManager.Desktop.csproj --verify-no-changes --no-restore
 
       - name: Verify Windows desktop contracts
         shell: pwsh
         run: ./tests/windows/Test-DesktopContracts.ps1
 
       - name: Test Desktop security
-        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release
+        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release -p:RestoreLockedMode=true
 
       - name: Build test-signed MSIX installer
         shell: pwsh

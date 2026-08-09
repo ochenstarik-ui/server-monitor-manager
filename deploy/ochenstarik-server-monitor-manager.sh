@@ -789,7 +789,7 @@ install_agent() {
     ensure_system_user "$AGENT_USER"
     install -d -m 0711 -o root -g root "$ETC_DIR" "$STATE_DIR"
     install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$STATE_DIR/agent"
-    install -d -m 0710 -o root -g "$AGENT_USER" "$ENROLLMENT_DIR"
+    install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$ENROLLMENT_DIR"
     install -d -m 0700 -o root -g root "$STATE_DIR/provisioning/rollback"
     install_tree_atomic "$TEMP_DIR/agent" "$LIB_DIR/agent" "root:root"
     install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"

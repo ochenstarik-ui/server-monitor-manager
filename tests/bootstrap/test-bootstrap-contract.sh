@@ -23,7 +23,7 @@ if grep -Fq 'SMM_EnrollToken=$ENROLL_TOKEN' "$bootstrap"; then
     exit 1
 fi
 grep -Fq 'readonly ENROLLMENT_DIR="${STATE_DIR}-enrollment"' "$bootstrap"
-grep -Fq 'install -d -m 0710 -o root -g "$AGENT_USER" "$ENROLLMENT_DIR"' "$bootstrap"
+grep -Fq 'install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$ENROLLMENT_DIR"' "$bootstrap"
 grep -Fq 'token_temp="$(mktemp "$ENROLLMENT_DIR/.enroll-token.XXXXXXXX")"' "$bootstrap"
 if grep -Fq '$STATE_DIR/enrollment' "$bootstrap"; then
     printf '%s\n' "enrollment directory is beneath Control-writable state" >&2

@@ -17,6 +17,7 @@ using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ServerMonitorManager.Core;
 using Xunit;
 
 namespace ServerMonitorManager.Control.Tests;
@@ -56,6 +57,29 @@ public sealed class ControlApiTests : IAsyncDisposable
         Assert.Equal(HttpStatusCode.OK,
             (await client.GetAsync(
                 "/api/v1/automation/links", TestContext.Current.CancellationToken)).StatusCode);
+    }
+
+    [Fact]
+    public async Task RenewalEndpointsRejectUnauthenticatedRequests()
+    {
+        using var anonymous = _factory.CreateClient();
+        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var csr = new CertificateRequest("CN=node-a", key, HashAlgorithmName.SHA256).CreateSigningRequestPem();
+        var req = new CertificateRenewalRequest("node-a", csr, Guid.NewGuid().ToString());
+
+        var agentRenewRes = await anonymous.PostAsJsonAsync(
+            "/api/v1/agents/certificate/renew",
+            req,
+            SmmJsonContext.Default.CertificateRenewalRequest,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, agentRenewRes.StatusCode);
+
+        var operatorRenewRes = await anonymous.PostAsJsonAsync(
+            "/api/v1/control/certificates/renew",
+            req,
+            SmmJsonContext.Default.CertificateRenewalRequest,
+            TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.Unauthorized, operatorRenewRes.StatusCode);
     }
 
     [Fact]

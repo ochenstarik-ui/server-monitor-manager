@@ -410,39 +410,6 @@ agents.MapPost("/certificate/renew", async (
         return Results.Conflict(new ProblemDetails { Title = exception.Message });
     }
 });
-
-app.MapPost("/api/v1/certificates/renew", async (
-    CertificateRenewalRequest request,
-    HttpContext context,
-    CertificateLifecycleService lifecycle,
-    CancellationToken cancellationToken) =>
-{
-    var entityId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
-    var role = context.User.FindFirstValue(ClaimTypes.Role);
-    if (string.IsNullOrWhiteSpace(entityId) || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
-    {
-        return Results.ValidationProblem(new Dictionary<string, string[]>
-        {
-            ["request"] = ["Invalid entity id or idempotency key."]
-        });
-    }
-
-    try
-    {
-        IssuedCertificate issued = role switch
-        {
-            "Agent" => await lifecycle.RenewAgentCertificateAsync(entityId, request, entityId, cancellationToken),
-            "Operator" => await lifecycle.RenewDeviceCertificateAsync(entityId, request, entityId, cancellationToken),
-            _ => throw new InvalidOperationException("Unauthorized role for certificate renewal.")
-        };
-        return Results.Ok(new CertificateRenewalResponse(
-            entityId, issued.CertificatePem, issued.CertificateAuthorityPem, issued.ExpiresAt));
-    }
-    catch (InvalidOperationException exception)
-    {
-        return Results.Conflict(new ProblemDetails { Title = exception.Message });
-    }
-}).RequireAuthorization();
 agents.MapGet("/provisioning/jobs/next", async (
     HttpContext context,
     ControlStore controlStore,
@@ -606,6 +573,35 @@ agents.MapPost("/provisioning/jobs/{id}/execution-grant", async (
 });
 
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
+control.MapPost("/certificates/renew", async (
+    CertificateRenewalRequest request,
+    HttpContext context,
+    CertificateLifecycleService lifecycle,
+    CancellationToken cancellationToken) =>
+{
+    var deviceId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(deviceId)
+        || !NodeIdValidator.IsValid(deviceId)
+        || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["request"] = ["Invalid device id or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var issued = await lifecycle.RenewDeviceCertificateAsync(
+            deviceId, request, deviceId, cancellationToken);
+        return Results.Ok(new CertificateRenewalResponse(
+            deviceId, issued.CertificatePem, issued.CertificateAuthorityPem, issued.ExpiresAt));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
 control.MapGet("/provisioning/catalogs/system-base-install/1", () =>

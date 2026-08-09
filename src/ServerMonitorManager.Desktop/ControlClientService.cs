@@ -318,7 +318,7 @@ public sealed partial class ControlClientService
                         var csrRequest = new CertificateRequest($"CN={deviceId}", key, HashAlgorithmName.SHA256);
                         var req = new CertificateRenewalRequest(deviceId, csrRequest.CreateSigningRequestPem(), Guid.NewGuid().ToString());
                         using var renewClient = CreateHttpClient(controlUrl, ca, certificate);
-                        using var resp = await renewClient.PostAsJsonAsync("api/v1/certificates/renew", req, SmmJsonContext.Default.CertificateRenewalRequest, cancellationToken);
+                        using var resp = await renewClient.PostAsJsonAsync("api/v1/control/certificates/renew", req, SmmJsonContext.Default.CertificateRenewalRequest, cancellationToken);
                         if (resp.IsSuccessStatusCode)
                         {
                             var renewal = await resp.Content.ReadFromJsonAsync(SmmJsonContext.Default.CertificateRenewalResponse, cancellationToken);

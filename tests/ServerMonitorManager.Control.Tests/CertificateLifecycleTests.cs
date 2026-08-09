@@ -240,6 +240,24 @@ public sealed class CertificateLifecycleTests : IDisposable
         Assert.True(optionsValid.ClientCertificateDays is >= 1 and <= 90);
     }
 
+    [Fact]
+    public void CertificateDays45_IssuesCertificateWith45DaysValidity()
+    {
+        var caPath = Path.Combine(_directory, "ca45.pfx");
+        CreateCaPfx(caPath);
+        var options = new ControlOptions { ClientCertificateDays = 45, CertificateAuthorityPath = caPath };
+        using var ca = new CertificateAuthority(Microsoft.Extensions.Options.Options.Create(options));
+
+        using var clientKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+        var csr = new CertificateRequest("CN=test-node-45", clientKey, HashAlgorithmName.SHA256).CreateSigningRequestPem();
+
+        var issued = ca.IssueClientCertificate("test-node-45", csr);
+        using var issuedCert = X509Certificate2.CreateFromPem(issued.CertificatePem);
+
+        var validitySpan = issuedCert.NotAfter - issuedCert.NotBefore;
+        Assert.InRange(validitySpan.TotalDays, 44.9, 45.1);
+    }
+
     private static void CreateCaPfx(string path)
     {
         using var caKey = ECDsa.Create(ECCurve.NamedCurves.nistP256);

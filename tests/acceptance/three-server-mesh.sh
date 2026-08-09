@@ -76,27 +76,27 @@ expect_blocked() {
 }
 
 probe_factual_status() {
-    local target="$1"
-    local expected="$2"
-    local command output
+  local target="$1"
+  local expected="$2"
+  local command output
   printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
     link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
   output="$(hub_ssh "$command")"
   [[ "$output" == "$expected" ]]
-  }
+}
 
-  expect_factual_status() {
+expect_factual_status() {
   local target="$1"
   local expected="$2"
   if ! probe_factual_status "$target" "$expected"; then
-      local command output
-      printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
-          link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
-      output="$(hub_ssh "$command")"
-      echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
-      exit 1
+    local command output
+    printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
+      link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
+    output="$(hub_ssh "$command")"
+    echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
+    exit 1
   fi
-  }
+}
 
 decode_base64url() {
   local value="${1//-/+}"
@@ -236,6 +236,21 @@ if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
   expect_factual_status "$HOME_NODE_ID" active
   expect_factual_status "$SECOND_NODE_ID" disabled
   expect_reachable "$HOME_WG_IP"
+  expect_blocked "$SECOND_WG_IP"
+
+  echo '[8/12] Injecting an orphan accept rule for the disabled policy'
+  printf -v orphan_command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
+    link-connect "$SOURCE_NODE_ID" "$SECOND_NODE_ID" tcp "$TARGET_PORT" 0
+  hub_ssh "$orphan_command" >/dev/null
+  expect_factual_status "$SECOND_NODE_ID" active
+  deadline=$((SECONDS + LINK_RECONCILIATION_SECONDS + 30))
+  while ((SECONDS < deadline)); do
+    if probe_factual_status "$SECOND_NODE_ID" disabled && probe_blocked "$SECOND_WG_IP"; then
+      break
+    fi
+    sleep 5
+  done
+  expect_factual_status "$SECOND_NODE_ID" disabled
   expect_blocked "$SECOND_WG_IP"
 else
   echo '[8/12] Firewall restore reconciliation skipped; set SMM_ACCEPT_RESTORE=1 to enable it'

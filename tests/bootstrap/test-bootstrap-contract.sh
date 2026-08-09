@@ -107,6 +107,90 @@ if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
     exit 1
 fi
 
+policy_listing="$(mktemp -t smm-policy-listing.XXXXXXXX)"
+cat >"$policy_listing" <<'EOF'
+ip saddr 10.77.0.2 ip daddr 10.77.0.3 tcp dport 22 counter accept comment "smm:source:target:tcp:22" # handle 5
+counter accept comment "foreign:keep-me" # handle 6
+counter accept comment "smm:source:target:tcp:22" # handle 7
+counter accept comment "smm:FORGED:target:tcp:22" # handle 8
+EOF
+list_error="$(mktemp -t smm-policy-list-error.XXXXXXXX)"
+list_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_LISTING_FILE="$policy_listing" \
+    bash "$helper" link-list 2>"$list_error")"
+[[ "$list_output" == $'source\ttarget\ttcp\t22\nsource\ttarget\ttcp\t22' ]]
+if grep -Fq 'foreign:keep-me' <<<"$list_output"; then
+    printf '%s\n' "policy helper exposed a foreign nftables comment" >&2
+    exit 1
+fi
+grep -Fq 'forged managed comment ignored' "$list_error"
+empty_listing="$(mktemp -t smm-policy-empty-listing.XXXXXXXX)"
+empty_list_output="$(SMM_POLICY_TESTING=1 SMM_POLICY_LISTING_FILE="$empty_listing" \
+    bash "$helper" link-list)"
+[[ -z "$empty_list_output" ]]
+if SMM_POLICY_TESTING=1 SMM_POLICY_FIREWALL_UNAVAILABLE=1 \
+    bash "$helper" link-list >/dev/null 2>"$list_error"; then
+    printf '%s\n' "missing Link policy table unexpectedly produced a listing" >&2
+    exit 1
+else
+    [[ $? -eq 79 ]]
+fi
+[[ "$(<"$list_error")" == 'mesh.firewall-unavailable' ]]
+if SMM_POLICY_TESTING=1 bash "$helper" link-list unexpected >/dev/null 2>&1; then
+    printf '%s\n' "policy helper unexpectedly accepted extra link-list arguments" >&2
+    exit 1
+fi
+inactive_state="$(mktemp -t smm-policy-inactive-state.XXXXXXXX)"
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+printf 'target\t10.77.0.3\t-\treserved\n' >>"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly activated a Link to a reserved Node" >&2
+    exit 1
+else
+    [[ $? -eq 80 ]]
+fi
+[[ "$(<"$list_error")" == 'mesh.node-not-activated' ]]
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+printf 'target\t\tkey-target\tactive\n' >>"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly accepted a blank Node address" >&2
+    exit 1
+else
+    [[ $? -eq 78 ]]
+fi
+[[ "$(<"$list_error")" == 'policy helper: node has no valid mesh address: target' ]]
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+printf 'target\tnot-an-ip\tkey-target\tactive\n' >>"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly accepted an invalid Node address" >&2
+    exit 1
+else
+    [[ $? -eq 78 ]]
+fi
+[[ "$(<"$list_error")" == 'policy helper: node has no valid mesh address: target' ]]
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+printf 'target\t999.77.0.3\tkey-target\tactive\n' >>"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly accepted an out-of-range Node address" >&2
+    exit 1
+else
+    [[ $? -eq 78 ]]
+fi
+[[ "$(<"$list_error")" == 'policy helper: node has no valid mesh address: target' ]]
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+printf 'target\t10.77.0.3\tkey-target\tgarbage!\n' >>"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly accepted a malformed Node status" >&2
+    exit 1
+else
+    [[ $? -eq 78 ]]
+fi
+[[ "$(<"$list_error")" == 'policy helper: invalid mesh node status: target' ]]
+
 generation_a='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 generation_b='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 reconcile_marker="$(mktemp -t smm-reconcile-marker.XXXXXXXX)"
@@ -121,6 +205,9 @@ SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconci
     bash "$helper" reconcile-complete "$generation_b" >/dev/null
 [[ ! -e "$reconcile_marker" ]]
 [[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
+    bash "$helper" reconcile-status)" == 'complete' ]]
+missing_mesh="$reconcile_marker-missing/mesh/reconcile-requested"
+[[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$missing_mesh" \
     bash "$helper" reconcile-status)" == 'complete' ]]
 if SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
     bash "$helper" reconcile-complete unexpected extra >/dev/null 2>&1; then
@@ -151,8 +238,8 @@ if grep -Fq 'mesh.firewall-unavailable' "$firewall_error"; then
     printf '%s\n' "unknown nft inspection error was misclassified as missing firewall" >&2
     exit 1
 fi
-rm -f -- "$firewall_error" "$reconcile_marker"
-rm -f -- "$policy_state"
+rm -f -- "$firewall_error" "$reconcile_marker" "$policy_state" \
+    "$policy_listing" "$empty_listing" "$list_error" "$inactive_state"
 
 extract_shell_function() {
     local name="$1"

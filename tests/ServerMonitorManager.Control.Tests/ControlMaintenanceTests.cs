@@ -110,6 +110,62 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
     }
 
     [Fact]
+    public async Task MaintenanceRetainsActiveAndDriftButPrunesCompletedHistoryWithoutResurrection()
+    {
+        var cancellationToken = TestContext.Current.CancellationToken;
+        var (store, options) = CreateServices();
+        await store.InitializeAsync(cancellationToken);
+        await EnrollAgentAsync(store, "source", "E111", cancellationToken);
+        await EnrollAgentAsync(store, "completed", "E222", cancellationToken);
+        await EnrollAgentAsync(store, "active", "E333", cancellationToken);
+        await EnrollAgentAsync(store, "drift", "E444", cancellationToken);
+        var applier = new RecordingPolicyApplier();
+        var service = new LinkService(store, applier, new ControlEventBroker());
+        var completed = await service.CreateAsync(
+            new LinkPolicyCreateRequest("source", "completed", "tcp", 22, 0, "done", Guid.NewGuid().ToString()),
+            "operator", cancellationToken);
+        await service.DisableAsync(
+            completed.Id, new LinkPolicyDisableRequest(Guid.NewGuid().ToString()), "operator", cancellationToken);
+        var active = await service.CreateAsync(
+            new LinkPolicyCreateRequest("source", "active", "tcp", 22, 0, "active", Guid.NewGuid().ToString()),
+            "operator", cancellationToken);
+        var drift = await service.CreateAsync(
+            new LinkPolicyCreateRequest("source", "drift", "tcp", 22, 0, "drift", Guid.NewGuid().ToString()),
+            "operator", cancellationToken);
+        await store.SetLinkActualStateAsync(drift.Id, "Failed", "simulated", "test", cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+
+        await using (var connection = new SqliteConnection($"Data Source={options.DatabasePath}"))
+        {
+            await connection.OpenAsync(cancellationToken);
+            var command = connection.CreateCommand();
+            command.CommandText = """
+                INSERT INTO links(
+                    id, source_node_id, target_node_id, protocol, port, ttl_minutes, reason,
+                    desired_state, actual_state, version, created_at, expires_at, updated_at, last_error)
+                SELECT $history_id, source_node_id, target_node_id, protocol, port, ttl_minutes, reason,
+                       'Active', 'Active', version - 1, $old, NULL, $old, NULL
+                FROM links WHERE id = $completed_id;
+                UPDATE links SET updated_at = $old;
+                """;
+            command.Parameters.AddWithValue("$history_id", Guid.NewGuid().ToString());
+            command.Parameters.AddWithValue("$completed_id", completed.Id);
+            command.Parameters.AddWithValue("$old", now.AddDays(-10).ToString("O"));
+            await command.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        var result = await store.MaintainAsync(now, cancellationToken);
+        var remaining = await store.ListLinksAsync(cancellationToken);
+
+        Assert.Equal(2, result.LinksDeleted);
+        Assert.Contains(remaining, link => link.Id == active.Id && link.ActualState == "Active");
+        Assert.Contains(remaining, link => link.Id == drift.Id && link.ActualState == "Failed");
+        Assert.DoesNotContain(remaining, link => link.TargetNodeId == "completed");
+        Assert.DoesNotContain(await store.ListEffectiveLinksAsync(cancellationToken),
+            link => link.TargetNodeId == "completed");
+    }
+
+    [Fact]
     public async Task ExpiredProvisioningJobsAreCancelledOrRequireReconciliationAndCanRetry()
     {
         var cancellationToken = TestContext.Current.CancellationToken;
@@ -201,7 +257,8 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
             BackupDirectory = Path.Combine(_directory, "backups"),
             MetricRetentionHours = 24,
             IdempotencyRetentionHours = 1,
-            AuditRetentionDays = 1
+            AuditRetentionDays = 1,
+            LinkRetentionDays = 1
         };
         return (new ControlStore(Options.Create(options)), options);
     }
@@ -224,12 +281,19 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
 
     private sealed class RecordingPolicyApplier : ILinkPolicyApplier
     {
+        private LinkRule? _connectedRule;
         public bool FailDisconnect { get; set; }
         public int DisconnectCalls { get; private set; }
+
+        public Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<LinkRule>>(IsConnected && _connectedRule is not null
+                ? [_connectedRule]
+                : []);
 
         public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         {
             IsConnected = true;
+            _connectedRule = new LinkRule(link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port);
             return Task.CompletedTask;
         }
 
@@ -240,6 +304,13 @@ public sealed class ControlMaintenanceTests : IAsyncDisposable
             {
                 return Task.FromException(new InvalidOperationException("simulated firewall failure"));
             }
+            IsConnected = false;
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken)
+        {
+            DisconnectCalls++;
             IsConnected = false;
             return Task.CompletedTask;
         }

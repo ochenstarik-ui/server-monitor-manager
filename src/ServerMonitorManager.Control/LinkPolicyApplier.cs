@@ -6,14 +6,18 @@ namespace ServerMonitorManager.Control;
 
 public interface ILinkPolicyApplier
 {
+    Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken);
     Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken);
     Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken);
+    Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken);
     Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken);
     Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
         => Task.FromResult<string?>(null);
     Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
         => Task.CompletedTask;
 }
+
+public sealed record LinkRule(string SourceNodeId, string TargetNodeId, string Protocol, int Port);
 
 public sealed class MeshFirewallUnavailableException : InvalidOperationException
 {
@@ -22,8 +26,38 @@ public sealed class MeshFirewallUnavailableException : InvalidOperationException
     }
 }
 
+public sealed class MeshNodeNotActivatedException : InvalidOperationException
+{
+    public MeshNodeNotActivatedException(string message) : base(message)
+    {
+    }
+}
+
 public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkPolicyApplier
 {
+    public async Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken)
+    {
+        var output = await RunAsync(["link-list"], cancellationToken);
+        if (output.Length == 0)
+        {
+            return [];
+        }
+        var rules = new List<LinkRule>();
+        foreach (var line in output.Split('\n', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var fields = line.Trim().Split('\t');
+            if (fields.Length != 4
+                || !int.TryParse(fields[3], System.Globalization.NumberStyles.None,
+                    System.Globalization.CultureInfo.InvariantCulture, out var port)
+                || port is < 1 or > 65535)
+            {
+                throw new InvalidOperationException("Hub policy helper returned an invalid link-list record.");
+            }
+            rules.Add(new LinkRule(fields[0], fields[1], fields[2], port));
+        }
+        return rules;
+    }
+
     public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         => RunAsync(
             [
@@ -37,13 +71,18 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
             cancellationToken);
 
     public Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
+        => ApplyDisconnectAsync(
+            new LinkRule(link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port),
+            cancellationToken);
+
+    public Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken)
         => RunAsync(
             [
                 "link-disconnect",
-                link.SourceNodeId,
-                link.TargetNodeId,
-                link.Protocol,
-                link.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                rule.SourceNodeId,
+                rule.TargetNodeId,
+                rule.Protocol,
+                rule.Port.ToString(System.Globalization.CultureInfo.InvariantCulture)
             ],
             cancellationToken);
 
@@ -113,6 +152,11 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
                 && string.Equals(message, LinkService.FirewallUnavailableCode, StringComparison.Ordinal))
             {
                 throw new MeshFirewallUnavailableException(LinkService.FirewallUnavailableCode);
+            }
+            if (process.ExitCode == 80
+                && string.Equals(message, LinkService.NodeNotActivatedCode, StringComparison.Ordinal))
+            {
+                throw new MeshNodeNotActivatedException(LinkService.NodeNotActivatedCode);
             }
             throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
                 ? $"Hub policy helper exited with code {process.ExitCode}."

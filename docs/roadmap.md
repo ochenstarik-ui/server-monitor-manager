@@ -58,7 +58,7 @@
 - [x] append-only audit операций Link;
 - [x] интеграционные тесты kill switch, process restart и helper failure;
 - [x] B-2: независимая фоновая и emergency-triggered реконсиляция, агрегированное состояние недоступного Mesh firewall и Desktop banner;
-- [ ] B-3: развести результат реконсиляции на `Examined` / `Converged` / `Failed` (M2), выбрать фильтр или retention завершённых Disabled-политик (M4) и типизировать ещё не активированный Mesh Node (M5). Эти изменения вынесены отдельно, потому что меняют API/UI semantics и helper classification, тогда как B-2 ограничен восстановлением фактических правил и общим firewall failure;
+- [x] B-3: факт-первичная реконсиляция использует один `link-list`, удаляет orphan/дубликаты (включая `Disabled/Disabled`), разводит `Examined` / `Converged` / `Failed` (M2), ограничивает marker-prompt тремя попытками, добавляет фильтр истории и retention завершённых Links (M4), а также типизированное ожидание активации Mesh Node (M5). Physical acceptance остаётся внешним блокером;
 - [ ] выполнить физический acceptance Hub + source Node + два destination Node с WireGuard/nftables/reboot.
 
 ## Этап 4 — мониторинг и терминал

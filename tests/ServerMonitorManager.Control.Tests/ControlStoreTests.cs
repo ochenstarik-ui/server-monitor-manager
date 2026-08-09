@@ -462,7 +462,8 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
         applier.IsConnected = false;
         var activeResult = await service.ReconcileLinksForNodeAsync("home", cancellationToken);
-        Assert.Equal(new LinkReconciliationResult(1, 0), activeResult);
+        Assert.Equal((1, 1, 0, 0),
+            (activeResult.Examined, activeResult.Converged, activeResult.Failed, activeResult.Deferred));
         Assert.Equal(3, applier.ConnectCalls);
 
         var latest = (await store.ListEffectiveLinksForNodeAsync("home", cancellationToken)).Single();
@@ -475,7 +476,8 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
         var disabledResult = await service.ReconcileLinksForNodeAsync("home", cancellationToken);
 
-        Assert.Equal(new LinkReconciliationResult(1, 0), disabledResult);
+        Assert.Equal((1, 1, 0, 0),
+            (disabledResult.Examined, disabledResult.Converged, disabledResult.Failed, disabledResult.Deferred));
         Assert.Equal(beforeReconnect, applier.DisconnectCalls);
         var persisted = (await store.ListEffectiveLinksForNodeAsync("home", cancellationToken)).Single();
         Assert.Equal("Disabled", persisted.DesiredState);
@@ -512,7 +514,8 @@ public sealed class ControlStoreTests : IAsyncDisposable
         applier.FailDisconnect = true;
         applier.IsConnected = true;
         var failed = await service.ReconcileLinksForNodeAsync("home", cancellationToken);
-        Assert.Equal(new LinkReconciliationResult(1, 1), failed);
+        Assert.Equal((1, 0, 1, 0),
+            (failed.Examined, failed.Converged, failed.Failed, failed.Deferred));
         var retry = await store.RecordHeartbeatAsync(
             heartbeat with
             {
@@ -525,7 +528,8 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
         applier.FailDisconnect = false;
         var succeeded = await service.ReconcileLinksForNodeAsync("home", cancellationToken);
-        Assert.Equal(new LinkReconciliationResult(1, 0), succeeded);
+        Assert.Equal((1, 1, 0, 0),
+            (succeeded.Examined, succeeded.Converged, succeeded.Failed, succeeded.Deferred));
         await store.CompleteAgentReconciliationAsync("home", cancellationToken);
         var completed = await store.RecordHeartbeatAsync(
             heartbeat with
@@ -964,12 +968,17 @@ public sealed class ControlStoreTests : IAsyncDisposable
 
     private sealed class CheckingPolicyApplier(ControlStore store) : ILinkPolicyApplier
     {
+        private LinkRule? _connectedRule;
         public int ConnectCalls { get; private set; }
         public int DisconnectCalls { get; private set; }
+
+        public Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<LinkRule>>(_connectedRule is null ? [] : [_connectedRule]);
 
         public async Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         {
             ConnectCalls++;
+            _connectedRule = new LinkRule(link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port);
             var persisted = Assert.Single(await store.ListLinksAsync(cancellationToken));
             Assert.Equal(link.Id, persisted.Id);
             Assert.Equal("Active", persisted.DesiredState);
@@ -979,28 +988,45 @@ public sealed class ControlStoreTests : IAsyncDisposable
         public async Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         {
             DisconnectCalls++;
+            _connectedRule = null;
             var persisted = Assert.Single(await store.ListLinksAsync(cancellationToken));
             Assert.Equal(link.Id, persisted.Id);
             Assert.Equal("Disabled", persisted.DesiredState);
             Assert.Equal("Disconnecting", persisted.ActualState);
         }
 
+        public Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken)
+        {
+            DisconnectCalls++;
+            _connectedRule = null;
+            return Task.CompletedTask;
+        }
+
         public Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken)
-            => Task.FromResult(ConnectCalls > DisconnectCalls);
+            => Task.FromResult(_connectedRule is not null);
     }
 
     private sealed class CountingPolicyApplier : ILinkPolicyApplier
     {
+        private LinkRule? _lastRule;
         public int ConnectCalls { get; private set; }
         public int DisconnectCalls { get; private set; }
         public bool FailDisconnect { get; set; }
         public bool ConnectLeavesRuleAbsent { get; set; }
         public bool IsConnected { get; set; }
 
+        public Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<LinkRule>>(IsConnected && _lastRule is not null
+                ? [_lastRule]
+                : []);
+
         public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
         {
             ConnectCalls++;
             IsConnected = !ConnectLeavesRuleAbsent;
+            _lastRule = IsConnected
+                ? new LinkRule(link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port)
+                : null;
             return Task.CompletedTask;
         }
 
@@ -1015,6 +1041,13 @@ public sealed class ControlStoreTests : IAsyncDisposable
             return Task.CompletedTask;
         }
 
+        public Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken)
+        {
+            DisconnectCalls++;
+            IsConnected = false;
+            return Task.CompletedTask;
+        }
+
         public Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken)
             => Task.FromResult(IsConnected);
     }
@@ -1023,9 +1056,15 @@ public sealed class ControlStoreTests : IAsyncDisposable
     {
         private TaskCompletionSource _connectStarted = CompletedSource();
         private TaskCompletionSource _releaseConnect = CompletedSource();
+        private LinkRule? _lastRule;
 
         public bool IsConnected { get; set; }
         public Task ConnectStarted => _connectStarted.Task;
+
+        public Task<IReadOnlyList<LinkRule>> ListRulesAsync(CancellationToken cancellationToken)
+            => Task.FromResult<IReadOnlyList<LinkRule>>(IsConnected && _lastRule is not null
+                ? [_lastRule]
+                : []);
 
         public void BlockNextConnect()
         {
@@ -1040,9 +1079,16 @@ public sealed class ControlStoreTests : IAsyncDisposable
             _connectStarted.TrySetResult();
             await _releaseConnect.Task.WaitAsync(cancellationToken);
             IsConnected = true;
+            _lastRule = new LinkRule(link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port);
         }
 
         public Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
+        {
+            IsConnected = false;
+            return Task.CompletedTask;
+        }
+
+        public Task ApplyDisconnectAsync(LinkRule rule, CancellationToken cancellationToken)
         {
             IsConnected = false;
             return Task.CompletedTask;

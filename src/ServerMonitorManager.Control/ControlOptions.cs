@@ -1,38 +1,47 @@
+using System.Diagnostics.CodeAnalysis;
+
 namespace ServerMonitorManager.Control;
 
 public sealed class ControlOptions
 {
+    [DynamicDependency(DynamicallyAccessedMemberTypes.PublicProperties, typeof(ControlOptions))]
+    public ControlOptions()
+    {
+    }
+
     public const string SectionName = "Control";
 
-    public string DatabasePath { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/control.db";
+    public string DatabasePath { get; set; } = "/var/lib/ochenstarik-server-monitor-manager/control.db";
 
-    public string CertificateAuthorityPath { get; init; } = "/etc/ochenstarik-server-monitor-manager/control-ca.pfx";
+    public string CertificateAuthorityPath { get; set; } = "/etc/ochenstarik-server-monitor-manager/control-ca.pfx";
 
-    public string? CertificateAuthorityPassword { get; init; }
+    public string? CertificateAuthorityPassword { get; set; }
 
-    public int HeartbeatSeconds { get; init; } = 30;
+    public int HeartbeatSeconds { get; set; } = 30;
 
-    public int MaxBufferedMetricAgeHours { get; init; } = 24;
+    public int MaxBufferedMetricAgeHours { get; set; } = 24;
 
-    public int MetricRetentionHours { get; init; } = 168;
+    public int MetricRetentionHours { get; set; } = 168;
 
-    public int IdempotencyRetentionHours { get; init; } = 24;
+    public int IdempotencyRetentionHours { get; set; } = 24;
 
-    public int AuditRetentionDays { get; init; } = 90;
+    public int AuditRetentionDays { get; set; } = 90;
 
-    public int MaintenanceIntervalMinutes { get; init; } = 15;
+    public int LinkRetentionDays { get; set; } = 90;
 
-    public int LinkExpirationPollSeconds { get; init; } = 15;
+    public int MaintenanceIntervalMinutes { get; set; } = 15;
 
-    public int LinkReconciliationSeconds { get; init; } = 300;
+    public int LinkExpirationPollSeconds { get; set; } = 15;
 
-    public string BackupDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/backups";
+    public int LinkReconciliationSeconds { get; set; } = 300;
 
-    public int BackupIntervalHours { get; init; } = 24;
+    public string BackupDirectory { get; set; } = "/var/lib/ochenstarik-server-monitor-manager/backups";
 
-    public int BackupRetentionCount { get; init; } = 7;
+    public int BackupIntervalHours { get; set; } = 24;
 
-    public string HubHelperPath { get; init; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
+    public int BackupRetentionCount { get; set; } = 7;
 
-    public string PrivilegeEscalationPath { get; init; } = "/usr/bin/sudo";
+    public string HubHelperPath { get; set; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
+
+    public string PrivilegeEscalationPath { get; set; } = "/usr/bin/sudo";
 }

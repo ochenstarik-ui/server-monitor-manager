@@ -6,9 +6,101 @@ namespace ServerMonitorManager.Control;
 public sealed class CertificateLifecycleService(
     ControlStore store,
     LinkService links,
-    ControlEventBroker events)
+    ControlEventBroker events,
+    CertificateAuthority? ca = null)
 {
     private static readonly TimeSpan TicketLifetime = TimeSpan.FromMinutes(10);
+
+    public async Task<IssuedCertificate> RenewAgentCertificateAsync(
+        string nodeId,
+        CertificateRenewalRequest request,
+        string authenticatedNodeId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(nodeId, authenticatedNodeId, StringComparison.Ordinal)
+            || !string.Equals(request.EntityId, authenticatedNodeId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Node ID mismatch for certificate renewal.");
+        }
+
+        var isRevoked = await store.IsAgentRevokedAsync(nodeId, cancellationToken);
+        if (isRevoked)
+        {
+            throw new InvalidOperationException("Revoked agent cannot renew certificate.");
+        }
+
+        if (ca is null)
+        {
+            throw new InvalidOperationException("Certificate authority is not configured.");
+        }
+        var issued = ca.IssueClientCertificate(nodeId, request.CertificateSigningRequestPem);
+        await store.UpdateAgentCertificateAsync(nodeId, issued.Thumbprint, issued.ExpiresAt, cancellationToken);
+
+        events.Publish(
+            "certificate.renewed",
+            nodeId,
+            JsonSerializer.Serialize(
+                new CertificateStatusEvent("Agent", nodeId, "Renewed", 0),
+                SmmJsonContext.Default.CertificateStatusEvent));
+
+        return issued;
+    }
+
+    public async Task<IssuedCertificate> RenewDeviceCertificateAsync(
+        string deviceId,
+        CertificateRenewalRequest request,
+        string authenticatedDeviceId,
+        CancellationToken cancellationToken = default)
+    {
+        if (!string.Equals(deviceId, authenticatedDeviceId, StringComparison.Ordinal)
+            || !string.Equals(request.EntityId, authenticatedDeviceId, StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Device ID mismatch for certificate renewal.");
+        }
+
+        var isRevoked = await store.IsDeviceRevokedAsync(deviceId, cancellationToken);
+        if (isRevoked)
+        {
+            throw new InvalidOperationException("Revoked device cannot renew certificate.");
+        }
+
+        if (ca is null)
+        {
+            throw new InvalidOperationException("Certificate authority is not configured.");
+        }
+        var issued = ca.IssueClientCertificate(deviceId, request.CertificateSigningRequestPem);
+        await store.UpdateDeviceCertificateAsync(deviceId, issued.Thumbprint, issued.ExpiresAt, cancellationToken);
+
+        events.Publish(
+            "certificate.renewed",
+            deviceId,
+            JsonSerializer.Serialize(
+                new CertificateStatusEvent("Operator", deviceId, "Renewed", 0),
+                SmmJsonContext.Default.CertificateStatusEvent));
+
+        return issued;
+    }
+
+    public async Task CheckAndPublishExpiringCertificatesAsync(CancellationToken cancellationToken = default)
+    {
+        var agents = await store.ListAgentsAsync(cancellationToken);
+        foreach (var agent in agents)
+        {
+            if (agent.CertificateExpiresAt.HasValue)
+            {
+                var remaining = agent.CertificateExpiresAt.Value - DateTimeOffset.UtcNow;
+                if (remaining > TimeSpan.Zero && remaining.TotalDays < 10)
+                {
+                    events.Publish(
+                        "certificate.expiring",
+                        agent.NodeId,
+                        JsonSerializer.Serialize(
+                            new CertificateStatusEvent("Agent", agent.NodeId, "Expiring", 0),
+                            SmmJsonContext.Default.CertificateStatusEvent));
+                }
+            }
+        }
+    }
 
     public async Task<CertificateReenrollmentTicket?> ReenrollAgentAsync(
         string nodeId,
@@ -67,5 +159,4 @@ public sealed class CertificateLifecycleService(
                     "Revoked",
                     ticket.DisabledLinks),
                 SmmJsonContext.Default.CertificateStatusEvent));
-
 }

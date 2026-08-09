@@ -23,6 +23,7 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     private string _healthText = "—";
     private bool _isOnline;
     private bool _hasWarning;
+    private int? _certificateRemainingDays;
 
     public ServerViewModel(ServerProfileData profile)
     {
@@ -49,17 +50,37 @@ public sealed class ServerViewModel : INotifyPropertyChanged
     public string HealthText { get => _healthText; set => Set(ref _healthText, value); }
     public bool IsOnline { get => _isOnline; set => Set(ref _isOnline, value); }
     public bool HasWarning { get => _hasWarning; set => Set(ref _hasWarning, value); }
+    public int? CertificateRemainingDays
+    {
+        get => _certificateRemainingDays;
+        set
+        {
+            if (Set(ref _certificateRemainingDays, value))
+            {
+                OnPropertyChanged(nameof(CertificateWarningText));
+                OnPropertyChanged(nameof(IsCertificateExpiring));
+            }
+        }
+    }
+    public bool IsCertificateExpiring => CertificateRemainingDays.HasValue && CertificateRemainingDays.Value < 10;
+    public string CertificateWarningText => CertificateRemainingDays.HasValue
+        ? (IsCertificateExpiring ? $"Cert: {CertificateRemainingDays.Value}d (expiring)" : $"Cert: {CertificateRemainingDays.Value}d")
+        : string.Empty;
 
     public event PropertyChangedEventHandler? PropertyChanged;
 
-    private void Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
+    private void OnPropertyChanged(string propertyName)
+        => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+
+    private bool Set<T>(ref T field, T value, [CallerMemberName] string? propertyName = null)
     {
         if (EqualityComparer<T>.Default.Equals(field, value))
         {
-            return;
+            return false;
         }
 
         field = value;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
+        return true;
     }
 }

@@ -8,9 +8,11 @@ namespace ServerMonitorManager.Control;
 public sealed class CertificateAuthority : IDisposable
 {
     private readonly X509Certificate2 _issuer;
+    private readonly IOptions<ControlOptions> _options;
 
     public CertificateAuthority(IOptions<ControlOptions> options)
     {
+        _options = options;
         var value = options.Value;
         _issuer = X509CertificateLoader.LoadPkcs12FromFile(
             value.CertificateAuthorityPath,
@@ -52,7 +54,7 @@ public sealed class CertificateAuthority : IDisposable
         var notBefore = DateTimeOffset.UtcNow.AddMinutes(-2) > issuerNotBefore
             ? DateTimeOffset.UtcNow.AddMinutes(-2)
             : issuerNotBefore;
-        var requestedNotAfter = DateTimeOffset.UtcNow.AddYears(1);
+        var requestedNotAfter = DateTimeOffset.UtcNow.AddDays(_options.Value.ClientCertificateDays);
         var notAfter = requestedNotAfter < issuerNotAfter ? requestedNotAfter : issuerNotAfter;
         if (notAfter <= notBefore)
         {

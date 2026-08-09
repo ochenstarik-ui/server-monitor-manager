@@ -303,6 +303,48 @@ public sealed partial class ControlClientService
             var certificate = X509CertificateLoader.LoadPkcs12(
                 pfx, password: null, X509KeyStorageFlags.EphemeralKeySet);
             var ca = await File.ReadAllBytesAsync(caPath, cancellationToken);
+            var notBefore = new DateTimeOffset(certificate.NotBefore.ToUniversalTime(), TimeSpan.Zero);
+            var notAfter = new DateTimeOffset(certificate.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+            var totalLifespan = notAfter - notBefore;
+            var remaining = notAfter - DateTimeOffset.UtcNow;
+            if (remaining <= TimeSpan.Zero || remaining < totalLifespan / 3)
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        var deviceId = configuration.Length > 1 ? configuration[1] : "device";
+                        using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+                        var csrRequest = new CertificateRequest($"CN={deviceId}", key, HashAlgorithmName.SHA256);
+                        var req = new CertificateRenewalRequest(deviceId, csrRequest.CreateSigningRequestPem(), Guid.NewGuid().ToString());
+                        using var renewClient = CreateHttpClient(controlUrl, ca, certificate);
+                        using var resp = await renewClient.PostAsJsonAsync("api/v1/certificates/renew", req, SmmJsonContext.Default.CertificateRenewalRequest, cancellationToken);
+                        if (resp.IsSuccessStatusCode)
+                        {
+                            var renewal = await resp.Content.ReadFromJsonAsync(SmmJsonContext.Default.CertificateRenewalResponse, cancellationToken);
+                            if (renewal is not null)
+                            {
+                                using var newCert = X509Certificate2.CreateFromPem(renewal.CertificatePem, key.ExportPkcs8PrivateKeyPem());
+                                var newPfxBytes = newCert.Export(X509ContentType.Pfx);
+                                try
+                                {
+                                    var newProtected = ProtectedData.Protect(newPfxBytes, null, DataProtectionScope.CurrentUser);
+                                    await File.WriteAllBytesAsync(protectedPath, newProtected, cancellationToken);
+                                }
+                                finally
+                                {
+                                    CryptographicOperations.ZeroMemory(newPfxBytes);
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Background renewal attempt error swallowed to keep main connection responsive
+                    }
+                }, cancellationToken);
+            }
+
             return new AuthenticatedControlSession(
                 CreateHttpClient(controlUrl, ca, certificate), certificate);
         }

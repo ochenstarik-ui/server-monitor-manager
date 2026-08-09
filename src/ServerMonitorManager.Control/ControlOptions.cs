@@ -19,6 +19,8 @@ public sealed class ControlOptions
 
     public int HeartbeatSeconds { get; set; } = 30;
 
+    public int ClientCertificateDays { get; set; } = 30;
+
     public int MaxBufferedMetricAgeHours { get; set; } = 24;
 
     public int MetricRetentionHours { get; set; } = 168;

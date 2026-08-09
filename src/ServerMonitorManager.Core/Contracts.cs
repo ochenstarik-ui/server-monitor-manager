@@ -39,7 +39,20 @@ public sealed record AgentSummary(
     string Name,
     string Status,
     string AgentVersion,
-    DateTimeOffset? LastSeenAt);
+    DateTimeOffset? LastSeenAt,
+    int? CertificateRemainingDays = null,
+    DateTimeOffset? CertificateExpiresAt = null);
+
+public sealed record CertificateRenewalRequest(
+    string EntityId,
+    string CertificateSigningRequestPem,
+    string IdempotencyKey);
+
+public sealed record CertificateRenewalResponse(
+    string EntityId,
+    string CertificatePem,
+    string CertificateAuthorityPem,
+    DateTimeOffset ExpiresAt);
 
 public sealed record CertificateReenrollmentRequest(
     string Reason,

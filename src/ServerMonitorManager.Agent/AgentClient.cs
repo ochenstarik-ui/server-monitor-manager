@@ -161,6 +161,15 @@ internal sealed class AgentClient(AgentOptions options)
             var iterationStartedAt = DateTimeOffset.UtcNow;
             try
             {
+                await EnsureCertificateRenewedAsync(certificate, client, cancellationToken);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                Console.Error.WriteLine($"Certificate renewal check failed: {exception.Message}");
+            }
+
+            try
+            {
                 await buffer.EnqueueAsync(
                     LinuxMetrics.Collect(options.NodeId, "0.1.0"),
                     cancellationToken);
@@ -487,6 +496,88 @@ internal sealed class AgentClient(AgentOptions options)
             SmmJsonContext.Default.AgentHeartbeatResponse,
             cancellationToken)
             ?? throw new InvalidOperationException("Control service returned an empty heartbeat response.");
+    }
+
+    public async Task<bool> EnsureCertificateRenewedAsync(
+        X509Certificate2 activeCertificate,
+        HttpClient client,
+        CancellationToken cancellationToken)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var notBefore = new DateTimeOffset(activeCertificate.NotBefore.ToUniversalTime(), TimeSpan.Zero);
+        var notAfter = new DateTimeOffset(activeCertificate.NotAfter.ToUniversalTime(), TimeSpan.Zero);
+        var totalLifespan = notAfter - notBefore;
+        var remaining = notAfter - now;
+
+        if (remaining <= TimeSpan.Zero || remaining < totalLifespan / 3)
+        {
+            try
+            {
+                using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+                var csrRequest = new CertificateRequest(
+                    $"CN={options.NodeId}",
+                    key,
+                    HashAlgorithmName.SHA256);
+                var renewalReq = new CertificateRenewalRequest(
+                    options.NodeId,
+                    csrRequest.CreateSigningRequestPem(),
+                    Guid.NewGuid().ToString());
+
+                using var response = await client.PostAsJsonAsync(
+                    "api/v1/agents/certificate/renew",
+                    renewalReq,
+                    SmmJsonContext.Default.CertificateRenewalRequest,
+                    cancellationToken);
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    if (response.StatusCode is HttpStatusCode.Forbidden or HttpStatusCode.BadRequest)
+                    {
+                        var body = await response.Content.ReadAsStringAsync(cancellationToken);
+                        if (body.Contains("Revoked", StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new InvalidOperationException("Agent certificate is revoked.");
+                        }
+                    }
+                    Console.Error.WriteLine($"Certificate renewal HTTP failed ({response.StatusCode}); keeping active cert.");
+                    return false;
+                }
+
+                var renewalRes = await response.Content.ReadFromJsonAsync(
+                    SmmJsonContext.Default.CertificateRenewalResponse,
+                    cancellationToken);
+                if (renewalRes is null)
+                {
+                    Console.Error.WriteLine("Certificate renewal returned empty response; keeping active cert.");
+                    return false;
+                }
+
+                using var newCert = X509Certificate2.CreateFromPem(renewalRes.CertificatePem, key.ExportPkcs8PrivateKeyPem());
+                var newPfx = newCert.Export(X509ContentType.Pfx);
+
+                var tempPath = _certificatePath + ".tmp";
+                await File.WriteAllBytesAsync(tempPath, newPfx, cancellationToken);
+                SetOwnerOnlyPermissions(tempPath);
+                File.Move(tempPath, _certificatePath, overwrite: true);
+
+                if (File.Exists(options.CertificateAuthorityPath) && !string.IsNullOrWhiteSpace(renewalRes.CertificateAuthorityPem))
+                {
+                    var tempCaPath = options.CertificateAuthorityPath + ".tmp";
+                    await File.WriteAllTextAsync(tempCaPath, renewalRes.CertificateAuthorityPem, cancellationToken);
+                    SetOwnerOnlyPermissions(tempCaPath);
+                    File.Move(tempCaPath, options.CertificateAuthorityPath, overwrite: true);
+                }
+
+                Console.WriteLine($"Agent certificate renewed successfully until {renewalRes.ExpiresAt:O}.");
+                return true;
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException and not InvalidOperationException)
+            {
+                Console.Error.WriteLine($"Certificate renewal failed: {exception.Message}. Retrying later.");
+                return false;
+            }
+        }
+        return false;
     }
 
     private HttpClient CreateHttpClient(X509Certificate2? clientCertificate)

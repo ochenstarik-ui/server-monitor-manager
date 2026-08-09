@@ -49,7 +49,8 @@ builder.Services.AddOptions<ControlOptions>()
             && options.LinkExpirationPollSeconds is >= 1 and <= 300
             && options.LinkReconciliationSeconds is >= 30 and <= 3600
             && options.BackupIntervalHours is >= 1 and <= 720
-            && options.BackupRetentionCount is >= 1 and <= 100,
+            && options.BackupRetentionCount is >= 1 and <= 100
+            && options.ClientCertificateDays is >= 1 and <= 90,
         "Invalid Control paths, heartbeat, retention, maintenance, expiration, reconciliation, or backup settings.")
     .ValidateOnStart();
 builder.Services.AddSingleton(TimeProvider.System);
@@ -380,6 +381,68 @@ agents.MapPost("/heartbeat", async (
         });
     }
 });
+agents.MapPost("/certificate/renew", async (
+    CertificateRenewalRequest request,
+    HttpContext context,
+    CertificateLifecycleService lifecycle,
+    CancellationToken cancellationToken) =>
+{
+    var nodeId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    if (string.IsNullOrWhiteSpace(nodeId)
+        || !NodeIdValidator.IsValid(nodeId)
+        || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["request"] = ["Invalid node id or idempotency key."]
+        });
+    }
+
+    try
+    {
+        var issued = await lifecycle.RenewAgentCertificateAsync(
+            nodeId, request, nodeId, cancellationToken);
+        return Results.Ok(new CertificateRenewalResponse(
+            nodeId, issued.CertificatePem, issued.CertificateAuthorityPem, issued.ExpiresAt));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+});
+
+app.MapPost("/api/v1/certificates/renew", async (
+    CertificateRenewalRequest request,
+    HttpContext context,
+    CertificateLifecycleService lifecycle,
+    CancellationToken cancellationToken) =>
+{
+    var entityId = context.User.FindFirstValue(ClaimTypes.NameIdentifier);
+    var role = context.User.FindFirstValue(ClaimTypes.Role);
+    if (string.IsNullOrWhiteSpace(entityId) || !IdempotencyKeyValidator.IsValid(request.IdempotencyKey))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["request"] = ["Invalid entity id or idempotency key."]
+        });
+    }
+
+    try
+    {
+        IssuedCertificate issued = role switch
+        {
+            "Agent" => await lifecycle.RenewAgentCertificateAsync(entityId, request, entityId, cancellationToken),
+            "Operator" => await lifecycle.RenewDeviceCertificateAsync(entityId, request, entityId, cancellationToken),
+            _ => throw new InvalidOperationException("Unauthorized role for certificate renewal.")
+        };
+        return Results.Ok(new CertificateRenewalResponse(
+            entityId, issued.CertificatePem, issued.CertificateAuthorityPem, issued.ExpiresAt));
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+}).RequireAuthorization();
 agents.MapGet("/provisioning/jobs/next", async (
     HttpContext context,
     ControlStore controlStore,

@@ -12,6 +12,8 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(CertificateReenrollmentRequest))]
 [JsonSerializable(typeof(CertificateReenrollmentTicket))]
 [JsonSerializable(typeof(CertificateStatusEvent))]
+[JsonSerializable(typeof(CertificateRenewalRequest))]
+[JsonSerializable(typeof(CertificateRenewalResponse))]
 [JsonSerializable(typeof(DeviceEnrollmentRequest))]
 [JsonSerializable(typeof(DeviceEnrollmentResponse))]
 [JsonSerializable(typeof(AutomationTokenCreateRequest))]

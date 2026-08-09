@@ -839,6 +839,80 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
     }
 
+    public async Task<bool> IsAgentRevokedAsync(string nodeId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM agents WHERE node_id = $id AND status = 'Revoked');";
+        command.Parameters.AddWithValue("$id", nodeId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
+    public async Task<bool> IsDeviceRevokedAsync(string deviceId, CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = "SELECT EXISTS(SELECT 1 FROM devices WHERE device_id = $id AND status = 'Revoked');";
+        command.Parameters.AddWithValue("$id", deviceId);
+        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
+    }
+
+    public async Task UpdateAgentCertificateAsync(
+        string nodeId,
+        string thumbprint,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE agents
+            SET certificate_thumbprint = $thumbprint,
+                certificate_expires_at = $expires
+            WHERE node_id = $node AND status != 'Revoked';
+            """;
+        command.Parameters.AddWithValue("$node", nodeId);
+        command.Parameters.AddWithValue("$thumbprint", thumbprint);
+        command.Parameters.AddWithValue("$expires", expiresAt.ToString("O"));
+        var rows = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (rows == 0)
+        {
+            throw new InvalidOperationException("Agent not found or revoked.");
+        }
+        await WriteAuditAsync(connection, transaction, nodeId, "agent.certificate_renewed", nodeId, "{}", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
+    public async Task UpdateDeviceCertificateAsync(
+        string deviceId,
+        string thumbprint,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = """
+            UPDATE devices
+            SET certificate_thumbprint = $thumbprint,
+                certificate_expires_at = $expires
+            WHERE device_id = $device AND status != 'Revoked';
+            """;
+        command.Parameters.AddWithValue("$device", deviceId);
+        command.Parameters.AddWithValue("$thumbprint", thumbprint);
+        command.Parameters.AddWithValue("$expires", expiresAt.ToString("O"));
+        var rows = await command.ExecuteNonQueryAsync(cancellationToken);
+        if (rows == 0)
+        {
+            throw new InvalidOperationException("Device not found or revoked.");
+        }
+        await WriteAuditAsync(connection, transaction, deviceId, "device.certificate_renewed", deviceId, "{}", cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<AgentHeartbeatMutation> RecordHeartbeatAsync(
         AgentHeartbeat heartbeat,
         int nextHeartbeatSeconds,
@@ -960,18 +1034,25 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         await using var connection = await OpenAsync(cancellationToken);
         var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT node_id, name, status, agent_version, last_seen_at
+            SELECT node_id, name, status, agent_version, last_seen_at, certificate_expires_at
             FROM agents ORDER BY name;
             """;
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var now = DateTimeOffset.UtcNow;
         while (await reader.ReadAsync(cancellationToken))
         {
+            DateTimeOffset? certExpiresAt = reader.IsDBNull(5) ? null : DateTimeOffset.Parse(reader.GetString(5));
+            int? remainingDays = certExpiresAt.HasValue
+                ? (int)Math.Max(0, Math.Floor((certExpiresAt.Value - now).TotalDays))
+                : null;
             result.Add(new AgentSummary(
                 reader.GetString(0),
                 reader.GetString(1),
                 reader.GetString(2),
                 reader.GetString(3),
-                reader.IsDBNull(4) ? null : DateTimeOffset.Parse(reader.GetString(4))));
+                reader.IsDBNull(4) ? null : DateTimeOffset.Parse(reader.GetString(4)),
+                remainingDays,
+                certExpiresAt));
         }
         return result;
     }

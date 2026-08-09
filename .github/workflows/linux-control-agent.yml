@@ -90,54 +90,11 @@ jobs:
           tar -C smoke -czf smoke-release.tar.gz agent control provisioning-helper deploy bootstrap
           sha256sum smoke-release.tar.gz > smoke-release.tar.gz.sha256
 
-      - name: Verify repeated systemd installation
-        run: |
-          set -Eeuo pipefail
-          smoke_log=/tmp/smm-systemd-smoke.log
-          report_failure() {
-            local title="$1" message main_pid
-            sudo systemctl status --no-pager ochenstarik-smm-control.service >>"$smoke_log" 2>&1 || true
-            sudo journalctl --no-pager -u ochenstarik-smm-control.service -n 40 >>"$smoke_log" 2>&1 || true
-            sudo ss -ltnp >>"$smoke_log" 2>&1 || true
-            main_pid="$(sudo systemctl show -p MainPID --value ochenstarik-smm-control.service 2>/dev/null || true)"
-            if [[ "$main_pid" =~ ^[1-9][0-9]*$ ]]; then
-              sudo sh -c "tr '\0' '\n' </proc/$main_pid/environ | grep '^ASPNETCORE_'" \
-                >>"$smoke_log" 2>&1 || true
-              sudo sh -c "printf 'wchan='; cat /proc/$main_pid/wchan" >>"$smoke_log" 2>&1 || true
-            fi
-            message="$(tail -c 6000 "$smoke_log" | sed ':a;N;$!ba;s/%/%25/g;s/\r/%0D/g;s/\n/%0A/g')"
-            printf '::error title=%s::%s\n' "$title" "$message"
-            exit 1
-          }
-          sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
-            smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
-            || report_failure 'Initial Control installation failed'
-          sudo test -x /usr/local/sbin/ochenstarik-smm-emergency \
-            || report_failure 'Emergency recovery command was not installed'
-          sudo /usr/local/sbin/ochenstarik-smm-emergency status >>"$smoke_log" 2>&1 \
-            || report_failure 'Emergency recovery status failed'
-          for _ in {1..30}; do
-            sudo curl --fail --silent --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-              https://127.0.0.1:7443/healthz && break
-            sleep 1
-          done
-          sudo curl --fail --silent --show-error \
-            --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \
-            || report_failure 'Initial Control healthcheck failed'
-          sudo deploy/ochenstarik-server-monitor-manager.sh install-control \
-            smoke-release.tar.gz 127.0.0.1 7443 >"$smoke_log" 2>&1 \
-            || report_failure 'Repeated Control installation failed'
-          sudo systemctl restart ochenstarik-smm-control.service \
-            || report_failure 'Control restart failed'
-          sudo systemctl is-active --quiet ochenstarik-smm-control.service \
-            || report_failure 'Control is inactive after restart'
-          sudo curl --fail --silent --show-error \
-            --retry 10 --retry-all-errors --retry-delay 1 \
-            --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
-            https://127.0.0.1:7443/healthz >>"$smoke_log" 2>&1 \
-            || report_failure 'Repeated Control healthcheck failed'
+      - name: Verify complete published enrollment with systemd
+        run: bash tests/bootstrap/run-native-systemd-smoke.sh smoke-release.tar.gz deploy/ochenstarik-server-monitor-manager.sh
 
       - name: Clean up systemd smoke installation
         if: always()
-        run: sudo deploy/ochenstarik-server-monitor-manager.sh uninstall-control --confirm-destroy-control || true
+        run: |
+          sudo /usr/local/sbin/ochenstarik-server-monitor-manager.sh uninstall-agent --purge || true
+          sudo /usr/local/sbin/ochenstarik-server-monitor-manager.sh uninstall-control --confirm-destroy-control || true

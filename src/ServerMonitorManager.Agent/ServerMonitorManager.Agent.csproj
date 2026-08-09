@@ -5,6 +5,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <InvariantGlobalization>true</InvariantGlobalization>
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
     <Version>0.1.0</Version>
     <AssemblyName>ochenstarik-smm-agent</AssemblyName>
   </PropertyGroup>

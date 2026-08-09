@@ -16,6 +16,7 @@ readonly AGENT_UNIT="ochenstarik-smm-agent.service"
 readonly PROVISIONING_HELPER_UNIT="ochenstarik-smm-provisioning-helper.service"
 readonly POLICY_HELPER="/usr/local/libexec/ochenstarik-smm-policy-apply"
 readonly EMERGENCY_COMMAND="/usr/local/sbin/ochenstarik-smm-emergency"
+readonly BOOTSTRAP_COMMAND="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"
 readonly SUDOERS_FILE="/etc/sudoers.d/ochenstarik-smm-control"
 readonly MESH_DIR="${STATE_DIR}/mesh"
 readonly WG_DIR="${ETC_DIR}/wireguard"
@@ -27,11 +28,25 @@ TEMP_DIR=""
 MESH_PEER_CODE=""
 ENROLLMENT_TOKEN_FILE=""
 ENROLLMENT_TOKEN_TEMP=""
+CONTROL_UPDATE_BACKUP_ID=""
+CONTROL_UPDATE_RECOVERY_REQUIRED=0
+CONTROL_UPDATE_LEGACY_ITEMS=()
 
 log() { printf '%s\n' "[$PROGRAM] $*"; }
 fail() { printf '%s\n' "[$PROGRAM] ERROR: $*" >&2; exit 1; }
 
 cleanup() {
+    local status=$?
+    trap - EXIT
+    if [[ "$CONTROL_UPDATE_RECOVERY_REQUIRED" == "1" ]]; then
+        log "Control update failed; restoring the pre-update state."
+        if recover_control_update "$CONTROL_UPDATE_BACKUP_ID"; then
+            log "Control recovery completed."
+        else
+            printf '%s\n' "[$PROGRAM] ERROR: Automatic Control recovery failed; manual recovery is required." >&2
+            status=1
+        fi
+    fi
     if [[ -n "$ENROLLMENT_TOKEN_FILE" ]]; then
         rm -f -- "$ENROLLMENT_TOKEN_FILE"
     fi
@@ -41,6 +56,7 @@ cleanup() {
     if [[ -n "$TEMP_DIR" && -d "$TEMP_DIR" ]]; then
         rm -rf -- "$TEMP_DIR"
     fi
+    exit "$status"
 }
 trap cleanup EXIT
 
@@ -61,6 +77,7 @@ Usage:
   ochenstarik-server-monitor-manager.sh update-agent ARCHIVE
   ochenstarik-server-monitor-manager.sh rollback control|agent [BACKUP_ID]
   ochenstarik-server-monitor-manager.sh node-code NODE_ID
+  ochenstarik-server-monitor-manager.sh control-device-code DEVICE_ID
   ochenstarik-server-monitor-manager.sh node-token NODE_ID
   ochenstarik-server-monitor-manager.sh control-ca-fingerprint
   ochenstarik-server-monitor-manager.sh status
@@ -125,13 +142,99 @@ validate_node_id() {
 }
 
 validate_port() {
-    [[ "$1" =~ ^[0-9]+$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )) \
+    [[ "$1" =~ ^[0-9]{1,5}$ ]] && (( 10#$1 >= 1 && 10#$1 <= 65535 )) \
         || fail "Port must be in range 1-65535."
 }
 
+validate_ipv4_literal() {
+    local address="$1" octet
+    local -a octets
+    IFS=. read -r -a octets <<<"$address"
+    (( ${#octets[@]} == 4 )) || fail "Control URL contains an invalid IPv4 host."
+    for octet in "${octets[@]}"; do
+        [[ "$octet" =~ ^[0-9]{1,3}$ ]] && (( 10#$octet <= 255 )) \
+            || fail "Control URL contains an invalid IPv4 host."
+    done
+}
+
 validate_control_url() {
-    [[ "$1" =~ ^https://[A-Za-z0-9._:\[\]-]+(:[0-9]{1,5})?/?$ ]] \
+    local authority host port="" label left right compressed=0 ipv4_groups=0 group_count last_group_index
+    local -a groups labels right_groups
+    [[ "$1" == https://* ]] || fail "Control URL must be an https URL without a path or credentials."
+    authority="${1#https://}"
+    authority="${authority%/}"
+    [[ -n "$authority" && "$authority" != *['/?#@']* ]] \
         || fail "Control URL must be an https URL without a path or credentials."
+
+    if [[ "$authority" == \[* ]]; then
+        [[ "$authority" =~ ^\[([0-9A-Fa-f:.]+)\](:([0-9]+))?$ ]] \
+            || fail "Control URL contains an invalid bracketed IPv6 authority."
+        host="${BASH_REMATCH[1]}"
+        port="${BASH_REMATCH[3]:-}"
+        [[ "$host" == *:* ]] || fail "Control URL contains an invalid bracketed IPv6 authority."
+        [[ "$host" != *:::* ]] || fail "Control URL contains an invalid bracketed IPv6 authority."
+        [[ "$host" != :* || "$host" == ::* ]] \
+            || fail "Control URL contains an invalid bracketed IPv6 authority."
+        [[ "$host" != *: || "$host" == *:: ]] \
+            || fail "Control URL contains an invalid bracketed IPv6 authority."
+        groups=()
+        if [[ "$host" == *::* ]]; then
+            compressed=1
+            [[ "${host/::/}" != *::* ]] \
+                || fail "Control URL contains an invalid bracketed IPv6 authority."
+            left="${host%%::*}"
+            right="${host#*::}"
+            if [[ -n "$left" ]]; then
+                IFS=: read -r -a groups <<<"$left"
+            fi
+            if [[ -n "$right" ]]; then
+                IFS=: read -r -a right_groups <<<"$right"
+                groups+=("${right_groups[@]}")
+            fi
+        else
+            IFS=: read -r -a groups <<<"$host"
+        fi
+        if (( ${#groups[@]} > 0 )) && [[ "${groups[${#groups[@]}-1]}" == *.* ]]; then
+            last_group_index=$(( ${#groups[@]} - 1 ))
+            validate_ipv4_literal "${groups[$last_group_index]}"
+            unset "groups[$last_group_index]"
+            ipv4_groups=2
+        fi
+        for label in "${groups[@]}"; do
+            [[ "$label" =~ ^[0-9A-Fa-f]{1,4}$ ]] \
+                || fail "Control URL contains an invalid bracketed IPv6 authority."
+        done
+        group_count=$(( ${#groups[@]} + ipv4_groups ))
+        if (( compressed == 1 )); then
+            (( group_count < 8 )) || fail "Control URL contains an invalid bracketed IPv6 authority."
+        else
+            (( group_count == 8 )) || fail "Control URL contains an invalid bracketed IPv6 authority."
+        fi
+    else
+        [[ "$authority" != *:*:* ]] \
+            || fail "Control URL IPv6 authorities must use balanced brackets."
+        if [[ "$authority" == *:* ]]; then
+            host="${authority%%:*}"
+            port="${authority#*:}"
+            [[ -n "$port" ]] || fail "Control URL contains an invalid port."
+        else
+            host="$authority"
+        fi
+        [[ "$host" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] \
+            || fail "Control URL contains an invalid DNS or IPv4 host."
+        [[ ${#host} -le 253 && "$host" != *..* ]] \
+            || fail "Control URL contains an invalid DNS or IPv4 host."
+        IFS=. read -r -a labels <<<"$host"
+        for label in "${labels[@]}"; do
+            [[ ${#label} -le 63 && "$label" =~ ^[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?$ ]] \
+                || fail "Control URL contains an invalid DNS or IPv4 host."
+        done
+        if [[ "$host" =~ ^[0-9.]+$ ]]; then
+            validate_ipv4_literal "$host"
+        fi
+    fi
+    [[ -n "$host" ]] || fail "Control URL host is empty."
+    [[ -z "$port" ]] || validate_port "$port"
 }
 
 verify_archive() {
@@ -267,6 +370,137 @@ install_unit() {
     local source="$1" unit="$2"
     install -m 0644 "$source" "/etc/systemd/system/$unit"
     systemctl daemon-reload
+}
+
+install_bootstrap_command() {
+    local source="$TEMP_DIR/bootstrap/ochenstarik-server-monitor-manager.sh" staging
+    [[ -x "$source" ]] || fail "Packaged bootstrap is missing."
+    install -d -m 0755 "$(dirname "$BOOTSTRAP_COMMAND")"
+    staging="$(mktemp "$(dirname "$BOOTSTRAP_COMMAND")/.ochenstarik-server-monitor-manager.XXXXXXXX")"
+    if ! install -m 0755 -o root -g root "$source" "$staging"; then
+        rm -f -- "$staging"
+        fail "Could not stage the system bootstrap command."
+    fi
+    if ! mv -fT -- "$staging" "$BOOTSTRAP_COMMAND"; then
+        rm -f -- "$staging"
+        fail "Could not publish the system bootstrap command."
+    fi
+}
+
+validate_control_state_migration() {
+    local name
+    for name in control.db control.db-wal control.db-shm; do
+        [[ ! -e "$STATE_DIR/$name" || ! -e "$STATE_DIR/control/$name" ]] \
+            || fail "Both legacy and role-isolated Control state exist: $name"
+    done
+    [[ ! -e "$STATE_DIR/backups" || ! -e "$STATE_DIR/control/backups" ]] \
+        || fail "Both legacy and role-isolated Control backup directories exist."
+}
+
+record_control_legacy_state() {
+    local name
+    CONTROL_UPDATE_LEGACY_ITEMS=()
+    for name in control.db control.db-wal control.db-shm; do
+        [[ ! -e "$STATE_DIR/$name" ]] || CONTROL_UPDATE_LEGACY_ITEMS+=("$name")
+    done
+    [[ ! -e "$STATE_DIR/backups" ]] || CONTROL_UPDATE_LEGACY_ITEMS+=(backups)
+}
+
+prepare_control_state() {
+    local name
+    install -d -m 0700 -o "$CONTROL_USER" -g "$CONTROL_USER" "$STATE_DIR/control"
+    for name in control.db control.db-wal control.db-shm; do
+        if [[ -e "$STATE_DIR/$name" ]]; then
+            mv -- "$STATE_DIR/$name" "$STATE_DIR/control/$name"
+        fi
+    done
+    if [[ -e "$STATE_DIR/backups" ]]; then
+        mv -- "$STATE_DIR/backups" "$STATE_DIR/control/backups"
+    fi
+    install -d -m 0700 -o "$CONTROL_USER" -g "$CONTROL_USER" "$STATE_DIR/control/backups"
+    chown -R "$CONTROL_USER:$CONTROL_USER" "$STATE_DIR/control"
+    find "$STATE_DIR/control" -type d -exec chmod 0700 {} +
+    find "$STATE_DIR/control" -type f -exec chmod 0600 {} +
+}
+
+reverse_control_state_migration() {
+    local name source destination
+    for name in "${CONTROL_UPDATE_LEGACY_ITEMS[@]}"; do
+        source="$STATE_DIR/control/$name"
+        destination="$STATE_DIR/$name"
+        if [[ -e "$destination" ]]; then
+            [[ ! -e "$source" ]] || return 1
+            continue
+        fi
+        [[ ! -e "$source" ]] || mv -- "$source" "$destination" || return 1
+    done
+    rmdir "$STATE_DIR/control/backups" 2>/dev/null || true
+    rmdir "$STATE_DIR/control" 2>/dev/null || true
+}
+
+restore_control_update_backup() {
+    local archive="$1" restore_root="${2:-/}"
+    [[ -f "$archive" ]] || return 1
+    tar -C "$restore_root" -xzf "$archive"
+}
+
+restore_control_binary_from_archive() {
+    local archive="$1" restore_root="${2:-/}"
+    [[ -f "$archive" ]] || return 1
+    tar -C "$restore_root" -xzf "$archive" \
+        usr/local/lib/ochenstarik-server-monitor-manager/control
+}
+
+recover_control_update() {
+    local backup_id="$1" restore_root="${2:-/}"
+    local archive="$BACKUP_DIR/${backup_id}.tar.gz"
+    systemctl stop "$CONTROL_UNIT" 2>/dev/null || true
+    reverse_control_state_migration || return 1
+    restore_control_update_backup "$archive" "$restore_root" || return 1
+    systemctl daemon-reload || return 1
+    systemctl start "$CONTROL_UNIT" || return 1
+    systemctl is-active --quiet "$CONTROL_UNIT"
+}
+
+validate_control_environment_migration() {
+    local env_file="$ETC_DIR/control.env" database_count backup_count database_value backup_value
+    [[ -f "$env_file" && ! -L "$env_file" ]] \
+        || fail "Control environment is missing or unsafe."
+    database_count="$(grep -c '^Control__DatabasePath=' "$env_file" || true)"
+    backup_count="$(grep -c '^Control__BackupDirectory=' "$env_file" || true)"
+    [[ "$database_count" == 1 && "$backup_count" == 1 ]] \
+        || fail "Control environment contains missing or conflicting state paths."
+    database_value="$(grep '^Control__DatabasePath=' "$env_file")"
+    backup_value="$(grep '^Control__BackupDirectory=' "$env_file")"
+    case "$database_value" in
+        "Control__DatabasePath=$STATE_DIR/control.db"|"Control__DatabasePath=$STATE_DIR/control/control.db") ;;
+        *) fail "Control environment contains an unsupported database path." ;;
+    esac
+    case "$backup_value" in
+        "Control__BackupDirectory=$STATE_DIR/backups"|"Control__BackupDirectory=$STATE_DIR/control/backups") ;;
+        *) fail "Control environment contains an unsupported backup path." ;;
+    esac
+}
+
+rewrite_control_environment() {
+    local env_file="$ETC_DIR/control.env" staging line
+    staging="$(mktemp "$ETC_DIR/.control.env.XXXXXXXX")"
+    if ! while IFS= read -r line || [[ -n "$line" ]]; do
+        case "$line" in
+            Control__DatabasePath=*) printf 'Control__DatabasePath=%s/control/control.db\n' "$STATE_DIR" ;;
+            Control__BackupDirectory=*) printf 'Control__BackupDirectory=%s/control/backups\n' "$STATE_DIR" ;;
+            *) printf '%s\n' "$line" ;;
+        esac
+    done <"$env_file" >"$staging"; then
+        rm -f -- "$staging"
+        fail "Could not rewrite the Control environment."
+    fi
+    chown root:"$CONTROL_USER" "$staging"
+    chmod 0640 "$staging"
+    if ! mv -fT -- "$staging" "$env_file"; then
+        rm -f -- "$staging"
+        fail "Could not publish the Control environment."
+    fi
 }
 
 write_mesh_firewall() {
@@ -480,18 +714,21 @@ install_control() {
     [[ -x "$TEMP_DIR/control/ochenstarik-smm-control" ]] || fail "Control binary is missing."
     backup_id="$(create_backup control)"
     ensure_system_user "$CONTROL_USER"
-    install -d -m 0750 -o root -g "$CONTROL_USER" "$ETC_DIR"
-    install -d -m 0750 -o "$CONTROL_USER" -g "$CONTROL_USER" "$STATE_DIR" "$STATE_DIR/backups"
+    validate_control_state_migration
+    systemctl stop "$CONTROL_UNIT" 2>/dev/null || true
+    install -d -m 0711 -o root -g root "$ETC_DIR" "$STATE_DIR"
+    prepare_control_state
     install_tree_atomic "$TEMP_DIR/control" "$LIB_DIR/control" "root:root"
+    install_bootstrap_command
     if [[ ! -f "$ETC_DIR/control-ca.pfx" || ! -f "$ETC_DIR/control-server.pfx" ]]; then
         create_control_certificates "$public_host"
     fi
     cat >"$ETC_DIR/control.env" <<EOF
 ASPNETCORE_URLS=https://0.0.0.0:$port
 ASPNETCORE_Kestrel__Certificates__Default__Path=$ETC_DIR/control-server.pfx
-Control__DatabasePath=$STATE_DIR/control.db
+Control__DatabasePath=$STATE_DIR/control/control.db
 Control__CertificateAuthorityPath=$ETC_DIR/control-ca.pfx
-Control__BackupDirectory=$STATE_DIR/backups
+Control__BackupDirectory=$STATE_DIR/control/backups
 Control__HubHelperPath=$POLICY_HELPER
 Control__PrivilegeEscalationPath=/usr/bin/sudo
 Control__LinkReconciliationSeconds=300
@@ -550,12 +787,13 @@ install_agent() {
     [[ -x "$TEMP_DIR/provisioning-helper/ochenstarik-smm-provisioning-helper" ]] || fail "Provisioning helper binary is missing."
     backup_id="$(create_backup agent)"
     ensure_system_user "$AGENT_USER"
-    install -d -m 0750 -o root -g "$AGENT_USER" "$ETC_DIR"
+    install -d -m 0711 -o root -g root "$ETC_DIR" "$STATE_DIR"
     install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$STATE_DIR/agent"
-    install -d -m 0710 -o root -g "$AGENT_USER" "$ENROLLMENT_DIR"
+    install -d -m 0700 -o "$AGENT_USER" -g "$AGENT_USER" "$ENROLLMENT_DIR"
     install -d -m 0700 -o root -g root "$STATE_DIR/provisioning/rollback"
     install_tree_atomic "$TEMP_DIR/agent" "$LIB_DIR/agent" "root:root"
     install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"
+    install_bootstrap_command
     install -d -m 0755 "$(dirname "$EMERGENCY_COMMAND")"
     install -m 0755 "$TEMP_DIR/deploy/ochenstarik-smm-emergency" "$EMERGENCY_COMMAND"
     if [[ "$(realpath "$ca_cert")" != "$(realpath -m "$ETC_DIR/control-ca.crt")" ]]; then
@@ -727,16 +965,32 @@ update_role() {
         *) fail "Unknown role: $role" ;;
     esac
     [[ -x "$TEMP_DIR/$role/$binary" ]] || fail "$role binary is missing."
-    if [[ "$role" == "agent" ]]; then
+    if [[ "$role" == "control" ]]; then
+        validate_control_state_migration
+        validate_control_environment_migration
+        record_control_legacy_state
+    else
         refresh_agent_uid
+    fi
+    backup_id="$(create_backup "$role")"
+    if [[ "$role" == "control" ]]; then
+        CONTROL_UPDATE_BACKUP_ID="$backup_id"
+        CONTROL_UPDATE_RECOVERY_REQUIRED=1
     fi
     systemctl stop "$unit"
     if [[ "$role" == "agent" ]]; then
         systemctl stop "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true
     fi
-    backup_id="$(create_backup "$role")"
-    install_tree_atomic "$TEMP_DIR/$role" "$LIB_DIR/$role" "$user"
-    if [[ "$role" == "agent" ]]; then
+    if [[ "$role" == "control" ]]; then
+        install -d -m 0711 -o root -g root "$ETC_DIR" "$STATE_DIR"
+        prepare_control_state
+        rewrite_control_environment
+        install_bootstrap_command
+        install_unit "$TEMP_DIR/deploy/$CONTROL_UNIT" "$CONTROL_UNIT"
+        systemctl enable "$CONTROL_UNIT"
+        install_tree_atomic "$TEMP_DIR/control" "$LIB_DIR/control" "$user"
+    else
+        install_tree_atomic "$TEMP_DIR/$role" "$LIB_DIR/$role" "$user"
         [[ -x "$TEMP_DIR/provisioning-helper/ochenstarik-smm-provisioning-helper" ]] \
             || fail "Provisioning helper binary is missing."
         install_tree_atomic "$TEMP_DIR/provisioning-helper" "$LIB_DIR/provisioning-helper" "root:root"
@@ -744,11 +998,18 @@ update_role() {
         install_unit "$TEMP_DIR/deploy/$PROVISIONING_HELPER_UNIT" "$PROVISIONING_HELPER_UNIT"
         systemctl enable --now "$PROVISIONING_HELPER_UNIT"
     fi
-    systemctl start "$unit"
+    systemctl restart "$unit"
     if ! systemctl is-active --quiet "$unit"; then
-        log "Update failed; restoring backup $backup_id"
-        restore_backup "$role" "$backup_id"
+        if [[ "$role" == "agent" ]]; then
+            log "Update failed; restoring backup $backup_id"
+            restore_backup "$role" "$backup_id"
+        fi
         fail "$role update was rolled back."
+    fi
+    if [[ "$role" == "control" ]]; then
+        CONTROL_UPDATE_RECOVERY_REQUIRED=0
+        CONTROL_UPDATE_BACKUP_ID=""
+        CONTROL_UPDATE_LEGACY_ITEMS=()
     fi
     log "$role updated. Backup: $backup_id"
 }
@@ -768,7 +1029,11 @@ restore_backup() {
     if [[ "$role" == "agent" ]]; then
         systemctl stop "$PROVISIONING_HELPER_UNIT" || true
     fi
-    tar -C / -xzf "$archive"
+    if [[ "$role" == "control" ]]; then
+        restore_control_binary_from_archive "$archive"
+    else
+        tar -C / -xzf "$archive"
+    fi
     systemctl daemon-reload
     if [[ "$role" == "agent" ]]; then
         systemctl start "$PROVISIONING_HELPER_UNIT"
@@ -849,6 +1114,27 @@ create_node_code() {
     token=""
 }
 
+create_device_code() {
+    local device_id="$1" token control_url ca_der
+    require_root
+    validate_node_id "$device_id"
+    [[ -r "$ETC_DIR/control-public-url" ]] || fail "Control public URL is missing; reinstall Control with PUBLIC_HOST."
+    [[ -r "$ETC_DIR/control-ca.crt" ]] || fail "Control CA certificate is missing."
+    require_command base64
+    require_command openssl
+    control_url="$(tr -d '\r\n' <"$ETC_DIR/control-public-url")"
+    validate_control_url "$control_url"
+    token="$(run_control_cli device-token-create "$device_id")"
+    [[ "$token" =~ ^[A-Za-z0-9_-]{43}$ ]] \
+        || fail "Control returned an invalid device enrollment token."
+    ca_der="$(openssl x509 -in "$ETC_DIR/control-ca.crt" -outform DER | base64 -w 0)"
+    printf 'SMMDEV1-'
+    printf 'VERSION=1\nDEVICE=%s\nTOKEN=%s\nURL=%s\nCA=%s\n' \
+        "$device_id" "$token" "$control_url" "$ca_der" | base64url_encode
+    printf '\n'
+    token=""
+}
+
 add_mesh_peer() {
     local code="$1" prefix node_part address_part key_part extra
     local node_id address public_key current tmp
@@ -908,6 +1194,22 @@ show_ca_fingerprint() {
     openssl x509 -in "$ETC_DIR/control-ca.crt" -noout -fingerprint -sha256
 }
 
+role_is_installed() {
+    case "$1" in
+        control) [[ -d "$LIB_DIR/control" || -f "$ETC_DIR/control.env" \
+            || -f "/etc/systemd/system/${CONTROL_UNIT:-ochenstarik-smm-control.service}" ]] ;;
+        agent) [[ -d "$LIB_DIR/agent" || -f "$ETC_DIR/agent.env" \
+            || -f "/etc/systemd/system/${AGENT_UNIT:-ochenstarik-smm-agent.service}" ]] ;;
+        *) return 1 ;;
+    esac
+}
+
+remove_shared_ca_if_unused() {
+    if ! role_is_installed control && ! role_is_installed agent; then
+        rm -f -- "$ETC_DIR/control-ca.crt"
+    fi
+}
+
 uninstall_agent() {
     local purge="${1:-}"
     require_root
@@ -915,8 +1217,10 @@ uninstall_agent() {
     systemctl disable --now "$PROVISIONING_HELPER_UNIT" 2>/dev/null || true
     rm -f -- "/etc/systemd/system/$AGENT_UNIT" "/etc/systemd/system/$PROVISIONING_HELPER_UNIT" "$ETC_DIR/agent.env"
     rm -rf -- "$LIB_DIR/agent" "$LIB_DIR/provisioning-helper"
-    [[ "$purge" == "--purge" ]] && rm -rf -- \
-        "$STATE_DIR/agent" "$ENROLLMENT_DIR" "$ETC_DIR/control-ca.crt"
+    if [[ "$purge" == "--purge" ]]; then
+        rm -rf -- "$STATE_DIR/agent" "$ENROLLMENT_DIR"
+        remove_shared_ca_if_unused
+    fi
     systemctl daemon-reload
     log "Agent removed${purge:+ ($purge)}."
 }
@@ -926,10 +1230,12 @@ uninstall_control() {
     require_root
     systemctl disable --now "$CONTROL_UNIT" 2>/dev/null || true
     rm -f -- "/etc/systemd/system/$CONTROL_UNIT" "$ETC_DIR/control.env" \
-        "$ETC_DIR/control-ca.pfx" "$ETC_DIR/control-server.pfx" "$ETC_DIR/control-ca.crt" \
+        "$ETC_DIR/control-ca.pfx" "$ETC_DIR/control-server.pfx" \
         "$POLICY_HELPER" "$SUDOERS_FILE"
-    rm -rf -- "$LIB_DIR/control" "$STATE_DIR/control.db" "$STATE_DIR/control.db-wal" \
+    rm -rf -- "$LIB_DIR/control" "$STATE_DIR/control" \
+        "$STATE_DIR/control.db" "$STATE_DIR/control.db-wal" \
         "$STATE_DIR/control.db-shm" "$STATE_DIR/backups"
+    remove_shared_ca_if_unused
     systemctl daemon-reload
     log "Control role and its state were removed."
 }
@@ -947,9 +1253,9 @@ main() {
     local action="${1:-help}"
     shift || true
     case "$action" in
-        help|-h|--help) usage ;;
-        version|--version) printf '%s %s\n' "$PROGRAM" "$PROGRAM_VERSION" ;;
-        preflight) preflight ;;
+        help|-h|--help) [[ $# -eq 0 ]] || fail "$action takes no arguments"; usage ;;
+        version|--version) [[ $# -eq 0 ]] || fail "$action takes no arguments"; printf '%s %s\n' "$PROGRAM" "$PROGRAM_VERSION" ;;
+        preflight) [[ $# -eq 0 ]] || fail "preflight takes no arguments"; preflight ;;
         verify-release) [[ $# -eq 1 ]] || fail "verify-release requires ARCHIVE"; verify_release_payload "$1" ;;
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
@@ -961,10 +1267,11 @@ main() {
         update-agent) [[ $# -eq 1 ]] || fail "update-agent requires ARCHIVE"; update_role agent "$1" ;;
         rollback) [[ $# -ge 1 && $# -le 2 ]] || fail "rollback requires control|agent [BACKUP_ID]"; rollback_role "$@" ;;
         node-code) [[ $# -eq 1 ]] || fail "node-code requires NODE_ID"; create_node_code "$1" ;;
+        control-device-code) [[ $# -eq 1 ]] || fail "control-device-code requires DEVICE_ID"; create_device_code "$1" ;;
         node-token) [[ $# -eq 1 ]] || fail "node-token requires NODE_ID"; run_control_cli token-create "$1" ;;
         control-ca-fingerprint) [[ $# -eq 0 ]] || fail "control-ca-fingerprint takes no arguments"; show_ca_fingerprint ;;
-        status) show_status ;;
-        uninstall-agent) [[ $# -le 1 ]] || fail "uninstall-agent accepts only [--purge]"; uninstall_agent "${1:-}" ;;
+        status) [[ $# -eq 0 ]] || fail "status takes no arguments"; show_status ;;
+        uninstall-agent) [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--purge" ) ]] || fail "uninstall-agent accepts only [--purge]"; uninstall_agent "${1:-}" ;;
         uninstall-control) [[ $# -eq 1 ]] || fail "uninstall-control requires confirmation"; uninstall_control "$1" ;;
         *) fail "Unknown action: $action (run with --help)" ;;
     esac

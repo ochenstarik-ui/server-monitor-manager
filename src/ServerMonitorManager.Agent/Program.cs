@@ -6,7 +6,18 @@ var configuration = new ConfigurationBuilder()
     .AddEnvironmentVariables("SMM_")
     .AddCommandLine(args)
     .Build();
-var options = configuration.Get<AgentOptions>() ?? new AgentOptions();
+var environmentControlUrl = Environment.GetEnvironmentVariable("SMM_ControlUrl");
+var environmentNodeId = Environment.GetEnvironmentVariable("SMM_NodeId");
+if (!AgentConfiguration.TryBind(
+        configuration,
+        environmentControlUrl,
+        environmentNodeId,
+        out var options,
+        out var bindingError))
+{
+    Console.Error.WriteLine(bindingError);
+    return 2;
+}
 if (string.IsNullOrWhiteSpace(options.NodeId)
     || !options.NodeId.All(character => character is >= 'a' and <= 'z' or >= '0' and <= '9' or '-'))
 {

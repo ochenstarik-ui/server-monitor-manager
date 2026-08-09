@@ -48,13 +48,13 @@ jobs:
           set -Eeuo pipefail
           dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj \
             --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/agent
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/agent
           dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj \
             --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/control
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/control
           dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj \
             --configuration Release --runtime '${{ matrix.runtime }}' --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/provisioning-helper
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/provisioning-helper
           install -d out/deploy out/bootstrap
           install -m 0644 deploy/ochenstarik-smm-control.service out/deploy/
           install -m 0644 deploy/ochenstarik-smm-agent.service out/deploy/

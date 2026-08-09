@@ -21,7 +21,7 @@ jobs:
           dotnet-version: 10.0.x
 
       - name: Restore
-        run: dotnet restore ServerMonitorManager.slnx
+        run: dotnet restore ServerMonitorManager.slnx --locked-mode
 
       - name: Build
         run: dotnet build ServerMonitorManager.slnx --configuration Release --no-restore
@@ -30,7 +30,9 @@ jobs:
         run: dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release --no-build
 
       - name: Verify formatting
-        run: dotnet format ServerMonitorManager.slnx --verify-no-changes --no-restore
+        run: |
+          dotnet format whitespace ServerMonitorManager.slnx --verify-no-changes --no-restore
+          dotnet format style ServerMonitorManager.slnx --verify-no-changes --no-restore
 
       - name: Verify three-server acceptance harness
         run: |
@@ -55,28 +57,28 @@ jobs:
           bash tests/bootstrap/test-enrollment-token-argv.sh
 
       - name: Publish agent amd64
-        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
 
       - name: Publish agent arm64
-        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
 
       - name: Publish provisioning helper amd64
-        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
 
       - name: Publish provisioning helper arm64
-        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
 
       - name: Build systemd smoke release
         run: |
           dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj \
             --configuration Release --runtime linux-x64 --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o smoke/agent
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o smoke/agent
           dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj \
             --configuration Release --runtime linux-x64 --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o smoke/control
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o smoke/control
           dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj \
             --configuration Release --runtime linux-x64 --self-contained true \
-            -p:PublishSingleFile=true -p:PublishTrimmed=true -o smoke/provisioning-helper
+            -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o smoke/provisioning-helper
           install -d smoke/deploy smoke/bootstrap
           install -m 0644 deploy/ochenstarik-smm-control.service smoke/deploy/
           install -m 0644 deploy/ochenstarik-smm-agent.service smoke/deploy/

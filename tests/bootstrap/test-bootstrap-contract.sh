@@ -57,9 +57,495 @@ grep -Fq "peer-add SMMPEER1_CODE" <<<"$help_output"
 grep -Fq "mesh-status" <<<"$help_output"
 grep -Fq "SMM_ENROLL_TOKEN" <<<"$help_output"
 grep -Fq "node-code NODE_ID" <<<"$help_output"
+grep -Fq "control-device-code DEVICE_ID" <<<"$help_output"
 grep -Fq "verify-release ARCHIVE" <<<"$help_output"
 grep -Fq "node-token NODE_ID" <<<"$help_output"
 grep -Eq '^ochenstarik-server-monitor-manager [0-9]+\.[0-9]+\.[0-9]+-' <<<"$version_output"
+
+extract_bootstrap_function() {
+    local name="$1"
+    awk -v signature="$name() {" '
+        $0 == signature { emitting = 1 }
+        emitting { print }
+        emitting && $0 == "}" { exit }
+    ' "$bootstrap"
+}
+validate_port_definition="$(extract_bootstrap_function validate_port)"
+validate_ipv4_literal_definition="$(extract_bootstrap_function validate_ipv4_literal)"
+validate_control_url_definition="$(extract_bootstrap_function validate_control_url)"
+for accepted_url in \
+    https://example.com \
+    https://host.example:7443 \
+    https://10.0.0.1:7443 \
+    'https://[2001:db8::1]:7443' \
+    'https://[::1]:7443' \
+    'https://[2001:db8::]' \
+    'https://[::]' \
+    'https://[::ffff:192.0.2.128]' \
+    'https://[2001:db8:3:4::192.0.2.33]:7443' \
+    'https://[1:2:3:4:5:6:192.0.2.1]' \
+    https://example.com/; do
+    if ! (fail() { exit 1; }; source <(printf '%s\n%s\n%s\n' "$validate_port_definition" "$validate_ipv4_literal_definition" "$validate_control_url_definition"); validate_control_url "$accepted_url"); then
+        printf 'valid Control URL was rejected: %s\n' "$accepted_url" >&2
+        exit 1
+    fi
+done
+for rejected_url in \
+    http://example.com \
+    https:// \
+    https://:7443 \
+    'https://[2001:db8::1' \
+    'https://[::::]' \
+    'https://[1:2:3]' \
+    'https://[::ffff:192.0.2.999]' \
+    'https://[::ffff:192.0.2]' \
+    'https://[::ffff:192.0.2.1.5]' \
+    'https://[::ffff:192.0.2.x]' \
+    'https://[1:2:3:4:5:6:7:192.0.2.1]' \
+    'https://[::ffff:192.0.2.1:]' \
+    'https://[1:2:3:4:5:6:192.0.2.1:]' \
+    'https://[1:2:3:4:5:6:7:8:]' \
+    'https://[:1:2:3:4:5:6:7]' \
+    'https://[::ffff:18446744073709551617.0.0.1]' \
+    'https://[::1]:18446744073709551696' \
+    'https://2001:db8::1:7443' \
+    'https://example.com:7443:7444' \
+    https://example..com \
+    https://999.0.0.1 \
+    https://18446744073709551617.0.0.1 \
+    https://example.com/path \
+    https://user@example.com \
+    'https://example.com:0' \
+    'https://example.com:65536' \
+    'https://example.com:18446744073709551696' \
+    'https://example.com?query=1' \
+    'https://example.com#fragment'; do
+    if (fail() { exit 1; }; source <(printf '%s\n%s\n%s\n' "$validate_port_definition" "$validate_ipv4_literal_definition" "$validate_control_url_definition"); validate_control_url "$rejected_url"); then
+        printf 'invalid Control URL was accepted: %s\n' "$rejected_url" >&2
+        exit 1
+    fi
+done
+
+for action in status version --version preflight help -h --help; do
+    if bash "$bootstrap" "$action" surplus >/dev/null 2>&1; then
+        printf 'bootstrap action accepted surplus arguments: %s\n' "$action" >&2
+        exit 1
+    fi
+done
+if ! bash "$bootstrap" >/dev/null 2>&1; then
+    printf '%s\n' 'bootstrap no-argument help form failed' >&2
+    exit 1
+fi
+for action in verify-release install-control install-agent install-node mesh-init peer-add \
+    update-control update-agent rollback node-code control-device-code node-token uninstall-control; do
+    if bash "$bootstrap" "$action" >/dev/null 2>&1; then
+        printf 'bootstrap action accepted missing arguments: %s\n' "$action" >&2
+        exit 1
+    fi
+done
+
+base64url_encode_definition="$(extract_bootstrap_function base64url_encode)"
+create_device_code_definition="$(extract_bootstrap_function create_device_code)"
+device_fixture="$(mktemp -d -t smm-device-code.XXXXXXXX)"
+printf '%s\n' 'https://control.example:7443' >"$device_fixture/control-public-url"
+printf '%s\n' 'fixture-ca' >"$device_fixture/control-ca.crt"
+device_code="$(
+    ETC_DIR="$device_fixture"
+    require_root() { :; }
+    require_command() { :; }
+    validate_node_id() { [[ "$1" == 'desktop-device' ]]; }
+    validate_control_url() { [[ "$1" == 'https://control.example:7443' ]]; }
+    run_control_cli() {
+        [[ "$1" == 'device-token-create' && "$2" == 'desktop-device' ]]
+        printf '%043d\n' 0
+    }
+    openssl() { printf '%s' 'DER-fixture'; }
+    source <(printf '%s\n%s\n' "$base64url_encode_definition" "$create_device_code_definition")
+    create_device_code desktop-device
+)"
+[[ "$device_code" == SMMDEV1-* ]]
+device_payload_encoded="${device_code#SMMDEV1-}"
+device_payload_encoded="${device_payload_encoded//-/+}"
+device_payload_encoded="${device_payload_encoded//_/\/}"
+case $(( ${#device_payload_encoded} % 4 )) in
+    0) ;;
+    2) device_payload_encoded+='==' ;;
+    3) device_payload_encoded+='=' ;;
+    *) printf '%s\n' 'invalid generated SMMDEV1 base64url length' >&2; exit 1 ;;
+esac
+device_payload="$(printf '%s' "$device_payload_encoded" | base64 -d)"
+grep -Fxq 'VERSION=1' <<<"$device_payload"
+grep -Fxq 'DEVICE=desktop-device' <<<"$device_payload"
+grep -Fxq 'TOKEN=0000000000000000000000000000000000000000000' <<<"$device_payload"
+grep -Fxq 'URL=https://control.example:7443' <<<"$device_payload"
+grep -Fxq "CA=$(printf '%s' 'DER-fixture' | base64 -w 0)" <<<"$device_payload"
+rm -rf -- "$device_fixture"
+
+grep -Fq 'readonly BOOTSTRAP_COMMAND="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"' "$bootstrap"
+grep -Fq 'staging="$(mktemp "$(dirname "$BOOTSTRAP_COMMAND")/.ochenstarik-server-monitor-manager.XXXXXXXX")"' "$bootstrap"
+grep -Fq 'mv -fT -- "$staging" "$BOOTSTRAP_COMMAND"' "$bootstrap"
+[[ "$(grep -Fc '    install_bootstrap_command' "$bootstrap")" -eq 3 ]]
+update_role_definition="$(extract_bootstrap_function update_role)"
+validation_line="$(grep -n -m1 'validate_control_state_migration' <<<"$update_role_definition" | cut -d: -f1)"
+environment_validation_line="$(grep -n -m1 'validate_control_environment_migration' <<<"$update_role_definition" | cut -d: -f1)"
+control_stop_line="$(grep -n -m1 'systemctl stop \"\$unit\"' <<<"$update_role_definition" | cut -d: -f1)"
+(( validation_line < control_stop_line && environment_validation_line < control_stop_line ))
+guard_arm_line="$(grep -n -m1 'CONTROL_UPDATE_RECOVERY_REQUIRED=1' <<<"$update_role_definition" | cut -d: -f1)"
+guard_clear_line="$(grep -n -m1 'CONTROL_UPDATE_RECOVERY_REQUIRED=0' <<<"$update_role_definition" | cut -d: -f1)"
+prepare_line="$(grep -n -m1 'prepare_control_state' <<<"$update_role_definition" | cut -d: -f1)"
+rewrite_line="$(grep -n -m1 'rewrite_control_environment' <<<"$update_role_definition" | cut -d: -f1)"
+bootstrap_line="$(grep -n -m1 'install_bootstrap_command' <<<"$update_role_definition" | cut -d: -f1)"
+unit_line="$(grep -n -m1 'install_unit \"\$TEMP_DIR/deploy/\$CONTROL_UNIT\"' <<<"$update_role_definition" | cut -d: -f1)"
+enable_line="$(grep -n -m1 'systemctl enable \"\$CONTROL_UNIT\"' <<<"$update_role_definition" | cut -d: -f1)"
+binary_line="$(grep -n -m1 'install_tree_atomic \"\$TEMP_DIR/control\"' <<<"$update_role_definition" | cut -d: -f1)"
+restart_line="$(grep -n -m1 'systemctl restart \"\$unit\"' <<<"$update_role_definition" | cut -d: -f1)"
+active_line="$(grep -n -m1 'systemctl is-active --quiet \"\$unit\"' <<<"$update_role_definition" | cut -d: -f1)"
+for guarded_line in "$control_stop_line" "$prepare_line" "$rewrite_line" "$bootstrap_line" \
+    "$unit_line" "$enable_line" "$binary_line" "$restart_line" "$active_line"; do
+    (( guard_arm_line < guarded_line && guarded_line < guard_clear_line ))
+done
+grep -Fq 'install_bootstrap_command' <<<"$update_role_definition"
+grep -Fq 'install_unit "$TEMP_DIR/deploy/$CONTROL_UNIT" "$CONTROL_UNIT"' <<<"$update_role_definition"
+grep -Fq 'install_tree_atomic "$TEMP_DIR/control" "$LIB_DIR/control" "$user"' <<<"$update_role_definition"
+grep -Fq 'systemctl restart "$unit"' <<<"$update_role_definition"
+grep -Fq 'systemctl is-active --quiet "$unit"' <<<"$update_role_definition"
+grep -Fq 'install -d -m 0711 -o root -g root "$ETC_DIR" "$STATE_DIR"' "$bootstrap"
+grep -Fq 'install -d -m 0700 -o "$CONTROL_USER" -g "$CONTROL_USER" "$STATE_DIR/control"' "$bootstrap"
+grep -Fq 'Control__DatabasePath=$STATE_DIR/control/control.db' "$bootstrap"
+grep -Fq 'Control__BackupDirectory=$STATE_DIR/control/backups' "$bootstrap"
+validate_control_state_migration_definition="$(extract_bootstrap_function validate_control_state_migration)"
+prepare_control_state_definition="$(extract_bootstrap_function prepare_control_state)"
+control_state_fixture="$(mktemp -d -t smm-control-state.XXXXXXXX)"
+mkdir -p "$control_state_fixture/backups"
+printf '%s' database >"$control_state_fixture/control.db"
+printf '%s' wal >"$control_state_fixture/control.db-wal"
+printf '%s' backup >"$control_state_fixture/backups/manifest.json"
+(
+    STATE_DIR="$control_state_fixture"
+    CONTROL_USER=fixture
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    install() {
+        local arguments=()
+        while (( $# > 0 )); do
+            case "$1" in
+                -m|-o|-g) shift 2 ;;
+                *) arguments+=("$1"); shift ;;
+            esac
+        done
+        command install "${arguments[@]}"
+    }
+    chown() { :; }
+    source <(printf '%s\n%s\n' "$validate_control_state_migration_definition" "$prepare_control_state_definition")
+    validate_control_state_migration
+    prepare_control_state
+)
+[[ ! -e "$control_state_fixture/control.db" ]]
+[[ "$(<"$control_state_fixture/control/control.db")" == database ]]
+[[ "$(<"$control_state_fixture/control/control.db-wal")" == wal ]]
+[[ "$(<"$control_state_fixture/control/backups/manifest.json")" == backup ]]
+if [[ "$(uname -s)" != MINGW* ]]; then
+    [[ "$(stat -c '%a' "$control_state_fixture/control")" == 700 ]]
+    [[ "$(stat -c '%a' "$control_state_fixture/control/control.db")" == 600 ]]
+fi
+printf '%s' conflict >"$control_state_fixture/control.db"
+if (
+    STATE_DIR="$control_state_fixture"
+    fail() { exit 1; }
+    source <(printf '%s\n' "$validate_control_state_migration_definition")
+    validate_control_state_migration
+); then
+    printf '%s\n' 'conflicting legacy and role-isolated Control state was accepted' >&2
+    exit 1
+fi
+rm -rf -- "$control_state_fixture"
+
+validate_control_environment_migration_definition="$(extract_bootstrap_function validate_control_environment_migration)"
+rewrite_control_environment_definition="$(extract_bootstrap_function rewrite_control_environment)"
+alpha7_fixture="$(mktemp -d -t smm-alpha7-update.XXXXXXXX)"
+mkdir -p "$alpha7_fixture/state/backups" "$alpha7_fixture/etc"
+printf '%s' alpha7-db >"$alpha7_fixture/state/control.db"
+printf '%s' alpha7-wal >"$alpha7_fixture/state/control.db-wal"
+printf '%s' alpha7-shm >"$alpha7_fixture/state/control.db-shm"
+printf '%s' alpha7-backup >"$alpha7_fixture/state/backups/manifest.json"
+cat >"$alpha7_fixture/etc/control.env" <<EOF
+# alpha.7 fixture: preserve comments and every unrelated value
+ASPNETCORE_URLS=https://0.0.0.0:7443
+Control__DatabasePath=$alpha7_fixture/state/control.db
+Control__CertificateAuthorityPath=/custom/control-ca.pfx
+Control__BackupDirectory=$alpha7_fixture/state/backups
+Control__LinkReconciliationSeconds=777
+CUSTOM_VALUE=spaces are preserved exactly
+EOF
+cp "$alpha7_fixture/etc/control.env" "$alpha7_fixture/original.env"
+(
+    STATE_DIR="$alpha7_fixture/state"
+    ETC_DIR="$alpha7_fixture/etc"
+    CONTROL_USER=fixture
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    install() {
+        local arguments=()
+        while (( $# > 0 )); do
+            case "$1" in -m|-o|-g) shift 2 ;; *) arguments+=("$1"); shift ;; esac
+        done
+        command install "${arguments[@]}"
+    }
+    chown() { :; }
+    source <(printf '%s\n%s\n%s\n%s\n' \
+        "$validate_control_state_migration_definition" \
+        "$prepare_control_state_definition" \
+        "$validate_control_environment_migration_definition" \
+        "$rewrite_control_environment_definition")
+    validate_control_state_migration
+    validate_control_environment_migration
+    prepare_control_state
+    rewrite_control_environment
+)
+[[ "$(<"$alpha7_fixture/state/control/control.db")" == alpha7-db ]]
+[[ "$(<"$alpha7_fixture/state/control/control.db-wal")" == alpha7-wal ]]
+[[ "$(<"$alpha7_fixture/state/control/control.db-shm")" == alpha7-shm ]]
+[[ "$(<"$alpha7_fixture/state/control/backups/manifest.json")" == alpha7-backup ]]
+expected_env="$(sed \
+    -e "s|^Control__DatabasePath=.*|Control__DatabasePath=$alpha7_fixture/state/control/control.db|" \
+    -e "s|^Control__BackupDirectory=.*|Control__BackupDirectory=$alpha7_fixture/state/control/backups|" \
+    "$alpha7_fixture/original.env")"
+[[ "$(<"$alpha7_fixture/etc/control.env")" == "$expected_env" ]]
+printf '%s\n' "Control__DatabasePath=$alpha7_fixture/state/control/control.db" \
+    >>"$alpha7_fixture/etc/control.env"
+if (
+    ETC_DIR="$alpha7_fixture/etc"
+    fail() { exit 1; }
+    source <(printf '%s\n' "$validate_control_environment_migration_definition")
+    validate_control_environment_migration
+); then
+    printf '%s\n' 'conflicting Control environment paths were accepted' >&2
+    exit 1
+fi
+rm -rf -- "$alpha7_fixture"
+
+record_control_legacy_state_definition="$(extract_bootstrap_function record_control_legacy_state)"
+reverse_control_state_migration_definition="$(extract_bootstrap_function reverse_control_state_migration)"
+restore_control_update_backup_definition="$(extract_bootstrap_function restore_control_update_backup)"
+restore_control_binary_from_archive_definition="$(extract_bootstrap_function restore_control_binary_from_archive)"
+recover_control_update_definition="$(extract_bootstrap_function recover_control_update)"
+[[ -n "$record_control_legacy_state_definition" ]]
+[[ -n "$reverse_control_state_migration_definition" ]]
+[[ -n "$restore_control_update_backup_definition" ]]
+[[ -n "$restore_control_binary_from_archive_definition" ]]
+[[ -n "$recover_control_update_definition" ]]
+
+recovery_fixture="$(mktemp -d -t smm-control-recovery.XXXXXXXX)"
+recovery_root="$recovery_fixture/root"
+archive_root="$recovery_fixture/archive-root"
+mkdir -p \
+    "$recovery_root/var/lib/ochenstarik-server-monitor-manager/backups" \
+    "$recovery_root/etc/ochenstarik-server-monitor-manager" \
+    "$recovery_root/etc/systemd/system" \
+    "$recovery_root/usr/local/lib/ochenstarik-server-monitor-manager/control" \
+    "$archive_root/etc/ochenstarik-server-monitor-manager" \
+    "$archive_root/etc/systemd/system" \
+    "$archive_root/usr/local/lib/ochenstarik-server-monitor-manager/control"
+printf '%s' original-db >"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db"
+printf '%s' original-wal >"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-wal"
+printf '%s' original-shm >"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-shm"
+printf '%s' original-backup >"$recovery_root/var/lib/ochenstarik-server-monitor-manager/backups/identity"
+printf '%s' old-binary >"$archive_root/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control"
+printf '%s\n' 'Control__DatabasePath=/var/lib/ochenstarik-server-monitor-manager/control.db' \
+    >"$archive_root/etc/ochenstarik-server-monitor-manager/control.env"
+printf '%s' old-unit >"$archive_root/etc/systemd/system/ochenstarik-smm-control.service"
+mkdir -p "$recovery_fixture/bootstrap-backups"
+tar -C "$archive_root" -czf "$recovery_fixture/bootstrap-backups/alpha7.tar.gz" \
+    usr/local/lib/ochenstarik-server-monitor-manager/control \
+    etc/ochenstarik-server-monitor-manager/control.env \
+    etc/systemd/system/ochenstarik-smm-control.service
+
+(
+    STATE_DIR="$recovery_root/var/lib/ochenstarik-server-monitor-manager"
+    CONTROL_USER=fixture
+    CONTROL_UPDATE_LEGACY_ITEMS=()
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    install() {
+        local arguments=()
+        while (( $# > 0 )); do
+            case "$1" in -m|-o|-g) shift 2 ;; *) arguments+=("$1"); shift ;; esac
+        done
+        command install "${arguments[@]}"
+    }
+    chown() { :; }
+    source <(printf '%s\n%s\n%s\n' \
+        "$record_control_legacy_state_definition" \
+        "$prepare_control_state_definition" \
+        "$reverse_control_state_migration_definition")
+    record_control_legacy_state
+    prepare_control_state
+    [[ "$(<"$STATE_DIR/control/control.db")" == original-db ]]
+    reverse_control_state_migration
+    [[ "$(<"$STATE_DIR/control.db")" == original-db ]]
+    [[ "$(<"$STATE_DIR/control.db-wal")" == original-wal ]]
+    [[ "$(<"$STATE_DIR/control.db-shm")" == original-shm ]]
+    [[ "$(<"$STATE_DIR/backups/identity")" == original-backup ]]
+    [[ ! -e "$STATE_DIR/control/control.db" ]]
+)
+
+printf '%s' new-binary >"$recovery_root/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control"
+printf '%s\n' 'Control__DatabasePath=/var/lib/ochenstarik-server-monitor-manager/control/control.db' \
+    >"$recovery_root/etc/ochenstarik-server-monitor-manager/control.env"
+printf '%s' new-unit >"$recovery_root/etc/systemd/system/ochenstarik-smm-control.service"
+(
+    STATE_DIR="$recovery_root/var/lib/ochenstarik-server-monitor-manager"
+    BACKUP_DIR="$recovery_fixture/bootstrap-backups"
+    CONTROL_UNIT=ochenstarik-smm-control.service
+    CONTROL_UPDATE_LEGACY_ITEMS=()
+    systemctl() { :; }
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    source <(printf '%s\n%s\n%s\n%s\n' \
+        "$reverse_control_state_migration_definition" \
+        "$restore_control_update_backup_definition" \
+        "$restore_control_binary_from_archive_definition" \
+        "$recover_control_update_definition")
+    restore_control_binary_from_archive "$BACKUP_DIR/alpha7.tar.gz" "$recovery_root"
+    [[ "$(<"$recovery_root/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control")" == old-binary ]]
+    [[ "$(<"$recovery_root/etc/ochenstarik-server-monitor-manager/control.env")" == \
+        'Control__DatabasePath=/var/lib/ochenstarik-server-monitor-manager/control/control.db' ]]
+)
+
+rm -rf -- "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control"
+mkdir -p "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control/backups"
+mv "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db" \
+    "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control/control.db"
+mv "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-wal" \
+    "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control/control.db-wal"
+mv "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-shm" \
+    "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control/control.db-shm"
+mv "$recovery_root/var/lib/ochenstarik-server-monitor-manager/backups/identity" \
+    "$recovery_root/var/lib/ochenstarik-server-monitor-manager/control/backups/identity"
+rmdir "$recovery_root/var/lib/ochenstarik-server-monitor-manager/backups"
+printf '%s' new-binary >"$recovery_root/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control"
+printf '%s\n' 'Control__DatabasePath=/var/lib/ochenstarik-server-monitor-manager/control/control.db' \
+    >"$recovery_root/etc/ochenstarik-server-monitor-manager/control.env"
+printf '%s' new-unit >"$recovery_root/etc/systemd/system/ochenstarik-smm-control.service"
+(
+    STATE_DIR="$recovery_root/var/lib/ochenstarik-server-monitor-manager"
+    BACKUP_DIR="$recovery_fixture/bootstrap-backups"
+    CONTROL_UNIT=ochenstarik-smm-control.service
+    CONTROL_UPDATE_LEGACY_ITEMS=(control.db control.db-wal control.db-shm backups)
+    systemctl() { :; }
+    fail() { printf '%s\n' "$*" >&2; exit 1; }
+    source <(printf '%s\n%s\n%s\n' \
+        "$reverse_control_state_migration_definition" \
+        "$restore_control_update_backup_definition" \
+        "$recover_control_update_definition")
+    recover_control_update alpha7 "$recovery_root"
+)
+[[ "$(<"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db")" == original-db ]]
+[[ "$(<"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-wal")" == original-wal ]]
+[[ "$(<"$recovery_root/var/lib/ochenstarik-server-monitor-manager/control.db-shm")" == original-shm ]]
+[[ "$(<"$recovery_root/var/lib/ochenstarik-server-monitor-manager/backups/identity")" == original-backup ]]
+[[ "$(<"$recovery_root/usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control")" == old-binary ]]
+[[ "$(<"$recovery_root/etc/ochenstarik-server-monitor-manager/control.env")" == \
+    'Control__DatabasePath=/var/lib/ochenstarik-server-monitor-manager/control.db' ]]
+[[ "$(<"$recovery_root/etc/systemd/system/ochenstarik-smm-control.service")" == old-unit ]]
+rm -rf -- "$recovery_fixture"
+
+cleanup_definition="$(extract_bootstrap_function cleanup)"
+[[ -n "$cleanup_definition" ]]
+for failure_step in stop state environment bootstrap unit enable binary restart active; do
+    guard_fixture="$(mktemp -d -t smm-control-guard.XXXXXXXX)"
+    marker="$guard_fixture.recovered"
+    set +e
+    (
+        set -Eeuo pipefail
+        PROGRAM=test-bootstrap
+        TEMP_DIR="$guard_fixture"
+        ENROLLMENT_TOKEN_FILE=""
+        ENROLLMENT_TOKEN_TEMP=""
+        CONTROL_UPDATE_BACKUP_ID=fixture-backup
+        CONTROL_UPDATE_RECOVERY_REQUIRED=1
+        marker="$marker"
+        failure_step="$failure_step"
+        log() { :; }
+        recover_control_update() { printf '%s' "$failure_step" >"$marker"; }
+        source <(printf '%s\n' "$cleanup_definition")
+        trap cleanup EXIT
+        false
+    ) >/dev/null 2>&1
+    guard_status=$?
+    set -e
+    (( guard_status != 0 )) || {
+        printf 'injected Control update failure was ignored: %s\n' "$failure_step" >&2
+        exit 1
+    }
+    [[ -f "$marker" && "$(<"$marker")" == "$failure_step" ]] || {
+        printf 'Control recovery guard was not invoked for: %s\n' "$failure_step" >&2
+        exit 1
+    }
+    rm -f -- "$marker"
+done
+
+role_is_installed_definition="$(extract_bootstrap_function role_is_installed)"
+remove_shared_ca_if_unused_definition="$(extract_bootstrap_function remove_shared_ca_if_unused)"
+uninstall_agent_definition="$(extract_bootstrap_function uninstall_agent)"
+uninstall_control_definition="$(extract_bootstrap_function uninstall_control)"
+grep -Fq 'remove_shared_ca_if_unused' <<<"$uninstall_agent_definition"
+grep -Fq 'remove_shared_ca_if_unused' <<<"$uninstall_control_definition"
+if grep -Fq 'control-ca.crt' <<<"$uninstall_agent_definition$uninstall_control_definition"; then
+    printf '%s\n' 'a role uninstaller deletes the shared CA directly' >&2
+    exit 1
+fi
+role_fixture="$(mktemp -d -t smm-role-uninstall.XXXXXXXX)"
+mkdir -p "$role_fixture/etc" "$role_fixture/lib/control" "$role_fixture/lib/agent"
+printf '%s' ca >"$role_fixture/etc/control-ca.crt"
+(
+    ETC_DIR="$role_fixture/etc"; LIB_DIR="$role_fixture/lib"
+    source <(printf '%s\n%s\n' "$role_is_installed_definition" "$remove_shared_ca_if_unused_definition")
+    rm -rf "$LIB_DIR/agent"
+    remove_shared_ca_if_unused
+)
+[[ -f "$role_fixture/etc/control-ca.crt" ]]
+rm -rf "$role_fixture/lib/control"
+(
+    ETC_DIR="$role_fixture/etc"; LIB_DIR="$role_fixture/lib"
+    source <(printf '%s\n%s\n' "$role_is_installed_definition" "$remove_shared_ca_if_unused_definition")
+    remove_shared_ca_if_unused
+)
+[[ ! -e "$role_fixture/etc/control-ca.crt" ]]
+mkdir -p "$role_fixture/lib/control" "$role_fixture/lib/agent"
+printf '%s' ca >"$role_fixture/etc/control-ca.crt"
+(
+    ETC_DIR="$role_fixture/etc"; LIB_DIR="$role_fixture/lib"
+    source <(printf '%s\n%s\n' "$role_is_installed_definition" "$remove_shared_ca_if_unused_definition")
+    rm -rf "$LIB_DIR/control"
+    remove_shared_ca_if_unused
+)
+[[ -f "$role_fixture/etc/control-ca.crt" ]]
+rm -rf "$role_fixture/lib/agent"
+(
+    ETC_DIR="$role_fixture/etc"; LIB_DIR="$role_fixture/lib"
+    source <(printf '%s\n%s\n' "$role_is_installed_definition" "$remove_shared_ca_if_unused_definition")
+    remove_shared_ca_if_unused
+)
+[[ ! -e "$role_fixture/etc/control-ca.crt" ]]
+rm -rf -- "$role_fixture"
+
+grep -Fq 'UMask=0077' "$root/deploy/ochenstarik-smm-control.service"
+grep -Fq 'ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/control' "$root/deploy/ochenstarik-smm-control.service"
+native_smoke="$root/tests/bootstrap/run-native-systemd-smoke.sh"
+grep -Fq 'node_code="$(sudo "$system_bootstrap" node-code smoke-node)"' "$native_smoke"
+grep -Fq 'export SMM_ENROLL_CODE="$node_code"' "$native_smoke"
+grep -Fq 'export SMM_ACCEPT_CA_FINGERPRINT=1' "$native_smoke"
+grep -Fq 'sudo test -s /var/lib/ochenstarik-server-monitor-manager/agent/agent.pfx' "$native_smoke"
+grep -Fq 'sudo systemctl is-active --quiet ochenstarik-smm-agent.service' "$native_smoke"
+grep -Fq 'device_code="$(sudo "$system_bootstrap" control-device-code smoke-device)"' "$native_smoke"
+grep -Fq '[[ "$device_code" == SMMDEV1-* ]]' "$native_smoke"
+grep -Fq 'sudo --preserve-env=SMM_ENROLL_CODE,SMM_ACCEPT_CA_FINGERPRINT' "$native_smoke"
+if grep -Fq 'sudo env SMM_ENROLL_CODE=' "$native_smoke"; then
+    printf '%s\n' 'native smoke exposes the enrollment code through env argv' >&2
+    exit 1
+fi
+grep -Fq 'rm -rf -- "$LIB_DIR/control" "$STATE_DIR/control"' "$bootstrap"
+if grep -Fq 'install -d -m 0750 -o root -g "$AGENT_USER" "$ETC_DIR"' "$bootstrap"; then
+    printf '%s\n' 'Agent installation still takes ownership of the shared configuration parent' >&2
+    exit 1
+fi
 emergency_help="$(bash "$emergency" --help)"
 grep -Fq 'mesh-disable' <<<"$emergency_help"
 grep -Fq 'firewall-restore' <<<"$emergency_help"

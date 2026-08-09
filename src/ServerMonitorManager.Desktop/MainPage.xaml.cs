@@ -1059,6 +1059,7 @@ public sealed partial class MainPage : Page
                 .GroupBy(link => new { link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port })
                 .Select(group => group.MaxBy(link => link.Version)!)
                 .Any(link => link.LastError == MeshLinkViewModel.FirewallUnavailableErrorCode));
+            _linksPage?.RefreshFilter();
 
             var activeLinks = MeshLinks.Count(link => link.ActualState == "Active");
             ActiveLinksValueText.Text = activeLinks.ToString(CultureInfo.InvariantCulture);
@@ -1265,10 +1266,14 @@ public sealed partial class MainPage : Page
                 await RefreshMeshAsync(showSuccess: false);
                 ShowInfo(
                     enable ? "Control Link создан" : "Control Link отключён",
-                    $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port} · {link.ActualState} v{link.Version}",
-                    link.ActualState is "Failed" or "Partial"
-                        ? InfoBarSeverity.Warning
-                        : InfoBarSeverity.Success);
+                    link.LastError == MeshLinkViewModel.NodeNotActivatedErrorCode
+                        ? $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port} · ожидает активации Node в Mesh"
+                        : $"{source.Name} → {target.Name} · {protocol.ToUpperInvariant()}/{port} · {link.ActualState} v{link.Version}",
+                    link.LastError == MeshLinkViewModel.NodeNotActivatedErrorCode
+                        ? InfoBarSeverity.Informational
+                        : link.ActualState is "Failed" or "Partial"
+                            ? InfoBarSeverity.Warning
+                            : InfoBarSeverity.Success);
                 return;
             }
 

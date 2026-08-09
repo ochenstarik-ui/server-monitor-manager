@@ -62,9 +62,36 @@ if ($linksCode.IndexOf('SetFirewallUnavailable', [StringComparison]::Ordinal) -l
     $mainCode.IndexOf('MeshLinkViewModel.FirewallUnavailableErrorCode', [StringComparison]::Ordinal) -lt 0) {
     throw 'Desktop must project both event and persisted Mesh firewall unavailable state.'
 }
-if ($meshModelsCode.IndexOf('LastError == FirewallUnavailableErrorCode ? string.Empty',
+if ($meshModelsCode.IndexOf(
+        'LastError is FirewallUnavailableErrorCode or NodeNotActivatedErrorCode ? string.Empty',
         [StringComparison]::Ordinal) -lt 0) {
-    throw 'Shared Mesh firewall errors must be suppressed from individual Link rows.'
+    throw 'Shared Mesh firewall and expected Node activation states must be suppressed from individual Link errors.'
+}
+if ($linksXaml.IndexOf('x:Name="ShowHistoryToggle"', [StringComparison]::Ordinal) -lt 0 -or
+    $linksXaml.IndexOf('Toggled="ShowHistoryToggle_Toggled"', [StringComparison]::Ordinal) -lt 0 -or
+    $linksCode.IndexOf('ShowHistoryToggle.IsOn', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Links page must expose an explicit history toggle.'
+}
+if ($linksCode.IndexOf(
+        'effective.Where(link => link.DesiredState == "Active" || link.HasDrift)',
+        [StringComparison]::Ordinal) -lt 0) {
+    throw 'Links page default view must show only effective Active or drifted policies.'
+}
+if ($linksCode.IndexOf('LinksCountText.Text = $', [StringComparison]::Ordinal) -lt 0 -or
+    $linksCode.IndexOf('DisplayedLinks.Count(link => link.ActualState == "Active")', [StringComparison]::Ordinal) -lt 0 -or
+    $linksCode.IndexOf('DisplayedLinks.Count(link => link.HasDrift)', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Links page counters must unambiguously distinguish shown, factual Active, and drifted policies.'
+}
+if ($meshModelsCode.IndexOf('public string DesiredStatusText', [StringComparison]::Ordinal) -lt 0 -or
+    $meshModelsCode.IndexOf('public string ActualStatusText', [StringComparison]::Ordinal) -lt 0 -or
+    $meshModelsCode.IndexOf('LastError == NodeNotActivatedErrorCode', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Links page must use typed desired/factual/expected-activation wording.'
+}
+if ($mainCode.IndexOf(
+        'link.LastError == MeshLinkViewModel.NodeNotActivatedErrorCode',
+        [StringComparison]::Ordinal) -lt 0 -or
+    $mainCode.IndexOf('? InfoBarSeverity.Informational', [StringComparison]::Ordinal) -lt 0) {
+    throw 'Expected Node activation state must use non-error informational severity.'
 }
 if ($mainCode.IndexOf('Servers.Count > 0 || _control.IsConfigured', [StringComparison]::Ordinal) -lt 0 -or
     $mainCode.IndexOf('await RefreshControlMeshAsync(showSuccess: false);', [StringComparison]::Ordinal) -lt 0) {

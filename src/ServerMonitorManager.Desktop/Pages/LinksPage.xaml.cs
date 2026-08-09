@@ -12,17 +12,43 @@ public sealed partial class LinksPage : Page
     {
         _host = host;
         InitializeComponent();
+        RefreshFilter();
     }
 
     public ObservableCollection<MeshNodeViewModel> Nodes => _host.MeshNodes;
 
-    public ObservableCollection<MeshLinkViewModel> Links => _host.MeshLinks;
+    public ObservableCollection<MeshLinkViewModel> DisplayedLinks { get; } = [];
+
+    internal void RefreshFilter()
+    {
+        var selectedId = (LinksList.SelectedItem as MeshLinkViewModel)?.Id;
+        var effective = _host.MeshLinks
+            .GroupBy(link => new { link.Source, link.Target, link.Protocol, link.Port })
+            .Select(group => group.MaxBy(link => link.Version)!)
+            .ToArray();
+        var source = ShowHistoryToggle.IsOn
+            ? _host.MeshLinks
+            : effective.Where(link => link.DesiredState == "Active" || link.HasDrift);
+        DisplayedLinks.Clear();
+        foreach (var link in source)
+        {
+            DisplayedLinks.Add(link);
+        }
+        LinksCountText.Text = $"Показано политик: {DisplayedLinks.Count} · фактически Active: {DisplayedLinks.Count(link => link.ActualState == "Active")} · с расхождением: {DisplayedLinks.Count(link => link.HasDrift)}";
+        if (selectedId is not null)
+        {
+            LinksList.SelectedItem = DisplayedLinks.FirstOrDefault(link => link.Id == selectedId);
+        }
+    }
 
     internal void SetFirewallUnavailable(bool unavailable)
         => FirewallUnavailableInfo.IsOpen = unavailable;
 
     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
         => await _host.RefreshLinksFromPageAsync();
+
+    private void ShowHistoryToggle_Toggled(object sender, RoutedEventArgs e)
+        => RefreshFilter();
 
     private async void ConnectButton_Click(object sender, RoutedEventArgs e)
         => await ChangeLinkAsync(enable: true);

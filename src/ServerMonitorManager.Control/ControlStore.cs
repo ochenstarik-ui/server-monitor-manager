@@ -352,6 +352,24 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             SELECT changes();
             DELETE FROM audit WHERE recorded_at < $audit_cutoff;
             SELECT changes();
+            DELETE FROM links AS historical
+            WHERE EXISTS (
+                SELECT 1 FROM links AS latest
+                WHERE latest.source_node_id = historical.source_node_id
+                  AND latest.target_node_id = historical.target_node_id
+                  AND latest.protocol = historical.protocol
+                  AND latest.port = historical.port
+                  AND latest.desired_state = 'Disabled'
+                  AND latest.actual_state = 'Disabled'
+                  AND latest.updated_at < $link_cutoff
+                  AND NOT EXISTS (
+                      SELECT 1 FROM links AS newer
+                      WHERE newer.source_node_id = latest.source_node_id
+                        AND newer.target_node_id = latest.target_node_id
+                        AND newer.protocol = latest.protocol
+                        AND newer.port = latest.port
+                        AND newer.version > latest.version));
+            SELECT changes();
             DELETE FROM enrollment_tokens WHERE consumed_at IS NOT NULL OR expires_at < $now;
             SELECT changes();
             DELETE FROM device_tokens WHERE consumed_at IS NOT NULL OR expires_at < $now;
@@ -365,8 +383,10 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
             "$idempotency_cutoff", now.AddHours(-_options.IdempotencyRetentionHours).ToString("O"));
         command.Parameters.AddWithValue(
             "$audit_cutoff", now.AddDays(-_options.AuditRetentionDays).ToString("O"));
+        command.Parameters.AddWithValue(
+            "$link_cutoff", now.AddDays(-_options.LinkRetentionDays).ToString("O"));
         command.Parameters.AddWithValue("$now", now.ToString("O"));
-        var changes = new int[9];
+        var changes = new int[10];
         await using (var reader = await command.ExecuteReaderAsync(cancellationToken))
         {
             for (var index = 0; index < changes.Length; index++)
@@ -384,7 +404,7 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         optimize.CommandText = "PRAGMA optimize; PRAGMA wal_checkpoint(PASSIVE);";
         await optimize.ExecuteNonQueryAsync(cancellationToken);
         return new ControlMaintenanceResult(
-            changes[3], changes[4], changes[5], changes[6] + changes[7] + changes[8],
+            changes[3], changes[4], changes[5], changes[6], changes[7] + changes[8] + changes[9],
             changes[0], changes[1] + changes[2]);
     }
 
@@ -1353,6 +1373,31 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         return link;
     }
 
+    public async Task RecordLinkOrphanRemovedAsync(
+        LinkRule rule,
+        string actor,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        var subject = $"{rule.SourceNodeId}:{rule.TargetNodeId}:{rule.Protocol}:{rule.Port}";
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            actor,
+            "link.orphan-removed",
+            subject,
+            JsonSerializer.Serialize(
+                new LinkOrphanAuditDetails(
+                    rule.SourceNodeId,
+                    rule.TargetNodeId,
+                    rule.Protocol,
+                    rule.Port),
+                ControlJsonContext.Default.LinkOrphanAuditDetails),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<LinkPolicy?> GetLinkAsync(
         string id,
         CancellationToken cancellationToken = default)
@@ -1362,6 +1407,29 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         var link = await ReadLinkAsync(connection, transaction, id, cancellationToken);
         await transaction.CommitAsync(cancellationToken);
         return link;
+    }
+
+    public async Task<LinkPolicy?> GetEffectiveLinkAsync(
+        LinkRule rule,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT * FROM links
+            WHERE source_node_id = $source
+              AND target_node_id = $target
+              AND protocol = $protocol
+              AND port = $port
+            ORDER BY version DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$source", rule.SourceNodeId);
+        command.Parameters.AddWithValue("$target", rule.TargetNodeId);
+        command.Parameters.AddWithValue("$protocol", rule.Protocol);
+        command.Parameters.AddWithValue("$port", rule.Port);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        return await reader.ReadAsync(cancellationToken) ? ReadLink(reader) : null;
     }
 
     public async Task<IReadOnlyList<LinkPolicy>> ListLinksAsync(CancellationToken cancellationToken = default)
@@ -1387,9 +1455,7 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         command.CommandText = """
             SELECT current.*
             FROM links AS current
-            WHERE (current.desired_state = 'Active'
-                   OR (current.desired_state = 'Disabled' AND current.actual_state != 'Disabled'))
-              AND NOT EXISTS (
+            WHERE NOT EXISTS (
                   SELECT 1 FROM links AS newer
                   WHERE newer.source_node_id = current.source_node_id
                     AND newer.target_node_id = current.target_node_id
@@ -1705,7 +1771,39 @@ public sealed record AgentHeartbeatMutation(
     AgentHeartbeatResponse Response,
     bool RequiresReconciliation);
 
-public sealed record LinkReconciliationResult(int Applied, int Failed);
+public sealed record LinkReconciliationResult
+{
+    public LinkReconciliationResult(
+        int examined,
+        int converged,
+        int failed,
+        int deferred,
+        IReadOnlyList<string> failedPolicyIds,
+        IReadOnlyList<string> deferredPolicyIds)
+    {
+        if (converged + failed + deferred != examined)
+        {
+            throw new InvalidOperationException(
+                $"Link reconciliation classification invariant failed: examined={examined}, "
+                + $"converged={converged}, failed={failed}, deferred={deferred}; "
+                + $"failed IDs=[{string.Join(',', failedPolicyIds)}], "
+                + $"deferred IDs=[{string.Join(',', deferredPolicyIds)}].");
+        }
+        Examined = examined;
+        Converged = converged;
+        Failed = failed;
+        Deferred = deferred;
+        FailedPolicyIds = failedPolicyIds;
+        DeferredPolicyIds = deferredPolicyIds;
+    }
+
+    public int Examined { get; }
+    public int Converged { get; }
+    public int Failed { get; }
+    public int Deferred { get; }
+    public IReadOnlyList<string> FailedPolicyIds { get; }
+    public IReadOnlyList<string> DeferredPolicyIds { get; }
+}
 
 public sealed record AgentReenrollmentMutation(
     CertificateReenrollmentTicket Ticket,

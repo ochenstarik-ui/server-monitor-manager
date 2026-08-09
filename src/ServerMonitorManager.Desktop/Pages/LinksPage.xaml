@@ -77,8 +77,15 @@
 
             <Grid x:Name="LinksListPanel" Grid.Row="1" RowSpacing="10">
                 <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
-                <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Политики направлений" />
-                <ListView x:Name="LinksList" Grid.Row="1" AutomationProperties.Name="Список связей" ItemsSource="{x:Bind Links}" SelectionMode="Single">
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2">
+                        <TextBlock Style="{StaticResource SubtitleTextBlockStyle}" Text="Политики направлений" />
+                        <TextBlock x:Name="LinksCountText" Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                    </StackPanel>
+                    <ToggleSwitch x:Name="ShowHistoryToggle" Grid.Column="1" Header="Показать историю" Toggled="ShowHistoryToggle_Toggled" />
+                </Grid>
+                <ListView x:Name="LinksList" Grid.Row="1" AutomationProperties.Name="Список связей" ItemsSource="{x:Bind DisplayedLinks}" SelectionMode="Single">
                     <ListView.ItemTemplate>
                         <DataTemplate x:DataType="local:MeshLinkViewModel">
                             <Grid MinHeight="62" ColumnSpacing="12">

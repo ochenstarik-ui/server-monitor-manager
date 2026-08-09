@@ -44,6 +44,7 @@ builder.Services.AddOptions<ControlOptions>()
             && options.MetricRetentionHours is >= 24 and <= 8760
             && options.IdempotencyRetentionHours is >= 1 and <= 720
             && options.AuditRetentionDays is >= 1 and <= 3650
+            && options.LinkRetentionDays is >= 1 and <= 3650
             && options.MaintenanceIntervalMinutes is >= 1 and <= 1440
             && options.LinkExpirationPollSeconds is >= 1 and <= 300
             && options.LinkReconciliationSeconds is >= 30 and <= 3600

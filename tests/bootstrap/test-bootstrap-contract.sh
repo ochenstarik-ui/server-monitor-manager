@@ -151,6 +151,15 @@ else
 fi
 [[ "$(<"$list_error")" == 'mesh.node-not-activated' ]]
 printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
+if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
+    bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then
+    printf '%s\n' "policy helper unexpectedly activated a Link to a missing Node" >&2
+    exit 1
+else
+    [[ $? -eq 80 ]]
+fi
+[[ "$(<"$list_error")" == 'mesh.node-not-activated' ]]
+printf 'source\t10.77.0.2\tkey-source\tactive\n' >"$inactive_state"
 printf 'target\t\tkey-target\tactive\n' >>"$inactive_state"
 if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$inactive_state" \
     bash "$helper" link-connect source target tcp 22 10 >/dev/null 2>"$list_error"; then

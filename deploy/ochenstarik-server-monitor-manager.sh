@@ -140,6 +140,54 @@ validate_platform() {
     [[ "$(ps -p 1 -o comm=)" == "systemd" ]] || fail "systemd must be PID 1."
 }
 
+# Release tags carry a leading "v" while some manifest fields and recorded values may not.
+normalize_version() {
+    printf '%s' "${1#v}"
+}
+
+# True when the first version orders strictly before the second. Lexicographic comparison is
+# wrong here: "0.1.0-alpha.10" sorts before "0.1.0-alpha.9" as a string, which would reject
+# every release after the ninth as a downgrade.
+version_lt() {
+    local left right first
+    left="$(normalize_version "$1")"
+    right="$(normalize_version "$2")"
+    [[ "$left" != "$right" ]] || return 1
+    first="$(printf '%s\n%s\n' "$left" "$right" | sort -V | head -n1)"
+    [[ "$first" == "$left" ]]
+}
+
+installed_version_file() {
+    printf '%s' "$ETC_DIR/installed-version-$1"
+}
+
+read_installed_version() {
+    local file
+    file="$(installed_version_file "$1")"
+    [[ -r "$file" ]] || return 0
+    tr -d '\r\n' <"$file"
+}
+
+record_installed_version() {
+    local role="$1" version="$2" file
+    [[ -n "$version" ]] || return 0
+    file="$(installed_version_file "$role")"
+    install -d -m 0755 "$ETC_DIR"
+    printf '%s\n' "$version" >"$file"
+    chmod 0644 "$file"
+}
+
+manifest_version_field() {
+    local manifest="$1" field="$2"
+    [[ -r "$manifest" ]] || return 0
+    awk -F'"' -v key="$field" '$2 == key { print $4; exit }' "$manifest" || true
+}
+
+# Version recorded for an archive being installed, empty when the release predates manifests.
+archive_version() {
+    manifest_version_field "$(dirname "$1")/server-monitor-manager-manifest.json" version
+}
+
 validate_node_id() {
     [[ "$1" =~ ^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$ ]] \
         || fail "Node id must contain 1-63 lowercase letters, digits, or hyphens."
@@ -799,6 +847,7 @@ EOF
         systemctl status --no-pager "$CONTROL_UNIT" >&2 || true
         fail "Control service failed; backup is $backup_id"
     }
+    record_installed_version control "$(archive_version "$archive")"
     log "Control installed. Backup: $backup_id"
     log "CA fingerprint: $(openssl x509 -in "$ETC_DIR/control-ca.crt" -noout -fingerprint -sha256 | cut -d= -f2)"
 }
@@ -895,6 +944,7 @@ EOF
         systemctl status --no-pager "$AGENT_UNIT" >&2 || true
         fail "Agent service failed; backup is $backup_id"
     }
+    record_installed_version agent "$(archive_version "$archive")"
     log "Agent $node_id installed and enrolled. Backup: $backup_id"
 }
 
@@ -1012,25 +1062,41 @@ update_role() {
     esac
     [[ -x "$TEMP_DIR/$role/$binary" ]] || fail "$role binary is missing."
     
-    local manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
+    local manifest new_version m_control m_agent installed peer_role peer_expected
+    manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
     if [[ -f "$manifest" ]]; then
-        local new_version m_control m_agent m_helper
-        new_version="$(awk -F'"' '/"version":/ {print $4}' "$manifest" || true)"
-        m_control="$(awk -F'"' '/"control":/ {print $4}' "$manifest" || true)"
-        m_agent="$(awk -F'"' '/"agent":/ {print $4}' "$manifest" || true)"
-        m_helper="$(awk -F'"' '/"helper":/ {print $4}' "$manifest" || true)"
+        new_version="$(manifest_version_field "$manifest" version)"
+        m_control="$(manifest_version_field "$manifest" control)"
+        m_agent="$(manifest_version_field "$manifest" agent)"
         if [[ -n "$new_version" ]]; then
-            if [[ "$new_version" < "$PROGRAM_VERSION" && "${SMM_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
-                fail "Downgrade from $PROGRAM_VERSION to $new_version is not allowed. Set SMM_ALLOW_DOWNGRADE=1 to bypass."
+            # Compared against the version recorded when this role was installed, not against
+            # PROGRAM_VERSION: that constant describes the bootstrap source tree and never the
+            # deployed component, so it can neither detect a downgrade nor match a release tag.
+            installed="$(read_installed_version "$role")"
+            if [[ -n "$installed" ]] \
+                && version_lt "$new_version" "$installed" \
+                && [[ "${SMM_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
+                fail "Downgrade of $role from $installed to $new_version is not allowed. Set SMM_ALLOW_DOWNGRADE=1 to bypass."
             fi
-            
-            if [[ "$role" == "control" ]] && systemctl list-unit-files | grep -q "^${AGENT_UNIT}"; then
-                if [[ "$PROGRAM_VERSION" != "$m_agent" ]]; then
-                    fail "Incompatible versions: installed agent is $PROGRAM_VERSION, but archive requires agent $m_agent. Update rejected."
-                fi
-            elif [[ "$role" == "agent" ]] && systemctl list-unit-files | grep -q "^${CONTROL_UNIT}"; then
-                if [[ "$PROGRAM_VERSION" != "$m_control" ]]; then
-                    fail "Incompatible versions: installed control is $PROGRAM_VERSION, but archive requires control $m_control. Update rejected."
+
+            # Cross-role compatibility: the peer component already on this host must run the
+            # version this archive expects of it. An unknown peer version is reported but not
+            # treated as failure, because installations predating version recording have
+            # nothing to compare against.
+            case "$role" in
+                control) peer_role="agent"; peer_expected="$m_agent" ;;
+                agent) peer_role="control"; peer_expected="$m_control" ;;
+                *) peer_role="" ;;
+            esac
+            if [[ -n "$peer_role" ]] \
+                && systemctl list-unit-files 2>/dev/null | grep -q "^ochenstarik-smm-${peer_role}.service"; then
+                local peer_actual
+                peer_actual="$(read_installed_version "$peer_role")"
+                if [[ -z "$peer_actual" ]]; then
+                    log "Warning: installed $peer_role version is unknown; compatibility check skipped."
+                elif [[ -n "$peer_expected" ]] \
+                    && [[ "$(normalize_version "$peer_actual")" != "$(normalize_version "$peer_expected")" ]]; then
+                    fail "Incompatible versions: installed $peer_role is $peer_actual, but this archive expects $peer_role $peer_expected. Update rejected."
                 fi
             fi
 
@@ -1083,6 +1149,7 @@ update_role() {
         CONTROL_UPDATE_BACKUP_ID=""
         CONTROL_UPDATE_LEGACY_ITEMS=()
     fi
+    record_installed_version "$role" "$(archive_version "$archive")"
     log "$role updated. Backup: $backup_id"
 }
 

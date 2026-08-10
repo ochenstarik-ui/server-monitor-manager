@@ -830,5 +830,43 @@ else
     fi
 fi
 
+# Version ordering. Lexicographic comparison would rank "0.1.0-alpha.10" below
+# "0.1.0-alpha.9" and reject every release after the ninth as a downgrade.
+version_helpers="$(sed -n '/^normalize_version()/,/^}/p;/^version_lt()/,/^}/p' "$bootstrap")"
+version_case() {
+    local left="$1" right="$2" expected="$3" actual
+    if bash -c "$version_helpers
+version_lt \"\$1\" \"\$2\"" _ "$left" "$right"; then actual="lt"; else actual="ge"; fi
+    if [[ "$actual" != "$expected" ]]; then
+        printf 'version_lt %s %s returned %s, expected %s\n' "$left" "$right" "$actual" "$expected" >&2
+        exit 1
+    fi
+}
+version_case "v0.1.0-alpha.9"  "v0.1.0-alpha.10" lt
+version_case "v0.1.0-alpha.10" "v0.1.0-alpha.9"  ge
+version_case "v0.1.0-alpha.9"  "v0.1.0-alpha.9"  ge
+version_case "0.1.0-alpha.9"   "v0.1.0-alpha.9"  ge
+version_case "v0.1.0-alpha.9"  "v0.2.0"          lt
+version_case "v0.2.0"          "v0.1.0-alpha.9"  ge
+
+# The downgrade guard must compare against the recorded installed version, never against
+# PROGRAM_VERSION: that constant tracks the source tree, not the deployed component.
+grep -Fq 'installed="$(read_installed_version "$role")"' "$bootstrap" || {
+    printf '%s\n' "update_role must compare against the recorded installed version" >&2
+    exit 1
+}
+if grep -qE '"\$new_version" *< *"\$PROGRAM_VERSION"' "$bootstrap"; then
+    printf '%s\n' "lexicographic version comparison against PROGRAM_VERSION reintroduced" >&2
+    exit 1
+fi
+grep -Fq 'record_installed_version control' "$bootstrap" || {
+    printf '%s\n' "install-control must record the installed version" >&2
+    exit 1
+}
+grep -Fq 'record_installed_version agent' "$bootstrap" || {
+    printf '%s\n' "install-agent must record the installed version" >&2
+    exit 1
+}
+
 printf '%s\n' "BOOTSTRAP_CONTRACT=PASS"
 

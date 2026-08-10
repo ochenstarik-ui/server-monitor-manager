@@ -5,6 +5,9 @@ param(
     [Parameter(Mandatory = $true)]
     [string]$CertificatePassword,
 
+    [Parameter(Mandatory = $false)]
+    [string]$Version,
+
     [string]$OutputDirectory = 'artifacts/windows-installer'
 )
 
@@ -38,19 +41,38 @@ try {
     dotnet restore $project -p:Platform=x64 -p:PublishReadyToRun=false -p:RestoreLockedMode=true
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed' }
 
-    dotnet publish $project `
-        --configuration Release `
-        --runtime win-x64 `
-        --no-restore `
-        -p:Platform=x64 `
-        -p:PublishReadyToRun=false `
-        -p:GenerateAppxPackageOnBuild=true `
-        -p:AppxPackageSigningEnabled=true `
-        -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint) `
-        -p:AppxBundle=Never `
-        -p:AppxSymbolPackageEnabled=false `
-        -p:UapAppxPackageBuildMode=SideloadOnly `
-        -p:AppxPackageDir="$appPackages\"
+    if ($Version) {
+        $dotnetArgs += "-p:Version=$Version"
+        $dotnetArgs += "-p:AppxPackageVersion=$Version.0"
+        dotnet publish $project `
+            --configuration Release `
+            --runtime win-x64 `
+            --no-restore `
+            -p:Platform=x64 `
+            -p:PublishReadyToRun=false `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint) `
+            -p:AppxBundle=Never `
+            -p:AppxSymbolPackageEnabled=false `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxPackageDir="$appPackages\" `
+            -p:Version=$Version
+    } else {
+        dotnet publish $project `
+            --configuration Release `
+            --runtime win-x64 `
+            --no-restore `
+            -p:Platform=x64 `
+            -p:PublishReadyToRun=false `
+            -p:GenerateAppxPackageOnBuild=true `
+            -p:AppxPackageSigningEnabled=true `
+            -p:PackageCertificateThumbprint=$($signingCertificate.Thumbprint) `
+            -p:AppxBundle=Never `
+            -p:AppxSymbolPackageEnabled=false `
+            -p:UapAppxPackageBuildMode=SideloadOnly `
+            -p:AppxPackageDir="$appPackages\"
+    }
     if ($LASTEXITCODE -ne 0) { throw 'dotnet publish failed' }
 
     $package = Get-ChildItem -LiteralPath $appPackages -Recurse -File |

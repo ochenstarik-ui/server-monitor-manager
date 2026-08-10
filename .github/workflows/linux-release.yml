@@ -70,14 +70,25 @@ jobs:
         with:
           dotnet-version: 10.0.x
 
+      - name: Set Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.2.0-dev"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Publish agent
-        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/agent
+        run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -p:Version=${{ steps.version.outputs.version }} -o out/agent
 
       - name: Publish control
-        run: dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/control
+        run: dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -p:Version=${{ steps.version.outputs.version }} -o out/control
 
       - name: Publish provisioning helper
-        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o out/provisioning-helper
+        run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -p:Version=${{ steps.version.outputs.version }} -o out/provisioning-helper
 
       - name: Package
         shell: bash
@@ -146,9 +157,20 @@ jobs:
             "test_certificate=true" >> $env:GITHUB_OUTPUT
           }
 
+      - name: Set Version
+        id: version
+        shell: bash
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="0.2.0-dev"
+          fi
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+
       - name: Build signed MSIX
         shell: pwsh
-        run: ./build/windows/Build-Installer.ps1 -CertificatePath '${{ steps.signing.outputs.certificate }}' -CertificatePassword '${{ steps.signing.outputs.password }}'
+        run: ./build/windows/Build-Installer.ps1 -CertificatePath '${{ steps.signing.outputs.certificate }}' -CertificatePassword '${{ steps.signing.outputs.password }}' -Version '${{ steps.version.outputs.version }}'
 
       - name: Include test certificate
         if: steps.signing.outputs.test_certificate == 'true'

@@ -6,6 +6,7 @@
     <IsPackable>false</IsPackable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="..\..\src\ServerMonitorManager.Desktop\UpdateService.cs" Link="UpdateService.cs" />
     <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshPrivateKeySession.cs" Link="SshPrivateKeySession.cs" />
     <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshHostKeyTrust.cs" Link="SshHostKeyTrust.cs" />
     <Compile Include="..\..\src\ServerMonitorManager.Desktop\SshConnectionArguments.cs" Link="SshConnectionArguments.cs" />

@@ -23,6 +23,9 @@ readonly WG_DIR="${ETC_DIR}/wireguard"
 readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
 readonly MESH_NETWORK="10.77.0.0/24"
 readonly HUB_MESH_ADDRESS="10.77.0.1/24"
+# Trust anchors — see docs/release-policy.md for the full signing and identity contract.
+readonly COSIGN_ISSUER="https://token.actions.githubusercontent.com"
+readonly COSIGN_IDENTITY_REGEXP="^https://github.com/ochenstarik-ui/server-monitor-manager/\.github/workflows/linux-release\.yml@refs/tags/v.*$"
 
 TEMP_DIR=""
 MESH_PEER_CODE=""
@@ -70,6 +73,7 @@ Usage:
   ochenstarik-server-monitor-manager.sh install-control ARCHIVE PUBLIC_HOST [HTTPS_PORT]
   ochenstarik-server-monitor-manager.sh install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT
   ochenstarik-server-monitor-manager.sh install-node ARCHIVE
+  ochenstarik-server-monitor-manager.sh verify-manifest MANIFEST SIGNATURE
   ochenstarik-server-monitor-manager.sh mesh-init PUBLIC_ENDPOINT [WG_PORT]
   ochenstarik-server-monitor-manager.sh peer-add SMMPEER1_CODE
   ochenstarik-server-monitor-manager.sh mesh-status
@@ -237,13 +241,55 @@ validate_control_url() {
     [[ -z "$port" ]] || validate_port "$port"
 }
 
+verify_manifest() {
+    local manifest="$1" signature="$2"
+    if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
+        log "WARNING: Signature verification skipped due to SMM_ALLOW_UNSIGNED=1."
+        return 0
+    fi
+    require_command cosign
+    [[ -f "$manifest" ]] || fail "Manifest not found: $manifest"
+    [[ -f "$signature" ]] || fail "Signature not found: $signature"
+    log "Verifying manifest signature..."
+    local verify_args=(--certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
+    if [[ -n "${SMM_TEST_PUBKEY:-}" ]]; then
+        verify_args=(--key "$SMM_TEST_PUBKEY")
+        log "WARNING: Using test public key for verification. This must NOT happen in production."
+    fi
+    if ! cosign verify-blob "${verify_args[@]}" \
+        --signature "$signature" "$manifest" >/dev/null 2>&1; then
+        fail "Manifest signature verification failed."
+    fi
+    log "Manifest signature is valid."
+}
+
 verify_archive() {
-    local archive="$1" checksum_file expected actual entry
+    local archive="$1" expected actual entry manifest signature
     [[ -f "$archive" ]] || fail "Archive not found: $archive"
-    checksum_file="${archive}.sha256"
-    [[ -f "$checksum_file" ]] || fail "Checksum file not found: $checksum_file"
-    expected="$(awk 'NR == 1 { print $1 }' "$checksum_file")"
-    [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Invalid checksum file: $checksum_file"
+    manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
+    signature="$(dirname "$archive")/server-monitor-manager-manifest.sig"
+    
+    if [[ -f "$manifest" && -f "$signature" ]]; then
+        verify_manifest "$manifest" "$signature"
+        local archive_basename
+        archive_basename="$(basename "$archive")"
+        expected="$(awk -F'"' -v name="$archive_basename" '$2 == name {print $4}' "$manifest" || true)"
+        if [[ -z "$expected" && "$archive_basename" == ochenstarik-* ]]; then
+            expected="$(awk -F'"' -v name="${archive_basename#ochenstarik-}" '$2 == name {print $4}' "$manifest" || true)"
+        fi
+        [[ -n "$expected" ]] || fail "Could not extract archive hash from manifest."
+    else
+        if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
+            log "WARNING: Manifest and signature not found, falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1."
+            local checksum_file="${archive}.sha256"
+            [[ -f "$checksum_file" ]] || fail "Checksum file not found: $checksum_file"
+            expected="$(awk 'NR == 1 { print $1 }' "$checksum_file")"
+            [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Invalid checksum file: $checksum_file"
+        else
+            fail "Manifest and signature are required for archive verification. Set SMM_ALLOW_UNSIGNED=1 to bypass."
+        fi
+    fi
+
     actual="$(sha256sum "$archive" | awk '{ print $1 }')"
     [[ "${actual,,}" == "${expected,,}" ]] || fail "Archive checksum mismatch."
 
@@ -965,6 +1011,32 @@ update_role() {
         *) fail "Unknown role: $role" ;;
     esac
     [[ -x "$TEMP_DIR/$role/$binary" ]] || fail "$role binary is missing."
+    
+    local manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
+    if [[ -f "$manifest" ]]; then
+        local new_version m_control m_agent m_helper
+        new_version="$(awk -F'"' '/"version":/ {print $4}' "$manifest" || true)"
+        m_control="$(awk -F'"' '/"control":/ {print $4}' "$manifest" || true)"
+        m_agent="$(awk -F'"' '/"agent":/ {print $4}' "$manifest" || true)"
+        m_helper="$(awk -F'"' '/"helper":/ {print $4}' "$manifest" || true)"
+        if [[ -n "$new_version" ]]; then
+            if [[ "$new_version" < "$PROGRAM_VERSION" && "${SMM_ALLOW_DOWNGRADE:-0}" != "1" ]]; then
+                fail "Downgrade from $PROGRAM_VERSION to $new_version is not allowed. Set SMM_ALLOW_DOWNGRADE=1 to bypass."
+            fi
+            
+            if [[ "$role" == "control" ]] && systemctl list-unit-files | grep -q "^${AGENT_UNIT}"; then
+                if [[ "$PROGRAM_VERSION" != "$m_agent" ]]; then
+                    fail "Incompatible versions: installed agent is $PROGRAM_VERSION, but archive requires agent $m_agent. Update rejected."
+                fi
+            elif [[ "$role" == "agent" ]] && systemctl list-unit-files | grep -q "^${CONTROL_UNIT}"; then
+                if [[ "$PROGRAM_VERSION" != "$m_control" ]]; then
+                    fail "Incompatible versions: installed control is $PROGRAM_VERSION, but archive requires control $m_control. Update rejected."
+                fi
+            fi
+
+            log "Updating $role to version $new_version"
+        fi
+    fi
     if [[ "$role" == "control" ]]; then
         validate_control_state_migration
         validate_control_environment_migration
@@ -1354,6 +1426,7 @@ main() {
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
         install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;
+        verify-manifest) [[ $# -eq 2 ]] || fail "verify-manifest requires MANIFEST SIGNATURE"; verify_manifest "$1" "$2" ;;
         install-monitor) [[ $# -eq 1 ]] || fail "install-monitor requires PUBLIC_KEY"; install_monitor "$1" ;;
         uninstall-monitor) [[ $# -eq 0 ]] || fail "uninstall-monitor takes no arguments"; uninstall_monitor ;;
         mesh-init) [[ $# -ge 1 && $# -le 2 ]] || fail "mesh-init requires PUBLIC_ENDPOINT [WG_PORT]"; mesh_init "$@" ;;

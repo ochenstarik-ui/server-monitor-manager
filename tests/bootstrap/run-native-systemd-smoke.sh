@@ -8,6 +8,13 @@ port="${SMM_SMOKE_PORT:-17443}"
 system_bootstrap="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"
 probe_dir=""
 
+# If manifest+sig are not shipped alongside the archive (CI-only builds),
+# allow unsigned verification via .sha256 fallback.
+archive_dir="$(dirname "$archive")"
+if [[ ! -f "$archive_dir/server-monitor-manager-manifest.json" || ! -f "$archive_dir/server-monitor-manager-manifest.sig" ]]; then
+    export SMM_ALLOW_UNSIGNED=1
+fi
+
 cleanup() {
     if [[ -n "$probe_dir" ]]; then
         rm -rf -- "$probe_dir"
@@ -18,8 +25,8 @@ cleanup() {
 trap cleanup EXIT
 
 sudo "$bootstrap" preflight
-sudo "$bootstrap" verify-release "$archive"
-sudo "$bootstrap" install-control "$archive" 127.0.0.1 "$port"
+sudo --preserve-env=SMM_ALLOW_UNSIGNED "$bootstrap" verify-release "$archive"
+sudo --preserve-env=SMM_ALLOW_UNSIGNED "$bootstrap" install-control "$archive" 127.0.0.1 "$port"
 sudo test -x "$system_bootstrap"
 sudo test -x /usr/local/sbin/ochenstarik-smm-emergency
 sudo /usr/local/sbin/ochenstarik-smm-emergency status
@@ -74,7 +81,7 @@ node_code="$(sudo "$system_bootstrap" node-code smoke-node)"
 [[ "$node_code" == SMMNODE1.* || "$node_code" == SMMNODE2.* ]]
 export SMM_ENROLL_CODE="$node_code"
 export SMM_ACCEPT_CA_FINGERPRINT=1
-sudo --preserve-env=SMM_ENROLL_CODE,SMM_ACCEPT_CA_FINGERPRINT \
+sudo --preserve-env=SMM_ENROLL_CODE,SMM_ACCEPT_CA_FINGERPRINT --preserve-env=SMM_ALLOW_UNSIGNED \
     "$system_bootstrap" install-node "$archive"
 unset SMM_ENROLL_CODE SMM_ACCEPT_CA_FINGERPRINT
 node_code=""
@@ -102,7 +109,7 @@ device_code="$(sudo "$system_bootstrap" control-device-code smoke-device)"
 [[ "$device_code" == SMMDEV1-* ]]
 device_code=""
 
-sudo "$system_bootstrap" update-control "$archive"
+sudo --preserve-env=SMM_ALLOW_UNSIGNED "$system_bootstrap" update-control "$archive"
 sudo systemctl is-active --quiet ochenstarik-smm-control.service
 sudo systemctl is-active --quiet ochenstarik-smm-agent.service
 sudo curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \

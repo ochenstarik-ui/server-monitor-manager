@@ -780,12 +780,55 @@ install -m 0644 "$root/deploy/ochenstarik-smm-firewall.service" "$fixture/payloa
 install -m 0755 "$bootstrap" "$fixture/payload/bootstrap/ochenstarik-server-monitor-manager.sh"
 tar -C "$fixture/payload" -czf "$fixture/release.tar.gz" agent control provisioning-helper deploy bootstrap
 sha256sum "$fixture/release.tar.gz" >"$fixture/release.tar.gz.sha256"
-bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null
 
-printf '%064d  %s\n' 0 release.tar.gz >"$fixture/release.tar.gz.sha256"
-if bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null 2>&1; then
-    printf '%s\n' "corrupt release checksum unexpectedly succeeded" >&2
-    exit 1
+# Create a signed manifest for verify-release (required by hardened verify_archive)
+release_hash="$(sha256sum "$fixture/release.tar.gz" | awk '{ print $1 }')"
+cat >"$fixture/server-monitor-manager-manifest.json" <<MEOF
+{
+  "version": "v0.0.0-test",
+  "hashes": {
+    "release.tar.gz": "$release_hash"
+  }
+}
+MEOF
+
+if command -v cosign &>/dev/null; then
+    COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix="$fixture/contract-test"
+    COSIGN_PASSWORD="" cosign sign-blob --yes --key "$fixture/contract-test.key" \
+        --output-signature "$fixture/server-monitor-manager-manifest.sig" \
+        "$fixture/server-monitor-manager-manifest.json"
+    SMM_TEST_PUBKEY="$fixture/contract-test.pub" \
+        bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null
+else
+    # Cosign unavailable — fall back to SMM_ALLOW_UNSIGNED for contract test only
+    SMM_ALLOW_UNSIGNED=1 bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null
+fi
+
+# Corrupt the manifest hash and verify rejection
+cat >"$fixture/server-monitor-manager-manifest.json" <<MEOF
+{
+  "version": "v0.0.0-test",
+  "hashes": {
+    "release.tar.gz": "$(printf '%064d' 0)"
+  }
+}
+MEOF
+if command -v cosign &>/dev/null; then
+    COSIGN_PASSWORD="" cosign sign-blob --yes --key "$fixture/contract-test.key" \
+        --output-signature "$fixture/server-monitor-manager-manifest.sig" \
+        "$fixture/server-monitor-manager-manifest.json"
+    if SMM_TEST_PUBKEY="$fixture/contract-test.pub" \
+        bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null 2>&1; then
+        printf '%s\n' "corrupt release checksum unexpectedly succeeded" >&2
+        exit 1
+    fi
+else
+    printf '%064d  %s\n' 0 release.tar.gz >"$fixture/release.tar.gz.sha256"
+    if SMM_ALLOW_UNSIGNED=1 bash "$bootstrap" verify-release "$fixture/release.tar.gz" >/dev/null 2>&1; then
+        printf '%s\n' "corrupt release checksum unexpectedly succeeded" >&2
+        exit 1
+    fi
 fi
 
 printf '%s\n' "BOOTSTRAP_CONTRACT=PASS"
+

@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+CLEANUP_FILES=()
+cleanup() {
+    rm -f "${CLEANUP_FILES[@]}"
+}
+trap cleanup EXIT
+
 echo "Running negative tests for manifest verification..."
 
 if ! command -v cosign &> /dev/null; then
@@ -12,12 +18,15 @@ fi
 export COSIGN_PASSWORD=""
 cosign generate-key-pair
 export SMM_TEST_PUBKEY="cosign.pub"
+CLEANUP_FILES+=(cosign.key cosign.pub)
 
 ARCHIVE_NAME="test-archive.tar.gz"
 echo "archive content" > "$ARCHIVE_NAME"
 ARCHIVE_HASH=$(sha256sum "$ARCHIVE_NAME" | awk '{print $1}')
+CLEANUP_FILES+=("$ARCHIVE_NAME")
 
-cat <<EOF > manifest.json
+# Use the canonical manifest name that verify_archive() expects
+cat <<EOF > server-monitor-manager-manifest.json
 {
   "hashes": {
     "$ARCHIVE_NAME": "$ARCHIVE_HASH"
@@ -25,10 +34,11 @@ cat <<EOF > manifest.json
 }
 EOF
 
-cosign sign-blob --yes --key cosign.key --output-signature manifest.sig manifest.json
+cosign sign-blob --yes --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
+CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig)
 
 echo "Test 1: Valid signature and hash"
-if ! bash tests/bootstrap/verify-manifest.sh "$ARCHIVE_NAME" manifest.json manifest.sig; then
+if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig; then
     echo "FAIL: Valid payload rejected"
     exit 1
 fi
@@ -36,7 +46,9 @@ echo "PASS: Valid payload accepted"
 
 echo "Test 2: Altered byte in archive"
 echo "altered content" > "$ARCHIVE_NAME"
-if bash tests/bootstrap/verify-manifest.sh "$ARCHIVE_NAME" manifest.json manifest.sig >/dev/null 2>&1; then
+# verify-release will call verify_archive → verify_manifest (signature check) then sha256 (hash check).
+# The manifest was signed with the original hash, so the archive hash won't match.
+if bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ARCHIVE_NAME" >/dev/null 2>&1; then
     echo "FAIL: Altered archive accepted"
     exit 1
 fi
@@ -45,27 +57,42 @@ echo "PASS: Altered archive rejected"
 echo "Test 3: Substituted hash in manifest without resigning"
 # Restore archive
 echo "archive content" > "$ARCHIVE_NAME"
-# Corrupt manifest
-cat <<EOF > manifest.json
+# Corrupt manifest (but don't re-sign — signature should now be invalid)
+cat <<EOF > server-monitor-manager-manifest.json
 {
   "hashes": {
     "$ARCHIVE_NAME": "0000000000000000000000000000000000000000000000000000000000000000"
   }
 }
 EOF
-if bash tests/bootstrap/verify-manifest.sh "$ARCHIVE_NAME" manifest.json manifest.sig >/dev/null 2>&1; then
+if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
     echo "FAIL: Substituted hash accepted"
     exit 1
 fi
 echo "PASS: Substituted hash rejected"
 
 echo "Test 4: Manifest without signature"
-if bash tests/bootstrap/verify-manifest.sh "$ARCHIVE_NAME" manifest.json "" >/dev/null 2>&1; then
+if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
     echo "FAIL: Missing signature accepted"
     exit 1
 fi
 echo "PASS: Missing signature rejected"
 
-echo "All tests passed."
+echo "Test 5: Real alpha.8 manifest fallback matching (REQUIRES_NETWORK)"
+ALPHA8_ARCHIVE="ochenstarik-server-monitor-manager-linux-x64.tar.gz"
+if ! wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz; then
+    echo "SKIP: Could not download alpha.8 archive (network unavailable)"
+else
+    wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
+    wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
+    CLEANUP_FILES+=("$ALPHA8_ARCHIVE")
+    # Use keyless verification against real Sigstore/Rekor (requires network)
+    unset SMM_TEST_PUBKEY
+    if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
+        echo "FAIL: Alpha.8 real release verification failed"
+        exit 1
+    fi
+    echo "PASS: Alpha.8 real release verification succeeded"
+fi
 
-rm -f cosign.key cosign.pub manifest.json manifest.sig "$ARCHIVE_NAME"
+echo "All tests passed."

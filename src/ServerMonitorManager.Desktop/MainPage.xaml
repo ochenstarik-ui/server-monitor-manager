@@ -108,13 +108,23 @@
                 </CommandBar>
             </Grid>
 
-            <InfoBar
-                x:Name="LinkActionInfo"
-                Grid.Row="1"
-                Margin="0,16,0,0"
-                IsClosable="True"
-                IsOpen="False"
-                Severity="Informational" />
+            <StackPanel Grid.Row="1" Spacing="16" Margin="0,16,0,0">
+                <InfoBar
+                    x:Name="UpdateInfoBar"
+                    IsClosable="True"
+                    IsOpen="False"
+                    Severity="Success">
+                    <InfoBar.ActionButton>
+                        <Button x:Name="InstallUpdateButton" Content="Обновить" Click="InstallUpdateButton_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+
+                <InfoBar
+                    x:Name="LinkActionInfo"
+                    IsClosable="True"
+                    IsOpen="False"
+                    Severity="Informational" />
+            </StackPanel>
 
             <Border
                 x:Name="OverviewSummary"

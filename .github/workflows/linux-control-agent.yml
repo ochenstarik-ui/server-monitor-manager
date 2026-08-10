@@ -26,6 +26,9 @@ jobs:
       - name: Build
         run: dotnet build ServerMonitorManager.slnx --configuration Release --no-restore
 
+      - name: Generate reference alpha.7 control database
+        run: bash tests/acceptance/generate_alpha7_db.sh tests/acceptance/alpha7.db
+
       - name: Test
         run: dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release --no-build
 

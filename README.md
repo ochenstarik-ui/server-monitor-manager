@@ -98,7 +98,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
 
 ## Current status
 
-`v0.1.0-alpha.5` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
+`v0.1.0-alpha.10` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
 
 The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
 

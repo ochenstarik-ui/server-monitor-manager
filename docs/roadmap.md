@@ -98,7 +98,7 @@
 
 - [x] добавить bootstrap source в этот репозиторий;
 - [x] упаковывать bootstrap, checksum и compatibility manifest в release workflow;
-- [ ] добавить криптографическую подпись compatibility manifest для production release;
+- [x] добавить криптографическую подпись compatibility manifest для production release;
 - [x] проверять Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
 - [x] добавить non-interactive install/update/rollback/uninstall;
 - [x] устанавливать Control/Agent, restricted helper и systemd units;
@@ -186,13 +186,13 @@
 
 ## Этап 14 — роль Monitor и доверенная поставка (Горизонт 0)
 
-- [ ] `install-monitor` в bootstrap: системный пользователь, root-owned forced command, установка публичного ключа из Desktop, идемпотентная переустановка и удаление;
-- [ ] контрактный тест формата снимка метрик, общий для forced command и Desktop-парсера;
-- [ ] подписанный release manifest с хэшами всех артефактов и версиями Control/Agent/helper/Desktop;
-- [ ] публичный ключ проверки вшит в bootstrap и Desktop, проверка подписи до разбора manifest;
-- [ ] отказ `update-control`/`update-agent` при несовместимых версиях;
-- [ ] негативные тесты в CI: подменённый архив, подменённый хэш, manifest без подписи;
-- [ ] пиннинг GitHub Actions по commit SHA, dependabot, SBOM;
+- [x] `install-monitor` в bootstrap: системный пользователь, root-owned forced command, установка публичного ключа из Desktop, идемпотентная переустановка и удаление;
+- [x] контрактный тест формата снимка метрик, общий для forced command и Desktop-парсера;
+- [x] подписанный release manifest с хэшами всех артефактов и версиями Control/Agent/helper/Desktop;
+- [x] публичный ключ проверки вшит в bootstrap и Desktop, проверка подписи до разбора manifest;
+- [x] отказ `update-control`/`update-agent` при несовместимых версиях;
+- [x] негативные тесты в CI: подменённый архив, подменённый хэш, manifest без подписи;
+- [x] пиннинг GitHub Actions по commit SHA, dependabot, SBOM;
 - [ ] автопродление сертификата Agent и документированная ротация Control CA;
 - [ ] доверенная подпись Windows MSIX.
 

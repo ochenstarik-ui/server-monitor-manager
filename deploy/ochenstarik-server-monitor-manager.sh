@@ -1245,11 +1245,6 @@ install_monitor() {
 set -euo pipefail
 # ochenstarik-smm-metrics
 
-MESH_STATUS=""
-if [[ -x /usr/bin/wg && -f /etc/wireguard/smm0.conf ]]; then
-    MESH_STATUS=$(wg show smm0 2>/dev/null || true)
-fi
-
 echo "PROTOCOL=1"
 echo "HOSTNAME=$(hostname)"
 UPTIME=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo "0")
@@ -1287,10 +1282,10 @@ echo "NETWORK_RX_BYTES=${NET_RX}"
 echo "NETWORK_TX_BYTES=${NET_TX}"
 KERNEL=$(uname -r 2>/dev/null || echo "unknown")
 echo "KERNEL=${KERNEL}"
-if [ -n "$MESH_STATUS" ]; then
-    echo "--- MESH STATUS ---"
-    echo "$MESH_STATUS"
-fi
+SYSTEMD_SSH=$(systemctl is-active ssh.service 2>/dev/null || true)
+echo "SYSTEMD_SSH=${SYSTEMD_SSH:-unknown}"
+SYSTEMD_WIREGUARD=$(systemctl is-active wg-quick@smm0.service 2>/dev/null || true)
+echo "SYSTEMD_WIREGUARD=${SYSTEMD_WIREGUARD:-unknown}"
 EOF
     chown root:root "$metrics_script"
     chmod 0755 "$metrics_script"

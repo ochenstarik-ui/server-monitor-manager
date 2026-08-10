@@ -23,38 +23,51 @@ jobs:
       - name: Validate bootstrap
         run: |
           bash -n deploy/ochenstarik-server-monitor-manager.sh
+          bash -n deploy/smm-setup.sh
           bash -n deploy/ochenstarik-smm-policy-apply
           bash -n deploy/ochenstarik-smm-emergency
           bash -n tests/bootstrap/run-native-systemd-smoke.sh
           bash -n tests/bootstrap/run-systemd-container-smoke.sh
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
+          shellcheck --severity=error deploy/smm-setup.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
           shellcheck --severity=error deploy/ochenstarik-smm-emergency
           shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
           shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
           bash tests/bootstrap/test-bootstrap-contract.sh
           bash tests/bootstrap/test-manifest-verification.sh
+          bash tests/bootstrap/test-release-contract.sh
 
       - name: Package bootstrap
         shell: bash
         run: |
           set -Eeuo pipefail
-          install -m 0755 deploy/ochenstarik-server-monitor-manager.sh ochenstarik-server-monitor-manager.sh
+          DIST_DIR=dist
+          install -d "$DIST_DIR"
+          install -m 0755 deploy/ochenstarik-server-monitor-manager.sh "$DIST_DIR/ochenstarik-server-monitor-manager.sh"
+          install -m 0755 deploy/smm-setup.sh "$DIST_DIR/smm-setup.sh"
           
           # Substitute PROGRAM_VERSION from tag
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            sed -i "s/^PROGRAM_VERSION=.*$/PROGRAM_VERSION=\"${GITHUB_REF_NAME}\"/" ochenstarik-server-monitor-manager.sh
+            sed -i "s/^PROGRAM_VERSION=.*$/PROGRAM_VERSION=\"${GITHUB_REF_NAME}\"/" "$DIST_DIR/ochenstarik-server-monitor-manager.sh"
+            grep -Fq "readonly DEFAULT_RELEASE_TAG=\"${GITHUB_REF_NAME}\"" "$DIST_DIR/smm-setup.sh"
           fi
           
-          sha256sum ochenstarik-server-monitor-manager.sh > ochenstarik-server-monitor-manager.sh.sha256
+          (
+            cd "$DIST_DIR"
+            sha256sum ochenstarik-server-monitor-manager.sh > ochenstarik-server-monitor-manager.sh.sha256
+            sha256sum smm-setup.sh > smm-setup.sh.sha256
+          )
 
       - name: Upload bootstrap artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: server-monitor-manager-bootstrap
           path: |
-            ochenstarik-server-monitor-manager.sh
-            ochenstarik-server-monitor-manager.sh.sha256
+            dist/ochenstarik-server-monitor-manager.sh
+            dist/ochenstarik-server-monitor-manager.sh.sha256
+            dist/smm-setup.sh
+            dist/smm-setup.sh.sha256
 
   publish-linux:
     runs-on: ubuntu-latest
@@ -233,6 +246,7 @@ jobs:
           
           # Calculate hashes
           BOOTSTRAP_SHA=$(sha256sum artifacts/server-monitor-manager-bootstrap/ochenstarik-server-monitor-manager.sh | awk '{print $1}')
+          SETUP_SHA=$(sha256sum artifacts/server-monitor-manager-bootstrap/smm-setup.sh | awk '{print $1}')
           LINUX_X64_SHA=$(sha256sum artifacts/server-monitor-manager-linux-x64/server-monitor-manager-linux-x64.tar.gz | awk '{print $1}')
           LINUX_ARM64_SHA=$(sha256sum artifacts/server-monitor-manager-linux-arm64/server-monitor-manager-linux-arm64.tar.gz | awk '{print $1}')
           MSIX_SHA=$(sha256sum artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/ServerMonitorManager-win-x64.msix | awk '{print $1}')
@@ -244,6 +258,7 @@ jobs:
             --arg schema "smm-manifest/v2" \
             --arg version "$VERSION" \
             --arg bootstrap_sha256 "$BOOTSTRAP_SHA" \
+            --arg setup_sha256 "$SETUP_SHA" \
             --arg linux_x64_sha256 "$LINUX_X64_SHA" \
             --arg linux_arm64_sha256 "$LINUX_ARM64_SHA" \
             --arg msix_sha256 "$MSIX_SHA" \
@@ -264,6 +279,7 @@ jobs:
               },
               hashes: {
                 "ochenstarik-server-monitor-manager.sh": $bootstrap_sha256,
+                "smm-setup.sh": $setup_sha256,
                 "server-monitor-manager-linux-x64.tar.gz": $linux_x64_sha256,
                 "server-monitor-manager-linux-arm64.tar.gz": $linux_arm64_sha256,
                 "ServerMonitorManager-win-x64.msix": $msix_sha256,

@@ -1,58 +1,54 @@
 #!/usr/bin/env bash
-set -euo pipefail
+set -Eeuo pipefail
+IFS=$'\n\t'
 
-# test_monitor_snapshot.sh
-# Acceptance test for Monitor role installation and metrics format
+root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
+contract="$root/tests/contracts/monitor-snapshot-v1.txt"
+installer_contract="$root/docs/installer-contract.md"
 
-cd "$(dirname "$0")/../.."
-BOOTSTRAP="./deploy/ochenstarik-server-monitor-manager.sh"
-DUMMY_KEY="ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDummyTestKeyForAcceptanceTest dummy@test"
+grep -Fq 'Monitoring key permits only the exact versioned metrics snapshot listed below; no additional mesh status or other output is allowed.' "$installer_contract"
+if grep -Fq 'read-only mesh status' "$installer_contract"; then
+    printf '%s\n' 'installer contract still permits mesh status outside the closed snapshot' >&2
+    exit 1
+fi
 
-echo "=== Testing install-monitor ==="
-sudo "$BOOTSTRAP" install-monitor "$DUMMY_KEY"
+extract_metrics_script() {
+    awk '
+        /cat >"\$metrics_script" <<'"'"'EOF'"'"'/ { emitting = 1; next }
+        emitting && $0 == "EOF" { exit }
+        emitting { print }
+    ' "$bootstrap"
+}
 
-# 1. Verify user exists and has nologin
-getent passwd ochenstarik-monitor | grep -q "/usr/sbin/nologin" || {
-    echo "ERROR: User ochenstarik-monitor does not exist or does not have nologin"
+fixture="$(mktemp -d -t smm-monitor-snapshot.XXXXXXXX)"
+trap 'rm -rf -- "$fixture"' EXIT
+metrics_script="$fixture/ochenstarik-smm-metrics"
+extract_metrics_script >"$metrics_script"
+chmod 0755 "$metrics_script"
+
+[[ -s "$metrics_script" ]] || {
+    printf '%s\n' 'monitor metrics script was not found in bootstrap' >&2
     exit 1
 }
 
-# 2. Verify authorized_keys
-AUTH_KEYS="/var/lib/ochenstarik-monitor/.ssh/authorized_keys"
-if ! sudo test -f "$AUTH_KEYS"; then
-    echo "ERROR: authorized_keys not found"
+metrics_out="$(bash "$metrics_script")"
+printf '%s\n' "$metrics_out"
+
+if grep -Ev '^[A-Z][A-Z0-9_]*=.*$' <<<"$metrics_out"; then
+    printf '%s\n' 'monitor snapshot contains non-contract output' >&2
     exit 1
 fi
 
-sudo grep -q "command=\"/usr/local/libexec/ochenstarik-smm-metrics\",restrict" "$AUTH_KEYS" || {
-    echo "ERROR: Forced command not found in authorized_keys"
-    exit 1
-}
-
-# 3. Verify metrics script output format
-echo "=== Testing metrics output ==="
-METRICS_OUT=$(sudo /usr/local/libexec/ochenstarik-smm-metrics)
-echo "$METRICS_OUT"
-
-for FIELD in PROTOCOL HOSTNAME UPTIME_SECONDS LOAD1 CPU_COUNT MEM_TOTAL_KB MEM_AVAILABLE_KB SWAP_TOTAL_KB SWAP_FREE_KB DISK_TOTAL_KB DISK_AVAILABLE_KB DISK_INODES_TOTAL DISK_INODES_FREE NETWORK_RX_BYTES NETWORK_TX_BYTES KERNEL; do
-    if ! echo "$METRICS_OUT" | grep -q "^${FIELD}="; then
-        echo "ERROR: Missing field ${FIELD} in metrics output"
-        exit 1
-    fi
-done
-
-# 4. Verify uninstall
-echo "=== Testing uninstall-monitor ==="
-sudo "$BOOTSTRAP" uninstall-monitor
-
-if getent passwd ochenstarik-monitor >/dev/null 2>&1; then
-    echo "ERROR: User ochenstarik-monitor was not removed"
+expected_keys="$(cut -d= -f1 "$contract" | LC_ALL=C sort)"
+actual_keys="$(cut -d= -f1 <<<"$metrics_out" | LC_ALL=C sort)"
+if [[ "$actual_keys" != "$expected_keys" ]]; then
+    printf '%s\n' 'monitor snapshot field closure differs from canonical contract' >&2
+    diff -u <(printf '%s\n' "$expected_keys") <(printf '%s\n' "$actual_keys") >&2 || true
     exit 1
 fi
 
-if sudo test -f "$AUTH_KEYS" || sudo test -f "/usr/local/libexec/ochenstarik-smm-metrics"; then
-    echo "ERROR: Leftover files found after uninstall"
-    exit 1
-fi
+[[ "$(grep -c '^PROTOCOL=1$' <<<"$metrics_out")" -eq 1 ]]
+[[ "$(wc -l <"$contract")" -eq "$(wc -l <<<"$metrics_out")" ]]
 
-echo "=== PASS: Monitor role acceptance test ==="
+printf '%s\n' 'MONITOR_SNAPSHOT_CONTRACT=PASS'

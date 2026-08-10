@@ -40,7 +40,7 @@ The control plane and data plane are separated:
 - **Desktop:** packaged WinUI 3 client with DPAPI-protected operator certificate and SSH identity.
 - **Agent:** self-contained Linux binary for `amd64` and `arm64`; it only creates outbound mTLS sessions.
 
-See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), [Linux bootstrap contract](docs/installer-contract.md), and the [Provisioning and Xray specification](docs/provisioning-vpn-requirements.md).
+See [architecture](docs/architecture.md), [security model](docs/security-model.md), [roadmap](docs/roadmap.md), [Linux bootstrap contract](docs/installer-contract.md), [release policy](docs/release-policy.md), and the [Provisioning and Xray specification](docs/provisioning-vpn-requirements.md).
 
 Work order is governed by [product horizons](docs/product-horizons.md): the roadmap records what is done, the horizons record what may be started. Planned subsystems are specified separately in [approval policies](docs/approval-policies.md) and the [KAgent integration](docs/integration-kagent.md). Both describe target behaviour and are not descriptions of the current alpha; nothing in them is implemented.
 

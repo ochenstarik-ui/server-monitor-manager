@@ -1,0 +1,95 @@
+name: Windows installer release
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    env:
+      SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
+      SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+
+      - name: Set up .NET 10
+        uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68  # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Prepare signing certificate
+        id: signing
+        shell: pwsh
+        run: |
+          $directory = Join-Path $env:RUNNER_TEMP 'smm-signing'
+          New-Item -ItemType Directory -Path $directory -Force | Out-Null
+          if ($env:SIGNING_CERTIFICATE_BASE64 -and $env:SIGNING_CERTIFICATE_PASSWORD) {
+            Write-Output "::add-mask::$env:SIGNING_CERTIFICATE_PASSWORD"
+            $pfx = Join-Path $directory 'trusted-signing.pfx'
+            [IO.File]::WriteAllBytes($pfx, [Convert]::FromBase64String($env:SIGNING_CERTIFICATE_BASE64))
+            "certificate=$pfx" >> $env:GITHUB_OUTPUT
+            "password=$env:SIGNING_CERTIFICATE_PASSWORD" >> $env:GITHUB_OUTPUT
+            "test_certificate=false" >> $env:GITHUB_OUTPUT
+          } else {
+            $password = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(24))
+            Write-Output "::add-mask::$password"
+            ./build/windows/New-TestSigningCertificate.ps1 -OutputDirectory $directory -Password $password
+            "certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.pfx')" >> $env:GITHUB_OUTPUT
+            "public_certificate=$(Join-Path $directory 'server-monitor-manager-test-signing.cer')" >> $env:GITHUB_OUTPUT
+            "password=$password" >> $env:GITHUB_OUTPUT
+            "test_certificate=true" >> $env:GITHUB_OUTPUT
+          }
+
+      - name: Build signed MSIX
+        shell: pwsh
+        run: ./build/windows/Build-Installer.ps1 -CertificatePath '${{ steps.signing.outputs.certificate }}' -CertificatePassword '${{ steps.signing.outputs.password }}'
+
+      - name: Include test certificate
+        if: steps.signing.outputs.test_certificate == 'true'
+        shell: pwsh
+        run: Copy-Item -LiteralPath '${{ steps.signing.outputs.public_certificate }}' -Destination artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+
+      - name: Verify checksum
+        shell: pwsh
+        run: |
+          $line = Get-Content artifacts/windows-installer/SHA256SUMS
+          $expected = ($line -split ' ')[0]
+          $actual = (Get-FileHash artifacts/windows-installer/ServerMonitorManager-win-x64.msix -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $expected) { throw 'Windows installer checksum mismatch.' }
+
+      - name: Generate SBOM
+        shell: bash
+        run: |
+          dotnet tool install --global CycloneDX
+          dotnet CycloneDX ServerMonitorManager.slnx -o . -j --filename server-monitor-manager-win-x64-sbom
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
+        with:
+          name: ServerMonitorManager-win-x64
+          path: |
+            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
+            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+            artifacts/windows-installer/SHA256SUMS
+            server-monitor-manager-win-x64-sbom.json
+          if-no-files-found: error
+
+      - name: Attach installer to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
+        with:
+          prerelease: ${{ contains(github.ref_name, '-') }}
+          files: |
+            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
+            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
+            artifacts/windows-installer/SHA256SUMS
+            server-monitor-manager-win-x64-sbom.json

@@ -7,20 +7,22 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   package:
+    permissions:
+      contents: write
     runs-on: windows-latest
     env:
       SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
       SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
 
       - name: Set up .NET 10
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1  # v5
         with:
           dotnet-version: 10.0.x
 
@@ -56,6 +58,12 @@ jobs:
         shell: pwsh
         run: Copy-Item -LiteralPath '${{ steps.signing.outputs.public_certificate }}' -Destination artifacts/windows-installer/ServerMonitorManager-test-signing.cer
 
+      - name: Generate SBOM
+        shell: pwsh
+        run: |
+          dotnet tool install --global CycloneDX
+          dotnet cyclonedx ServerMonitorManager.slnx -o artifacts/windows-installer/sbom
+
       - name: Verify checksum
         shell: pwsh
         run: |
@@ -65,21 +73,24 @@ jobs:
           if ($actual -ne $expected) { throw 'Windows installer checksum mismatch.' }
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
           name: ServerMonitorManager-win-x64
           path: |
             artifacts/windows-installer/ServerMonitorManager-win-x64.msix
             artifacts/windows-installer/ServerMonitorManager-test-signing.cer
             artifacts/windows-installer/SHA256SUMS
+            artifacts/windows-installer/sbom
           if-no-files-found: error
 
       - name: Attach installer to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
             artifacts/windows-installer/ServerMonitorManager-win-x64.msix
             artifacts/windows-installer/ServerMonitorManager-test-signing.cer
             artifacts/windows-installer/SHA256SUMS
+            artifacts/windows-installer/sbom/bom.xml
+            artifacts/windows-installer/sbom/bom.json

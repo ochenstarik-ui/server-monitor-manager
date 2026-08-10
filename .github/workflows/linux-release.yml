@@ -7,14 +7,16 @@ on:
       - 'v*'
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   bootstrap:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
 
       - name: Validate bootstrap
         run: |
@@ -46,7 +48,7 @@ jobs:
             > server-monitor-manager-bootstrap-manifest.json
 
       - name: Upload bootstrap artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
           name: server-monitor-manager-bootstrap
           path: |
@@ -56,7 +58,7 @@ jobs:
 
       - name: Attach bootstrap to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |
@@ -65,16 +67,18 @@ jobs:
             server-monitor-manager-bootstrap-manifest.json
 
   publish:
+    permissions:
+      contents: write
     runs-on: ubuntu-latest
     strategy:
       matrix:
         runtime: [linux-x64, linux-arm64]
     steps:
       - name: Checkout
-        uses: actions/checkout@v6
+        uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803  # v6
 
       - name: Set up .NET 10
-        uses: actions/setup-dotnet@v5
+        uses: actions/setup-dotnet@26b0ec14cb23fa6904739307f278c14f94c95bf1  # v5
         with:
           dotnet-version: 10.0.x
 
@@ -86,6 +90,11 @@ jobs:
 
       - name: Publish provisioning helper
         run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime ${{ matrix.runtime }} --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o out/provisioning-helper
+
+      - name: Generate SBOM
+        run: |
+          dotnet tool install --global CycloneDX
+          dotnet cyclonedx ServerMonitorManager.slnx -o out/sbom
 
       - name: Package
         shell: bash
@@ -100,11 +109,11 @@ jobs:
           install -m 0755 deploy/ochenstarik-smm-emergency out/deploy/
           install -m 0755 deploy/ochenstarik-server-monitor-manager.sh out/bootstrap/
           archive="server-monitor-manager-${{ matrix.runtime }}.tar.gz"
-          tar -C out -czf "$archive" agent control provisioning-helper deploy bootstrap
+          tar -C out -czf "$archive" agent control provisioning-helper deploy bootstrap sbom
           sha256sum "$archive" > "$archive.sha256"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f  # v6
         with:
           name: server-monitor-manager-${{ matrix.runtime }}
           path: |
@@ -113,7 +122,7 @@ jobs:
 
       - name: Attach to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65  # v2
         with:
           prerelease: ${{ contains(github.ref_name, '-') }}
           files: |

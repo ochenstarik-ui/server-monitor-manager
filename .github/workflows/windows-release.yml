@@ -1,10 +1,7 @@
-name: Windows installer release
+name: Windows installer packaging
 
 on:
   workflow_dispatch:
-  push:
-    tags:
-      - 'v*'
 
 permissions:
   contents: read
@@ -12,8 +9,6 @@ permissions:
 jobs:
   package:
     runs-on: windows-latest
-    permissions:
-      contents: write
     env:
       SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_BASE64 }}
       SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_SIGNING_CERTIFICATE_PASSWORD }}
@@ -85,14 +80,3 @@ jobs:
             artifacts/windows-installer/SHA256SUMS
             server-monitor-manager-win-x64-sbom.json
           if-no-files-found: error
-
-      - name: Attach installer to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/')
-        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228  # v3.0.2
-        with:
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          files: |
-            artifacts/windows-installer/ServerMonitorManager-win-x64.msix
-            artifacts/windows-installer/ServerMonitorManager-test-signing.cer
-            artifacts/windows-installer/SHA256SUMS
-            server-monitor-manager-win-x64-sbom.json

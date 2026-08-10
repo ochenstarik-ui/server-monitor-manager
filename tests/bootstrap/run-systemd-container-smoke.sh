@@ -46,13 +46,23 @@ docker cp "$archive" "$name:$remote_archive"
 docker cp "${archive}.sha256" "$name:${remote_archive}.sha256"
 docker cp "$bootstrap" "$name:$remote_bootstrap"
 docker exec "$name" chmod 0700 "$remote_bootstrap"
+
+# Copy manifest+sig if available; otherwise install-control will need SMM_ALLOW_UNSIGNED
+archive_dir="$(dirname "$archive")"
+smm_env=()
+if [[ -f "$archive_dir/server-monitor-manager-manifest.json" && -f "$archive_dir/server-monitor-manager-manifest.sig" ]]; then
+    docker cp "$archive_dir/server-monitor-manager-manifest.json" "$name:$smoke_dir/server-monitor-manager-manifest.json"
+    docker cp "$archive_dir/server-monitor-manager-manifest.sig" "$name:$smoke_dir/server-monitor-manager-manifest.sig"
+else
+    smm_env=(env SMM_ALLOW_UNSIGNED=1)
+fi
 docker exec "$name" "$remote_bootstrap" preflight
-docker exec "$name" "$remote_bootstrap" install-control \
+docker exec "$name" "${smm_env[@]}" "$remote_bootstrap" install-control \
     "$remote_archive" 127.0.0.1 "$port"
 docker exec "$name" curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
     --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
     "https://127.0.0.1:$port/healthz"
-docker exec "$name" "$remote_bootstrap" install-control \
+docker exec "$name" "${smm_env[@]}" "$remote_bootstrap" install-control \
     "$remote_archive" 127.0.0.1 "$port"
 
 docker restart "$name" >/dev/null

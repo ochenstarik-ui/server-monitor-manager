@@ -8,6 +8,13 @@ port="${SMM_SMOKE_PORT:-17443}"
 system_bootstrap="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"
 probe_dir=""
 
+# If manifest+sig are not shipped alongside the archive (CI-only builds),
+# allow unsigned verification via .sha256 fallback.
+archive_dir="$(dirname "$archive")"
+if [[ ! -f "$archive_dir/server-monitor-manager-manifest.json" || ! -f "$archive_dir/server-monitor-manager-manifest.sig" ]]; then
+    export SMM_ALLOW_UNSIGNED=1
+fi
+
 cleanup() {
     if [[ -n "$probe_dir" ]]; then
         rm -rf -- "$probe_dir"

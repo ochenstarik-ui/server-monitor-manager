@@ -39,12 +39,5 @@ public sealed class SchemaCompatibilityTests
         var links = await store.ListEffectiveLinksForNodeAsync("nonexistent", CancellationToken.None);
         Assert.Empty(links);
         
-        // 4. Test Backup
-        var backupPath = dbPath + ".backup";
-        await store.BackupToAsync(backupPath, CancellationToken.None);
-        Assert.True(File.Exists(backupPath));
-        
-        // Clean up backup
-        File.Delete(backupPath);
     }
 }

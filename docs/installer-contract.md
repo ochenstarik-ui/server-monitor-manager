@@ -6,6 +6,8 @@ Bootstrap, helper, systemd units, JSON schemas и manifests являются к�
 
 Bootstrap не скачивает и не запускает исходники других проектов. Production-установка использует закреплённый release/tag, проверяет signed compatibility manifest и SHA-256 каждого artifact. Mutable `main` не является источником production-установки.
 
+Published release tags and their assets are immutable. A published tag must never be moved, reused, deleted and recreated, or supplied with replacement assets under the same names; corrections must preserve the existing release and publish a new, higher version tag.
+
 Пока bootstrap не опубликован в release, документация не должна предлагать несуществующую команду его скачивания.
 
 ## 2. Поддерживаемые роли
@@ -104,7 +106,7 @@ CLI является non-interactive, кроме локального ввода
 
 ## 7. Forced command monitoring
 
-Monitoring key допускает только versioned metrics snapshot и read-only mesh status. Полный SSH-терминал использует отдельную пользовательскую identity.
+Monitoring key permits only the exact versioned metrics snapshot listed below; no additional mesh status or other output is allowed. Полный SSH-терминал использует отдельную пользовательскую identity.
 
 Минимальный snapshot:
 
@@ -125,6 +127,8 @@ DISK_INODES_FREE=...
 NETWORK_RX_BYTES=...
 NETWORK_TX_BYTES=...
 KERNEL=...
+SYSTEMD_SSH=active|inactive|failed|unknown
+SYSTEMD_WIREGUARD=active|inactive|failed|unknown
 ```
 
 ## 8. Обязательные проверки

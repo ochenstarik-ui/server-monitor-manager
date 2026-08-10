@@ -26,9 +26,6 @@ jobs:
       - name: Build
         run: dotnet build ServerMonitorManager.slnx --configuration Release --no-restore
 
-      - name: Generate reference alpha.7 control database
-        run: bash tests/acceptance/generate_alpha7_db.sh tests/acceptance/alpha7.db
-
       - name: Test
         run: dotnet test tests/ServerMonitorManager.Control.Tests/ServerMonitorManager.Control.Tests.csproj --configuration Release --no-build
 
@@ -42,6 +39,17 @@ jobs:
           bash -n tests/acceptance/three-server-mesh.sh
           shellcheck --severity=error tests/acceptance/three-server-mesh.sh
 
+      - name: Verify Monitor snapshot contract
+        run: |
+          bash -n tests/acceptance/test_monitor_snapshot.sh
+          bash -n tests/acceptance/test_previous_schema_contract.sh
+          bash -n tests/acceptance/test_previous_schema_arm64.sh
+          shellcheck --severity=error tests/acceptance/test_monitor_snapshot.sh
+          shellcheck --severity=error tests/acceptance/test_previous_schema_contract.sh
+          shellcheck --severity=error tests/acceptance/test_previous_schema_arm64.sh
+          bash tests/acceptance/test_monitor_snapshot.sh
+          bash tests/acceptance/test_previous_schema_contract.sh
+
       - name: Verify standalone bootstrap
         run: |
           bash -n deploy/ochenstarik-server-monitor-manager.sh
@@ -50,20 +58,39 @@ jobs:
           bash -n tests/bootstrap/run-native-systemd-smoke.sh
           bash -n tests/bootstrap/run-systemd-container-smoke.sh
           bash -n tests/bootstrap/test-enrollment-token-argv.sh
+          bash -n tests/bootstrap/test-release-contract.sh
           shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
           shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
           shellcheck --severity=error deploy/ochenstarik-smm-emergency
           shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
           shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
           shellcheck --severity=error tests/bootstrap/test-enrollment-token-argv.sh
+          shellcheck --severity=error tests/bootstrap/test-release-contract.sh
           bash tests/bootstrap/test-bootstrap-contract.sh
           bash tests/bootstrap/test-enrollment-token-argv.sh
+          bash tests/bootstrap/test-release-contract.sh
 
       - name: Publish agent amd64
         run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
 
       - name: Publish agent arm64
         run: dotnet publish src/ServerMonitorManager.Agent/ServerMonitorManager.Agent.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true
+
+      - name: Publish control arm64 compatibility binary
+        run: dotnet publish src/ServerMonitorManager.Control/ServerMonitorManager.Control.csproj --configuration Release --runtime linux-arm64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true -o compatibility/control-linux-arm64
+
+      - name: Set up arm64 emulation
+        uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130  # v3
+        with:
+          platforms: arm64
+
+      - name: Verify previous schema with arm64 published Control
+        run: |
+          docker run --rm --platform linux/arm64 \
+            --volume "$PWD:/workspace" --workdir /workspace \
+            ubuntu:24.04 \
+            bash tests/acceptance/test_previous_schema_arm64.sh \
+              compatibility/control-linux-arm64/ochenstarik-smm-control
 
       - name: Publish provisioning helper amd64
         run: dotnet publish src/ServerMonitorManager.Provisioning.Helper/ServerMonitorManager.Provisioning.Helper.csproj --configuration Release --runtime linux-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -p:RestoreLockedMode=true

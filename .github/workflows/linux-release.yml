@@ -213,7 +213,7 @@ jobs:
           BOOTSTRAP_SHA=$(sha256sum artifacts/server-monitor-manager-bootstrap/ochenstarik-server-monitor-manager.sh | awk '{print $1}')
           LINUX_X64_SHA=$(sha256sum artifacts/server-monitor-manager-linux-x64/server-monitor-manager-linux-x64.tar.gz | awk '{print $1}')
           LINUX_ARM64_SHA=$(sha256sum artifacts/server-monitor-manager-linux-arm64/server-monitor-manager-linux-arm64.tar.gz | awk '{print $1}')
-          MSIX_SHA=$(sha256sum artifacts/server-monitor-manager-win-x64/ServerMonitorManager-win-x64.msix | awk '{print $1}')
+          MSIX_SHA=$(sha256sum artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/ServerMonitorManager-win-x64.msix | awk '{print $1}')
           LINUX_X64_SBOM_SHA=$(sha256sum artifacts/server-monitor-manager-linux-x64/server-monitor-manager-linux-x64-sbom.json | awk '{print $1}')
           LINUX_ARM64_SBOM_SHA=$(sha256sum artifacts/server-monitor-manager-linux-arm64/server-monitor-manager-linux-arm64-sbom.json | awk '{print $1}')
           WIN_X64_SBOM_SHA=$(sha256sum artifacts/server-monitor-manager-win-x64/server-monitor-manager-win-x64-sbom.json | awk '{print $1}')
@@ -265,6 +265,7 @@ jobs:
             artifacts/server-monitor-manager-bootstrap/*
             artifacts/server-monitor-manager-linux-x64/*
             artifacts/server-monitor-manager-linux-arm64/*
-            artifacts/server-monitor-manager-win-x64/*
+            artifacts/server-monitor-manager-win-x64/server-monitor-manager-win-x64-sbom.json
+            artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/*
             server-monitor-manager-manifest.json
             server-monitor-manager-manifest.sig

@@ -49,6 +49,16 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             ]
         }";
 
+        // Release JSON without the .sig asset — used by Test4
+        private const string NoSigReleaseJson = @"
+        {
+            ""tag_name"": ""v0.1.0-alpha.9"",
+            ""assets"": [
+                { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+                { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
+            ]
+        }";
+
         private const string ValidManifestJson = @"
         {
             ""version"": ""v0.1.0-alpha.9"",
@@ -130,8 +140,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
         [Fact]
         public async Task Test4_MissingSignature_Rejected()
         {
-            var noSigRelease = ValidReleaseJson.Replace("{ \"name\": \"server-monitor-manager-manifest.sig\"", "//");
-            var http = new MockHttpTransport { GetStringAsyncFunc = _ => Task.FromResult(noSigRelease) };
+            var http = new MockHttpTransport { GetStringAsyncFunc = _ => Task.FromResult(NoSigReleaseJson) };
             var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
@@ -154,7 +163,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
         }
 
         [Fact]
-        public async Task Test8_UpdateActionNotShownUntilVerified()
+        public async Task Test6_UpdateActionNotShownUntilVerified()
         {
             var http = new MockHttpTransport { GetStringAsyncFunc = url => Task.FromResult(url.EndsWith("releases/latest") ? ValidReleaseJson : ValidManifestJson) };
             bool signatureVerified = false;
@@ -173,7 +182,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
         }
 
         [Fact]
-        public async Task Test9_PreReleaseChannel_Used()
+        public async Task Test7_PreReleaseChannel_Used()
         {
             var preReleaseJson = "[" + ValidReleaseJson.Replace("v0.1.0-alpha.9", "v0.1.0-alpha.10") + "]";
             var preReleaseManifest = ValidManifestJson.Replace("v0.1.0-alpha.9", "v0.1.0-alpha.10");
@@ -195,7 +204,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
         }
 
         [Fact]
-        public async Task Test10_UrlAssetFromAnotherTag_Rejected()
+        public async Task Test8_UrlAssetFromAnotherTag_Rejected()
         {
             // Msix URL points to a different tag
             var maliciousRelease = ValidReleaseJson.Replace("v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix", "v0.1.0-alpha.8/ServerMonitorManager-win-x64.msix");
@@ -205,6 +214,55 @@ namespace ServerMonitorManager.Desktop.Security.Tests
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
             Assert.Contains("does not match the release tag", ex.Message);
+        }
+
+        [Fact]
+        public async Task Test9_ManifestVersionMismatch_Rejected()
+        {
+            // Manifest says v0.1.0-alpha.8 but release tag says v0.1.0-alpha.9
+            var mismatchedManifest = ValidManifestJson.Replace("v0.1.0-alpha.9", "v0.1.0-alpha.8");
+            var http = new MockHttpTransport
+            {
+                GetStringAsyncFunc = url =>
+                {
+                    if (url.EndsWith("releases/latest")) return Task.FromResult(ValidReleaseJson);
+                    if (url.EndsWith(".json")) return Task.FromResult(mismatchedManifest);
+                    if (url.EndsWith(".sig")) return Task.FromResult("valid-sig");
+                    return Task.FromResult("");
+                }
+            };
+            var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
+            Assert.Contains("version", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task Test10_MissingMsixAsset_Rejected()
+        {
+            // Release JSON without the MSIX asset
+            var noMsixRelease = @"
+            {
+                ""tag_name"": ""v0.1.0-alpha.9"",
+                ""assets"": [
+                    { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+                    { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" }
+                ]
+            }";
+            var http = new MockHttpTransport
+            {
+                GetStringAsyncFunc = url =>
+                {
+                    if (url.EndsWith("releases/latest")) return Task.FromResult(noMsixRelease);
+                    if (url.EndsWith(".json")) return Task.FromResult(ValidManifestJson);
+                    if (url.EndsWith(".sig")) return Task.FromResult("valid-sig");
+                    return Task.FromResult("");
+                }
+            };
+            var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
+            Assert.Contains("MSIX", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
     }
 }

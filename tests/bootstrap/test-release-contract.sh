@@ -5,6 +5,7 @@ IFS=$'\n\t'
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 setup="$root/deploy/smm-setup.sh"
 workflow="$root/.github/workflows/linux-release.yml"
+windows_workflow="$root/.github/workflows/windows-release.yml"
 policy="$root/docs/release-policy.md"
 installer_contract="$root/docs/installer-contract.md"
 
@@ -22,6 +23,22 @@ fi
 grep -Fq 'install -m 0755 deploy/smm-setup.sh "$DIST_DIR/smm-setup.sh"' "$workflow"
 grep -Fq 'smm-setup.sh.sha256' "$workflow"
 grep -Fq 'dist/smm-setup.sh' "$workflow"
+grep -Fq "      - 'v*'" "$workflow"
+grep -Fq 'contents: write' "$workflow"
+grep -Fq 'softprops/action-gh-release@' "$workflow"
+grep -Fq 'workflow_dispatch:' "$windows_workflow"
+if grep -Eq '^[[:space:]]+tags:' "$windows_workflow"; then
+    printf '%s\n' 'Windows packaging workflow must not trigger on tags' >&2
+    exit 1
+fi
+if grep -Fq 'softprops/action-gh-release@' "$windows_workflow"; then
+    printf '%s\n' 'Windows packaging workflow must not publish GitHub Release assets' >&2
+    exit 1
+fi
+if grep -Eq 'contents:[[:space:]]*write' "$windows_workflow"; then
+    printf '%s\n' 'Windows packaging workflow must not have contents write permission' >&2
+    exit 1
+fi
 grep -Fq 'Published tags and release assets are immutable.' "$policy"
 grep -Fq 'publish a new, higher version tag' "$policy"
 grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"

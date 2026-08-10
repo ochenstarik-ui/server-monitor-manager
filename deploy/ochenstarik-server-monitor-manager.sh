@@ -250,8 +250,12 @@ verify_manifest() {
     [[ -f "$manifest" ]] || fail "Manifest not found: $manifest"
     [[ -f "$signature" ]] || fail "Signature not found: $signature"
     log "Verifying manifest signature..."
-    if ! cosign verify-blob --certificate-oidc-issuer "$COSIGN_ISSUER" \
-        --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP" \
+    local verify_args=(--certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
+    if [[ -n "${SMM_TEST_PUBKEY:-}" ]]; then
+        verify_args=(--key "$SMM_TEST_PUBKEY")
+        log "WARNING: Using test public key for verification. This must NOT happen in production."
+    fi
+    if ! cosign verify-blob "${verify_args[@]}" \
         --signature "$signature" "$manifest" >/dev/null 2>&1; then
         fail "Manifest signature verification failed."
     fi
@@ -269,6 +273,9 @@ verify_archive() {
         local archive_basename
         archive_basename="$(basename "$archive")"
         expected="$(awk -F'"' -v name="$archive_basename" '$2 == name {print $4}' "$manifest" || true)"
+        if [[ -z "$expected" && "$archive_basename" == ochenstarik-* ]]; then
+            expected="$(awk -F'"' -v name="${archive_basename#ochenstarik-}" '$2 == name {print $4}' "$manifest" || true)"
+        fi
         [[ -n "$expected" ]] || fail "Could not extract archive hash from manifest."
     else
         if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then

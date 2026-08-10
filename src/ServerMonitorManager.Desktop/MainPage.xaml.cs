@@ -18,6 +18,8 @@ public sealed partial class MainPage : Page
     private readonly SshMonitorService _ssh = new();
     private readonly MetricsHistoryStorage _historyStorage = new();
     private readonly ControlClientService _control = new();
+    private readonly UpdateService _update = new(new DefaultHttpTransport(), new ProcessSignatureVerifier(new DefaultFileStorage(), new DefaultHttpTransport()), new DefaultFileStorage());
+    private UpdateInfo? _pendingUpdate;
     private readonly List<MetricSampleData> _history = [];
     private readonly DispatcherTimer _refreshTimer = new() { Interval = TimeSpan.FromSeconds(30) };
     private readonly SemaphoreSlim _refreshLock = new(1, 1);
@@ -136,6 +138,28 @@ public sealed partial class MainPage : Page
         }
 
         _loaded = true;
+        
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var update = await _update.CheckForUpdatesAsync(usePreRelease: true);
+                if (update is not null)
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        _pendingUpdate = update;
+                        UpdateInfoBar.Message = $"Доступна новая версия: {update.Version}";
+                        UpdateInfoBar.IsOpen = true;
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Update check failed: {ex.Message}");
+            }
+        });
+        
         _refreshTimer.Start();
         _history.AddRange(await _historyStorage.LoadAsync());
         foreach (var profile in await _storage.LoadAsync())
@@ -444,6 +468,26 @@ public sealed partial class MainPage : Page
                 _controlListening = false;
             }
         });
+    }
+
+    private async void InstallUpdateButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_pendingUpdate is null) return;
+        
+        InstallUpdateButton.IsEnabled = false;
+        InstallUpdateButton.Content = "Скачивание...";
+        UpdateInfoBar.IsClosable = false;
+        
+        try
+        {
+            await _update.DownloadAndVerifyUpdateAsync(_pendingUpdate);
+            _update.InstallUpdate();
+        }
+        catch (Exception ex)
+        {
+            ShowInfo("Ошибка обновления", ex.Message, InfoBarSeverity.Error);
+            UpdateInfoBar.IsOpen = false;
+        }
     }
 
     private Task HandleControlEventAsync(ControlEvent controlEvent)

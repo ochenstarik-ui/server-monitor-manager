@@ -1,0 +1,69 @@
+name: Release Verification
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to verify'
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout tests
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          sparse-checkout: |
+            tests/release-verification
+            tests/contracts/monitor-snapshot-v1.txt
+          sparse-checkout-cone-mode: false
+
+      - name: Setup cosign
+        uses: sigstore/cosign-installer@v3.5.0
+
+      - name: Determine Tag
+        id: tag
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Verify Assets List
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          bash tests/release-verification/verify-assets.sh "${{ steps.tag.outputs.tag }}"
+
+      - name: Isolate Workspace
+        run: |
+          # Move tests to a safe location and clean the workspace
+          # This ensures the installation does not accidentally use source files
+          cp -r tests /tmp/isolated_tests
+          rm -rf * .git
+
+      - name: Run Positive Installation
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p workspace
+          cd workspace
+          # Bring contract back for verification script
+          mkdir -p tests/contracts
+          cp /tmp/isolated_tests/contracts/monitor-snapshot-v1.txt tests/contracts/
+          bash /tmp/isolated_tests/release-verification/run-positive-installation.sh "${{ steps.tag.outputs.tag }}"
+
+      - name: Run Negative Tests
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p workspace-neg
+          cd workspace-neg
+          bash /tmp/isolated_tests/release-verification/run-negative-tests.sh "${{ steps.tag.outputs.tag }}"

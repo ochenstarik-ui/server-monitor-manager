@@ -23,6 +23,7 @@ readonly WG_DIR="${ETC_DIR}/wireguard"
 readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
 readonly MESH_NETWORK="10.77.0.0/24"
 readonly HUB_MESH_ADDRESS="10.77.0.1/24"
+# Trust anchors — see docs/release-policy.md for the full signing and identity contract.
 readonly COSIGN_ISSUER="https://token.actions.githubusercontent.com"
 readonly COSIGN_IDENTITY_REGEXP="^https://github.com/ochenstarik-ui/server-monitor-manager/\.github/workflows/linux-release\.yml@refs/tags/v.*$"
 

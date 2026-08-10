@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Diagnostics.Tracing;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -163,6 +164,11 @@ public class DefaultFileStorage : IFileStorage
 public class UpdateService
 {
     private const string Repository = "ochenstarik-ui/server-monitor-manager";
+    // Trust anchors pinned per docs/release-policy.md — do NOT fetch these from the release being verified.
+    private const string CosignIssuer = "https://token.actions.githubusercontent.com";
+    private const string CosignIdentityRegexp = @"^https://github\.com/ochenstarik-ui/server-monitor-manager/\.github/workflows/.*\.yml@refs/tags/v.*$";
+    
+    private static readonly TraceSource Log = new("ServerMonitorManager.UpdateService", SourceLevels.All);
     
     private readonly IHttpTransport _http;
     private readonly ISignatureVerifier _signatureVerifier;
@@ -239,6 +245,13 @@ public class UpdateService
         }
         
         var version = manifestNode["version"]?.GetValue<string>();
+        
+        // Manifest version must match the release tag to prevent downgrade/cross-version attacks
+        if (!string.IsNullOrEmpty(version) && !string.IsNullOrEmpty(releaseTagName) && version != releaseTagName)
+        {
+            Log.TraceEvent(TraceEventType.Error, 0, $"Manifest version '{version}' does not match release tag '{releaseTagName}'. Rejecting.");
+            throw new InvalidOperationException($"Manifest version '{version}' does not match release tag '{releaseTagName}'. Update rejected.");
+        }
 
         // 3. Verify manifest signature BEFORE showing update action
         var tempFolder = _fileStorage.GetTempFolder();
@@ -247,7 +260,9 @@ public class UpdateService
         await _fileStorage.WriteAllTextAsync(manifestPath, manifestJson, cancellationToken);
         await _fileStorage.WriteAllTextAsync(sigPath, manifestSig, cancellationToken);
 
+        Log.TraceEvent(TraceEventType.Information, 0, "Verifying manifest signature...");
         await _signatureVerifier.VerifySignatureAsync(sigPath, manifestPath, cancellationToken);
+        Log.TraceEvent(TraceEventType.Information, 0, "Manifest signature verified successfully.");
         
         var msixUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "ServerMonitorManager-win-x64.msix")?["browser_download_url"]?.GetValue<string>();
         if (msixUrl is null)
@@ -270,12 +285,17 @@ public class UpdateService
         var tempFolder = _fileStorage.GetTempFolder();
         var msixPath = Path.Combine(tempFolder, "ServerMonitorManager-win-x64.msix");
 
+        Log.TraceEvent(TraceEventType.Information, 0, $"Downloading update from {updateInfo.DownloadUrl}...");
         await _http.DownloadFileAsync(updateInfo.DownloadUrl, msixPath, progressCallback, cancellationToken);
         
         if (!VerifyFileHash(msixPath, updateInfo.ExpectedHash))
         {
+            // Delete the corrupted file immediately
+            try { File.Delete(msixPath); } catch { /* best-effort cleanup */ }
+            Log.TraceEvent(TraceEventType.Error, 0, "MSIX hash mismatch — downloaded file deleted.");
             throw new InvalidOperationException("Update MSIX hash mismatch. Update rejected.");
         }
+        Log.TraceEvent(TraceEventType.Information, 0, "MSIX hash verified successfully.");
     }
     
     public void InstallUpdate()

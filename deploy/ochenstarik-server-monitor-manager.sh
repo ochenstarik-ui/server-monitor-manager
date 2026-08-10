@@ -1225,6 +1225,105 @@ uninstall_agent() {
     log "Agent removed${purge:+ ($purge)}."
 }
 
+install_monitor() {
+    local public_key="$1"
+    require_root
+    validate_platform
+    
+    local metrics_script="/usr/local/libexec/ochenstarik-smm-metrics"
+    local monitor_user="ochenstarik-monitor"
+    local monitor_home="/var/lib/ochenstarik-monitor"
+    
+    if ! id -u "$monitor_user" >/dev/null 2>&1; then
+        useradd -r -s /usr/sbin/nologin -d "$monitor_home" -M "$monitor_user"
+    fi
+    install -d -m 0755 -o "$monitor_user" -g "$monitor_user" "$monitor_home"
+    
+    install -d -m 0755 "/usr/local/libexec"
+    cat >"$metrics_script" <<'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+# ochenstarik-smm-metrics
+
+MESH_STATUS=""
+if [[ -x /usr/bin/wg && -f /etc/wireguard/smm0.conf ]]; then
+    MESH_STATUS=$(wg show smm0 2>/dev/null || true)
+fi
+
+echo "PROTOCOL=1"
+echo "HOSTNAME=$(hostname)"
+UPTIME=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo "0")
+echo "UPTIME_SECONDS=${UPTIME}"
+LOAD1=$(awk '{print $1}' /proc/loadavg 2>/dev/null || echo "0.00")
+echo "LOAD1=${LOAD1}"
+CPU_COUNT=$(nproc 2>/dev/null || echo "1")
+echo "CPU_COUNT=${CPU_COUNT}"
+MEM_TOTAL=$(awk '/^MemTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+echo "MEM_TOTAL_KB=${MEM_TOTAL}"
+MEM_AVAIL=$(awk '/^MemAvailable:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+if [ "$MEM_AVAIL" = "0" ] || [ -z "$MEM_AVAIL" ]; then
+    MEM_FREE=$(awk '/^MemFree:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    MEM_CACHED=$(awk '/^Cached:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+    MEM_AVAIL=$((MEM_FREE + MEM_CACHED))
+fi
+echo "MEM_AVAILABLE_KB=${MEM_AVAIL}"
+SWAP_TOTAL=$(awk '/^SwapTotal:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+echo "SWAP_TOTAL_KB=${SWAP_TOTAL}"
+SWAP_FREE=$(awk '/^SwapFree:/ {print $2}' /proc/meminfo 2>/dev/null || echo "0")
+echo "SWAP_FREE_KB=${SWAP_FREE}"
+DF_OUT=$(df -k / 2>/dev/null | awk 'NR==2 {print $2, $4}' || echo "0 0")
+DISK_TOTAL=$(echo "$DF_OUT" | awk '{print $1}')
+DISK_AVAIL=$(echo "$DF_OUT" | awk '{print $2}')
+echo "DISK_TOTAL_KB=${DISK_TOTAL}"
+echo "DISK_AVAILABLE_KB=${DISK_AVAIL}"
+DF_INODES=$(df -i / 2>/dev/null | awk 'NR==2 {print $2, $4}' || echo "0 0")
+INODES_TOTAL=$(echo "$DF_INODES" | awk '{print $1}')
+INODES_FREE=$(echo "$DF_INODES" | awk '{print $2}')
+echo "DISK_INODES_TOTAL=${INODES_TOTAL}"
+echo "DISK_INODES_FREE=${INODES_FREE}"
+NET_RX=$(awk 'NR>2 {rx+=$1} END {print rx}' /proc/net/dev 2>/dev/null || echo "0")
+NET_TX=$(awk 'NR>2 {tx+=$9} END {print tx}' /proc/net/dev 2>/dev/null || echo "0")
+echo "NETWORK_RX_BYTES=${NET_RX}"
+echo "NETWORK_TX_BYTES=${NET_TX}"
+KERNEL=$(uname -r 2>/dev/null || echo "unknown")
+echo "KERNEL=${KERNEL}"
+if [ -n "$MESH_STATUS" ]; then
+    echo "--- MESH STATUS ---"
+    echo "$MESH_STATUS"
+fi
+EOF
+    chown root:root "$metrics_script"
+    chmod 0755 "$metrics_script"
+
+    install -d -m 0700 -o "$monitor_user" -g "$monitor_user" "$monitor_home/.ssh"
+    local auth_keys="$monitor_home/.ssh/authorized_keys"
+    
+    # We idempotently add the key
+    local key_entry="command=\"$metrics_script\",restrict,no-pty,no-agent-forwarding,no-port-forwarding,no-X11-forwarding $public_key"
+    if [[ -f "$auth_keys" ]] && grep -qF "$public_key" "$auth_keys"; then
+        log "Monitor key already installed."
+    else
+        echo "$key_entry" >> "$auth_keys"
+        chown "$monitor_user:$monitor_user" "$auth_keys"
+        chmod 0600 "$auth_keys"
+        log "Monitor key installed."
+    fi
+}
+
+uninstall_monitor() {
+    require_root
+    local monitor_user="ochenstarik-monitor"
+    local monitor_home="/var/lib/ochenstarik-monitor"
+    local metrics_script="/usr/local/libexec/ochenstarik-smm-metrics"
+
+    if id -u "$monitor_user" >/dev/null 2>&1; then
+        userdel -f "$monitor_user" || true
+    fi
+    rm -rf -- "$monitor_home"
+    rm -f -- "$metrics_script"
+    log "Monitor removed."
+}
+
 uninstall_control() {
     [[ "${1:-}" == "--confirm-destroy-control" ]] || fail "Control removal requires --confirm-destroy-control"
     require_root
@@ -1260,6 +1359,8 @@ main() {
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
         install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;
+        install-monitor) [[ $# -eq 1 ]] || fail "install-monitor requires PUBLIC_KEY"; install_monitor "$1" ;;
+        uninstall-monitor) [[ $# -eq 0 ]] || fail "uninstall-monitor takes no arguments"; uninstall_monitor ;;
         mesh-init) [[ $# -ge 1 && $# -le 2 ]] || fail "mesh-init requires PUBLIC_ENDPOINT [WG_PORT]"; mesh_init "$@" ;;
         peer-add) [[ $# -eq 1 ]] || fail "peer-add requires SMMPEER1_CODE"; add_mesh_peer "$1" ;;
         mesh-status) [[ $# -eq 0 ]] || fail "mesh-status takes no arguments"; show_mesh_status ;;

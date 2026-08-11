@@ -44,25 +44,23 @@ jobs:
 
       - name: Isolate Workspace
         run: |
-          # Move tests to a safe location and clean the workspace
-          # This ensures the installation does not accidentally use source files
+          # Move tests to a safe location and clean the workspace.
+          # This ensures the installation does not accidentally use source files.
           cp -r tests /tmp/isolated_tests
           rm -rf * .git
 
       - name: Run Positive Installation
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # No GH_TOKEN: the real user path uses only curl/sha256sum/cosign.
         run: |
           mkdir -p workspace
           cd workspace
-          # Bring contract back for verification script
+          # ISOLATION RULE: only expectation files come back from the repo.
           mkdir -p tests/contracts
           cp /tmp/isolated_tests/contracts/monitor-snapshot-v1.txt tests/contracts/
           bash /tmp/isolated_tests/release-verification/run-positive-installation.sh "${{ steps.tag.outputs.tag }}"
 
       - name: Run Negative Tests
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # No GH_TOKEN: consistent with the positive path.
         run: |
           mkdir -p workspace-neg
           cd workspace-neg

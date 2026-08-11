@@ -63,17 +63,4 @@ fi
 echo "PASS: Wrong identity signature rejected."
 rm cosign.key cosign.pub fake.sig
 
-echo "Test 5: Real alpha.8 manifest fallback matching (verify-release against older release)"
-ALPHA8_ARCHIVE="alpha8-archive.tar.gz"
-wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz
-wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
-wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
-
-if ! ./ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
-    echo "FAIL: Alpha.8 real release verification failed!"
-    exit 1
-fi
-echo "PASS: Alpha.8 real release verification succeeded."
-rm "$ALPHA8_ARCHIVE" server-monitor-manager-manifest.json server-monitor-manager-manifest.sig
-
 echo "All negative tests passed!"

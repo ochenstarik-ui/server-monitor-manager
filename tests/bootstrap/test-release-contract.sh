@@ -14,7 +14,7 @@ installer_contract="$root/docs/installer-contract.md"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.9"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.10"' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
     exit 1
@@ -83,7 +83,7 @@ chmod +x "$work/bin/curl"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_COMMAND=version' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.9/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.9/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.10/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.10/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
 
 printf '%s\n' 'RELEASE_CONTRACT=PASS'

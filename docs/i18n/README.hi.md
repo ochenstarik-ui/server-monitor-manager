@@ -32,7 +32,7 @@ Hub पर UDP `51820` और TCP `7443` खोलें, Node codes बना�
 
 Shared root password नहीं है और Node की WireGuard private key Node से बाहर नहीं जाती। Monitoring, terminal, Agent, Operator और AI automation identities अलग हैं। SSH forced-command shell/PTY/forwarding नहीं देता; mTLS roles सीमित करता है; nftables केवल explicit Links स्वीकारता है; SQLite पहले desired state और audit सहेजता है।
 
-`v0.1.0-alpha.10` testing release है। Current development branch में Windows client, Hub/Node installer, Links, mTLS, certificate revocation और re-enrollment, SQLite, audit, event stream, downsampling वाला सीमित offline buffer और durable reconnect reconciliation तैयार हैं। 50–100 Node load test और signed Windows installer अभी बाकी हैं।
+`v0.1.0-alpha.11` testing release है। Current development branch में Windows client, Hub/Node installer, Links, mTLS, certificate revocation और re-enrollment, SQLite, audit, event stream, downsampling वाला सीमित offline buffer और durable reconnect reconciliation तैयार हैं। 50–100 Node load test और signed Windows installer अभी बाकी हैं।
 
 ## लाइसेंस
 

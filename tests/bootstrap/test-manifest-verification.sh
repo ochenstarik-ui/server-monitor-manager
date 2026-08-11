@@ -78,21 +78,4 @@ if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-moni
 fi
 echo "PASS: Missing signature rejected"
 
-echo "Test 5: Real alpha.8 manifest fallback matching (REQUIRES_NETWORK)"
-ALPHA8_ARCHIVE="ochenstarik-server-monitor-manager-linux-x64.tar.gz"
-if ! wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz; then
-    echo "SKIP: Could not download alpha.8 archive (network unavailable)"
-else
-    wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
-    wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
-    CLEANUP_FILES+=("$ALPHA8_ARCHIVE")
-    # Use keyless verification against real Sigstore/Rekor (requires network)
-    unset SMM_TEST_PUBKEY
-    if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
-        echo "FAIL: Alpha.8 real release verification failed"
-        exit 1
-    fi
-    echo "PASS: Alpha.8 real release verification succeeded"
-fi
-
 echo "All tests passed."

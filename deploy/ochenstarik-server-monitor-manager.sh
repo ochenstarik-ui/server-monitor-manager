@@ -301,7 +301,7 @@ verify_manifest() {
     log "Verifying manifest signature..."
     local verify_args=(--certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
     if [[ -n "${SMM_TEST_PUBKEY:-}" ]]; then
-        verify_args=(--key "$SMM_TEST_PUBKEY")
+        verify_args=(--key "$SMM_TEST_PUBKEY" --insecure-ignore-tlog)
         log "WARNING: Using test public key for verification. This must NOT happen in production."
     fi
     if ! cosign verify-blob "${verify_args[@]}" \

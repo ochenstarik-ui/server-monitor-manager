@@ -1,0 +1,10 @@
+{
+  "schema": "smm-bootstrap-manifest/v1",
+  "version": "v0.1.0-alpha.8",
+  "bootstrap": "ochenstarik-server-monitor-manager.sh",
+  "bootstrap_sha256": "522cfb6c28cf21df6e060c48b44a391e4a4b71a37bfa36008078400e1085e3ca",
+  "supported_runtimes": [
+    "linux-x64",
+    "linux-arm64"
+  ]
+}

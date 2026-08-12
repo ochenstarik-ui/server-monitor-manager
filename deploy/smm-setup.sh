@@ -3,7 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 readonly PROGRAM_NAME="smm-setup"
-readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.11"
+readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.12"
 readonly DEFAULT_REPOSITORY="ochenstarik-ui/server-monitor-manager"
 readonly INNER_ASSET="ochenstarik-server-monitor-manager.sh"
 
@@ -22,7 +22,7 @@ asset from the selected immutable GitHub release. Common commands:
   backup-create | backup-restore | version
 
 Environment overrides:
-  SMM_TAG         Release tag (default: v0.1.0-alpha.11)
+  SMM_TAG         Release tag (default: v0.1.0-alpha.12)
   SMM_REPOSITORY  GitHub repository (default: ochenstarik-ui/server-monitor-manager)
   SMM_CACHE_DIR   Verified-download cache directory
 USAGE

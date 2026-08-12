@@ -9,3 +9,5 @@ Fixture properties:
 - SHA-256: `15bf788dd5789a55bd54a4a548d339b4e29e54e1c75311b21eec079e0ef2faa2`
 
 The compatibility test always copies this file before opening it, so the committed previous-release database is never migrated or mutated in place.
+
+`alpha8-v1-release/` is a deterministic synthetic fixture for the release layout used before manifest v2. Its archive payload is assembled locally by the bootstrap test; no published release is downloaded or modified.

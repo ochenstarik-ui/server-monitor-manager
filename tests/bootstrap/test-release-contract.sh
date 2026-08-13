@@ -16,7 +16,7 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.12"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.13"' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
     exit 1
@@ -48,6 +48,9 @@ grep -Fq 'v0.1.0-alpha.10' "$policy"
 grep -Fq 'v0.1.0-alpha.11' "$policy"
 grep -Fq 'release owner' "$policy"
 grep -Fq 'tests/bootstrap/**' "$policy"
+grep -Fq 'v0.1.0-alpha.12' "$policy"
+grep -Fq "perl -pi -e 's/\\x0D$//' \"\$windows_dir/SHA256SUMS\"" "$workflow"
+grep -Fq 'sha256sum -c SHA256SUMS' "$workflow"
 grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"
 grep -Fq 'publish a new, higher version tag' "$installer_contract"
 
@@ -109,7 +112,7 @@ chmod +x "$work/bin/curl"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_COMMAND=version' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.12/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.12/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.13/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.13/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
 
 printf '%s\n' 'RELEASE_CONTRACT=PASS'

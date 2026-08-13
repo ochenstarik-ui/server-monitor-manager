@@ -237,6 +237,15 @@ jobs:
         shell: bash
         run: |
           set -Eeuo pipefail
+
+          # PowerShell emits CRLF for SHA256SUMS. Normalize the release asset and
+          # prove that GNU sha256sum can consume it before publication.
+          windows_dir=artifacts/server-monitor-manager-win-x64/artifacts/windows-installer
+          perl -pi -e 's/\x0D$//' "$windows_dir/SHA256SUMS"
+          (
+            cd "$windows_dir"
+            sha256sum -c SHA256SUMS
+          )
           
           # Version fallback for non-tag runs
           VERSION="${GITHUB_REF_NAME}"

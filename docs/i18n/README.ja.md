@@ -32,7 +32,7 @@ Hub で UDP `51820` と TCP `7443` を開き、Node コードを作成して他�
 
 共有 root パスワードはなく、Node の WireGuard 秘密鍵は Node 外に出ません。monitoring、terminal、Agent、Operator、AI automation の ID は分離されています。SSH は shell/PTY/forwarding のない forced-command、mTLS はロール制限、nftables は明示 Link のみを許可し、SQLite は firewall 変更前に状態と監査を保存します。
 
-`v0.1.0-alpha.11` はテスト版です。現在の開発ブランチには Windows client、Hub/Node installer、Links、mTLS、証明書失効と再登録、SQLite、監査、イベント、downsampling 付きの制限オフラインバッファが実装済みです。再接続調整、50–100 Node 負荷試験、署名付き Windows installer は今後の課題です。
+`v0.1.0-alpha.12` はテスト版です。現在の開発ブランチには Windows client、Hub/Node installer、Links、mTLS、証明書失効と再登録、SQLite、監査、イベント、downsampling 付きの制限オフラインバッファが実装済みです。再接続調整、50–100 Node 負荷試験、署名付き Windows installer は今後の課題です。
 
 ## ライセンス
 

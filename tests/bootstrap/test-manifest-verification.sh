@@ -2,8 +2,10 @@
 set -Eeuo pipefail
 
 CLEANUP_FILES=()
+CLEANUP_DIRS=()
 cleanup() {
     rm -f "${CLEANUP_FILES[@]}"
+    rm -rf -- "${CLEANUP_DIRS[@]}"
 }
 trap cleanup EXIT
 
@@ -34,7 +36,7 @@ cat <<EOF > server-monitor-manager-manifest.json
 }
 EOF
 
-cosign sign-blob --yes --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
+cosign sign-blob --yes --tlog-upload=false --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
 CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig)
 
 echo "Test 1: Valid signature and hash"
@@ -78,21 +80,45 @@ if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-moni
 fi
 echo "PASS: Missing signature rejected"
 
-echo "Test 5: Real alpha.8 manifest fallback matching (REQUIRES_NETWORK)"
-ALPHA8_ARCHIVE="ochenstarik-server-monitor-manager-linux-x64.tar.gz"
-if ! wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz; then
-    echo "SKIP: Could not download alpha.8 archive (network unavailable)"
-else
-    wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
-    wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
-    CLEANUP_FILES+=("$ALPHA8_ARCHIVE")
-    # Use keyless verification against real Sigstore/Rekor (requires network)
-    unset SMM_TEST_PUBKEY
-    if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
-        echo "FAIL: Alpha.8 real release verification failed"
-        exit 1
-    fi
-    echo "PASS: Alpha.8 real release verification succeeded"
+echo "Test 5: Synthetic pre-alpha.9 v1 release layout"
+fixture_root="tests/fixtures/alpha8-v1-release"
+fixture_work="$(mktemp -d -t smm-alpha8-v1.XXXXXXXX)"
+CLEANUP_DIRS+=("$fixture_work")
+cp "$fixture_root/server-monitor-manager-bootstrap-manifest.json" "$fixture_work/"
+cp -R "$fixture_root/archive-root" "$fixture_work/archive-root"
+expected_bootstrap_hash="$(sed -n 's/.*"bootstrap_sha256": "\([0-9a-f]\{64\}\)".*/\1/p' "$fixture_work/server-monitor-manager-bootstrap-manifest.json")"
+actual_bootstrap_hash="$(sha256sum "$fixture_work/archive-root/bootstrap/ochenstarik-server-monitor-manager.sh" | awk '{print $1}')"
+[[ "$expected_bootstrap_hash" == "$actual_bootstrap_hash" ]] || {
+    echo "FAIL: Synthetic v1 manifest bootstrap hash does not match fixture payload"
+    exit 1
+}
+find "$fixture_work/archive-root" -type f -name 'ochenstarik-*' -exec chmod 0755 {} +
+ALPHA8_ARCHIVE="$fixture_work/server-monitor-manager-linux-x64.tar.gz"
+tar -C "$fixture_work/archive-root" -czf "$ALPHA8_ARCHIVE" \
+    agent control provisioning-helper deploy bootstrap
+sha256sum "$ALPHA8_ARCHIVE" >"$ALPHA8_ARCHIVE.sha256"
+
+unset SMM_TEST_PUBKEY
+if SMM_ALLOW_UNSIGNED=0 bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >"$fixture_work/strict.out" 2>&1; then
+    echo "FAIL: Unsigned v1 fixture accepted without explicit bypass"
+    exit 1
 fi
+if ! grep -Fq 'Manifest and signature are required' "$fixture_work/strict.out"; then
+    echo "FAIL: Strict v1 rejection lacked expected diagnostic"
+    cat "$fixture_work/strict.out" >&2
+    exit 1
+fi
+echo "PASS: Unsigned v1 fixture rejected without bypass"
+
+if ! SMM_ALLOW_UNSIGNED=1 bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >"$fixture_work/bypass.out" 2>&1; then
+    echo "FAIL: Valid v1 fixture rejected with SMM_ALLOW_UNSIGNED=1"
+    cat "$fixture_work/bypass.out" >&2
+    exit 1
+fi
+grep -Fq 'falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1' "$fixture_work/bypass.out" || {
+    echo "FAIL: v1 fixture did not exercise checksum fallback"
+    exit 1
+}
+echo "PASS: Valid v1 fixture accepted only with explicit bypass"
 
 echo "All tests passed."

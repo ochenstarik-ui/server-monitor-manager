@@ -791,10 +791,11 @@ cat >"$fixture/server-monitor-manager-manifest.json" <<MEOF
   }
 }
 MEOF
+printf '%s\n' 'test-key certificate placeholder' >"$fixture/server-monitor-manager-manifest.pem"
 
 if command -v cosign &>/dev/null; then
     COSIGN_PASSWORD="" cosign generate-key-pair --output-key-prefix="$fixture/contract-test"
-    COSIGN_PASSWORD="" cosign sign-blob --yes --key "$fixture/contract-test.key" \
+    COSIGN_PASSWORD="" cosign sign-blob --yes --tlog-upload=false --key "$fixture/contract-test.key" \
         --output-signature "$fixture/server-monitor-manager-manifest.sig" \
         "$fixture/server-monitor-manager-manifest.json"
     SMM_TEST_PUBKEY="$fixture/contract-test.pub" \
@@ -814,7 +815,7 @@ cat >"$fixture/server-monitor-manager-manifest.json" <<MEOF
 }
 MEOF
 if command -v cosign &>/dev/null; then
-    COSIGN_PASSWORD="" cosign sign-blob --yes --key "$fixture/contract-test.key" \
+    COSIGN_PASSWORD="" cosign sign-blob --yes --tlog-upload=false --key "$fixture/contract-test.key" \
         --output-signature "$fixture/server-monitor-manager-manifest.sig" \
         "$fixture/server-monitor-manager-manifest.json"
     if SMM_TEST_PUBKEY="$fixture/contract-test.pub" \

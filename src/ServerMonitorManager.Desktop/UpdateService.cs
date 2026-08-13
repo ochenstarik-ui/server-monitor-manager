@@ -22,7 +22,7 @@ public interface IHttpTransport
 
 public interface ISignatureVerifier
 {
-    Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default);
+    Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default);
 }
 
 public interface IFileStorage
@@ -88,7 +88,12 @@ public class ProcessSignatureVerifier : ISignatureVerifier
         _httpTransport = httpTransport;
     }
 
-    public async Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default)
+    internal static string BuildVerificationArguments(string signaturePath, string manifestPath, string certificatePath)
+    {
+        return $"verify-blob --certificate \"{certificatePath}\" --certificate-oidc-issuer \"{OidcIssuer}\" --certificate-identity-regexp \"{OidcIdentityRegexp}\" --signature \"{signaturePath}\" \"{manifestPath}\"";
+    }
+
+    public async Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default)
     {
         var cosignPath = Path.Combine(_fileStorage.GetTempFolder(), "cosign.exe");
         if (!_fileStorage.FileExists(cosignPath) || !VerifyFileHash(cosignPath, CosignHash))
@@ -107,7 +112,7 @@ public class ProcessSignatureVerifier : ISignatureVerifier
             StartInfo = new ProcessStartInfo
             {
                 FileName = cosignPath,
-                Arguments = $"verify-blob --certificate-oidc-issuer \"{OidcIssuer}\" --certificate-identity-regexp \"{OidcIdentityRegexp}\" --signature \"{signaturePath}\" \"{manifestPath}\"",
+                Arguments = BuildVerificationArguments(signaturePath, manifestPath, certificatePath),
                 UseShellExecute = false,
                 RedirectStandardError = true,
                 RedirectStandardOutput = true,
@@ -217,20 +222,24 @@ public class UpdateService
 
         var manifestUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.json")?["browser_download_url"]?.GetValue<string>();
         var sigUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.sig")?["browser_download_url"]?.GetValue<string>();
+        var certificateUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.pem")?["browser_download_url"]?.GetValue<string>();
         
-        if (manifestUrl is null || sigUrl is null)
+        if (manifestUrl is null || sigUrl is null || certificateUrl is null)
         {
-            throw new InvalidOperationException("Manifest or signature not found in the release. Update rejected.");
+            throw new InvalidOperationException("Manifest, signature, or certificate not found in the release. Update rejected.");
         }
 
         // Validate URLs belong to the same tag!
-        if (!manifestUrl.Contains($"/releases/download/{releaseTagName}/") || !sigUrl.Contains($"/releases/download/{releaseTagName}/"))
+        if (!manifestUrl.Contains($"/releases/download/{releaseTagName}/") ||
+            !sigUrl.Contains($"/releases/download/{releaseTagName}/") ||
+            !certificateUrl.Contains($"/releases/download/{releaseTagName}/"))
         {
-             throw new InvalidOperationException("Manifest or signature URL does not match the release tag. Update rejected.");
+             throw new InvalidOperationException("Manifest, signature, or certificate URL does not match the release tag. Update rejected.");
         }
 
         var manifestJson = await _http.GetStringAsync(manifestUrl, cancellationToken);
         var manifestSig = await _http.GetStringAsync(sigUrl, cancellationToken);
+        var manifestCertificate = await _http.GetStringAsync(certificateUrl, cancellationToken);
 
         var manifestNode = JsonNode.Parse(manifestJson);
         if (manifestNode is null)
@@ -257,11 +266,13 @@ public class UpdateService
         var tempFolder = _fileStorage.GetTempFolder();
         var manifestPath = Path.Combine(tempFolder, "server-monitor-manager-manifest.json");
         var sigPath = Path.Combine(tempFolder, "server-monitor-manager-manifest.sig");
+        var certificatePath = Path.Combine(tempFolder, "server-monitor-manager-manifest.pem");
         await _fileStorage.WriteAllTextAsync(manifestPath, manifestJson, cancellationToken);
         await _fileStorage.WriteAllTextAsync(sigPath, manifestSig, cancellationToken);
+        await _fileStorage.WriteAllTextAsync(certificatePath, manifestCertificate, cancellationToken);
 
         Log.TraceEvent(TraceEventType.Information, 0, "Verifying manifest signature...");
-        await _signatureVerifier.VerifySignatureAsync(sigPath, manifestPath, cancellationToken);
+        await _signatureVerifier.VerifySignatureAsync(sigPath, manifestPath, certificatePath, cancellationToken);
         Log.TraceEvent(TraceEventType.Information, 0, "Manifest signature verified successfully.");
         
         var msixUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "ServerMonitorManager-win-x64.msix")?["browser_download_url"]?.GetValue<string>();

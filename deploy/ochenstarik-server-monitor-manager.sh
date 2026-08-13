@@ -73,7 +73,7 @@ Usage:
   ochenstarik-server-monitor-manager.sh install-control ARCHIVE PUBLIC_HOST [HTTPS_PORT]
   ochenstarik-server-monitor-manager.sh install-agent ARCHIVE NODE_ID CONTROL_URL CA_CERT
   ochenstarik-server-monitor-manager.sh install-node ARCHIVE
-  ochenstarik-server-monitor-manager.sh verify-manifest MANIFEST SIGNATURE
+  ochenstarik-server-monitor-manager.sh verify-manifest MANIFEST SIGNATURE CERTIFICATE
   ochenstarik-server-monitor-manager.sh mesh-init PUBLIC_ENDPOINT [WG_PORT]
   ochenstarik-server-monitor-manager.sh peer-add SMMPEER1_CODE
   ochenstarik-server-monitor-manager.sh mesh-status
@@ -290,7 +290,7 @@ validate_control_url() {
 }
 
 verify_manifest() {
-    local manifest="$1" signature="$2"
+    local manifest="$1" signature="$2" certificate="$3"
     if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
         log "WARNING: Signature verification skipped due to SMM_ALLOW_UNSIGNED=1."
         return 0
@@ -299,10 +299,13 @@ verify_manifest() {
     [[ -f "$manifest" ]] || fail "Manifest not found: $manifest"
     [[ -f "$signature" ]] || fail "Signature not found: $signature"
     log "Verifying manifest signature..."
-    local verify_args=(--certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
+    local verify_args
     if [[ -n "${SMM_TEST_PUBKEY:-}" ]]; then
         verify_args=(--key "$SMM_TEST_PUBKEY" --insecure-ignore-tlog)
         log "WARNING: Using test public key for verification. This must NOT happen in production."
+    else
+        [[ -f "$certificate" ]] || fail "Certificate not found: $certificate"
+        verify_args=(--certificate "$certificate" --certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
     fi
     if ! cosign verify-blob "${verify_args[@]}" \
         --signature "$signature" "$manifest" >/dev/null 2>&1; then
@@ -312,13 +315,14 @@ verify_manifest() {
 }
 
 verify_archive() {
-    local archive="$1" expected actual entry manifest signature
+    local archive="$1" expected actual entry manifest signature certificate
     [[ -f "$archive" ]] || fail "Archive not found: $archive"
     manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
     signature="$(dirname "$archive")/server-monitor-manager-manifest.sig"
+    certificate="$(dirname "$archive")/server-monitor-manager-manifest.pem"
     
-    if [[ -f "$manifest" && -f "$signature" ]]; then
-        verify_manifest "$manifest" "$signature"
+    if [[ -f "$manifest" && -f "$signature" && -f "$certificate" ]]; then
+        verify_manifest "$manifest" "$signature" "$certificate"
         local archive_basename
         archive_basename="$(basename "$archive")"
         expected="$(awk -F'"' -v name="$archive_basename" '$2 == name {print $4}' "$manifest" || true)"
@@ -328,13 +332,13 @@ verify_archive() {
         [[ -n "$expected" ]] || fail "Could not extract archive hash from manifest."
     else
         if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
-            log "WARNING: Manifest and signature not found, falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1."
+            log "WARNING: Manifest, signature, or certificate not found; falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1."
             local checksum_file="${archive}.sha256"
             [[ -f "$checksum_file" ]] || fail "Checksum file not found: $checksum_file"
             expected="$(awk 'NR == 1 { print $1 }' "$checksum_file")"
             [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Invalid checksum file: $checksum_file"
         else
-            fail "Manifest and signature are required for archive verification. Set SMM_ALLOW_UNSIGNED=1 to bypass."
+            fail "Manifest, signature, and certificate are required for archive verification. Set SMM_ALLOW_UNSIGNED=1 to bypass."
         fi
     fi
 
@@ -1493,7 +1497,7 @@ main() {
         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
         install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;
-        verify-manifest) [[ $# -eq 2 ]] || fail "verify-manifest requires MANIFEST SIGNATURE"; verify_manifest "$1" "$2" ;;
+        verify-manifest) [[ $# -eq 3 ]] || fail "verify-manifest requires MANIFEST SIGNATURE CERTIFICATE"; verify_manifest "$1" "$2" "$3" ;;
         install-monitor) [[ $# -eq 1 ]] || fail "install-monitor requires PUBLIC_KEY"; install_monitor "$1" ;;
         uninstall-monitor) [[ $# -eq 0 ]] || fail "uninstall-monitor takes no arguments"; uninstall_monitor ;;
         mesh-init) [[ $# -ge 1 && $# -le 2 ]] || fail "mesh-init requires PUBLIC_ENDPOINT [WG_PORT]"; mesh_init "$@" ;;

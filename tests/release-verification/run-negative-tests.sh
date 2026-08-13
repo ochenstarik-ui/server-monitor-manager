@@ -19,6 +19,7 @@ ARCHIVE="server-monitor-manager-linux-$(uname -m | sed -e 's/x86_64/x64/' -e 's/
 gh release download "$TAG" -p "$ARCHIVE"
 gh release download "$TAG" -p "server-monitor-manager-manifest.json"
 gh release download "$TAG" -p "server-monitor-manager-manifest.sig"
+gh release download "$TAG" -p "server-monitor-manager-manifest.pem"
 
 echo "Test 1: Altered byte in archive"
 cp "$ARCHIVE" "corrupted-$ARCHIVE"
@@ -35,7 +36,7 @@ cp server-monitor-manager-manifest.json corrupted-manifest.json
 # Replace all hashes with zeros
 sed -i 's/"[a-f0-9]\{64\}"/"0000000000000000000000000000000000000000000000000000000000000000"/g' corrupted-manifest.json
 # Test verify-manifest directly
-if ./ochenstarik-server-monitor-manager.sh verify-manifest corrupted-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
+if ./ochenstarik-server-monitor-manager.sh verify-manifest corrupted-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
     echo "FAIL: Manifest with substituted hash accepted!"
     exit 1
 fi
@@ -44,7 +45,7 @@ rm corrupted-manifest.json
 
 echo "Test 3: Manifest without signature"
 # We just pass an empty string for the signature file argument
-if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
+if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" server-monitor-manager-manifest.pem >/dev/null 2>&1; then
     echo "FAIL: Manifest without signature accepted!"
     exit 1
 fi
@@ -56,7 +57,7 @@ export COSIGN_PASSWORD=""
 cosign generate-key-pair
 cosign sign-blob --yes --key cosign.key --output-signature fake.sig server-monitor-manager-manifest.json
 # Verification must fail because ochenstarik-server-monitor-manager.sh enforces keyless OIDC identity!
-if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json fake.sig >/dev/null 2>&1; then
+if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json fake.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
     echo "FAIL: Signature from wrong identity accepted!"
     exit 1
 fi

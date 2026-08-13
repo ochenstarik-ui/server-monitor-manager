@@ -37,10 +37,11 @@ cat <<EOF > server-monitor-manager-manifest.json
 EOF
 
 cosign sign-blob --yes --tlog-upload=false --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
-CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig)
+printf '%s\n' 'test-key certificate placeholder' >server-monitor-manager-manifest.pem
+CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem)
 
 echo "Test 1: Valid signature and hash"
-if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig; then
+if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem; then
     echo "FAIL: Valid payload rejected"
     exit 1
 fi
@@ -67,25 +68,41 @@ cat <<EOF > server-monitor-manager-manifest.json
   }
 }
 EOF
-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
+if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
     echo "FAIL: Substituted hash accepted"
     exit 1
 fi
 echo "PASS: Substituted hash rejected"
 
 echo "Test 4: Manifest without signature"
-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
+if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" server-monitor-manager-manifest.pem >/dev/null 2>&1; then
     echo "FAIL: Missing signature accepted"
     exit 1
 fi
 echo "PASS: Missing signature rejected"
 
-echo "Test 5: Synthetic pre-alpha.9 v1 release layout"
+echo "Test 5: Manifest without certificate"
+unset SMM_TEST_PUBKEY
+if output="$(bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig "" 2>&1)"; then
+    echo "FAIL: Missing certificate accepted"
+    exit 1
+fi
+if [[ "$output" != *"Certificate not found"* ]]; then
+    printf 'FAIL: Missing certificate rejection lacked diagnostic. Output: %s\n' "$output" >&2
+    exit 1
+fi
+export SMM_TEST_PUBKEY="cosign.pub"
+echo "PASS: Missing certificate rejected with diagnostic"
+
+echo "Test 6: Synthetic pre-alpha.9 v1 release layout"
 fixture_root="tests/fixtures/alpha8-v1-release"
 fixture_work="$(mktemp -d -t smm-alpha8-v1.XXXXXXXX)"
 CLEANUP_DIRS+=("$fixture_work")
 cp "$fixture_root/server-monitor-manager-bootstrap-manifest.json" "$fixture_work/"
 cp -R "$fixture_root/archive-root" "$fixture_work/archive-root"
+# Git for Windows may materialize text fixtures with CRLF. The historical
+# manifest hash pins the canonical LF payload used to build the local archive.
+perl -pi -e 's/\x0D$//' "$fixture_work/archive-root/bootstrap/ochenstarik-server-monitor-manager.sh"
 expected_bootstrap_hash="$(sed -n 's/.*"bootstrap_sha256": "\([0-9a-f]\{64\}\)".*/\1/p' "$fixture_work/server-monitor-manager-bootstrap-manifest.json")"
 actual_bootstrap_hash="$(sha256sum "$fixture_work/archive-root/bootstrap/ochenstarik-server-monitor-manager.sh" | awk '{print $1}')"
 [[ "$expected_bootstrap_hash" == "$actual_bootstrap_hash" ]] || {
@@ -103,7 +120,7 @@ if SMM_ALLOW_UNSIGNED=0 bash deploy/ochenstarik-server-monitor-manager.sh verify
     echo "FAIL: Unsigned v1 fixture accepted without explicit bypass"
     exit 1
 fi
-if ! grep -Fq 'Manifest and signature are required' "$fixture_work/strict.out"; then
+if ! grep -Fq 'Manifest, signature, and certificate are required' "$fixture_work/strict.out"; then
     echo "FAIL: Strict v1 rejection lacked expected diagnostic"
     cat "$fixture_work/strict.out" >&2
     exit 1

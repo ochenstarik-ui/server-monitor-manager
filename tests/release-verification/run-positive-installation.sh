@@ -22,14 +22,16 @@ sha256sum -c smm-setup.sh.sha256
 # Actually, the user does:
 ARCHIVE="server-monitor-manager-linux-$(uname -m | sed -e 's/x86_64/x64/' -e 's/aarch64/arm64/').tar.gz"
 gh release download "$TAG" -p "$ARCHIVE*"
-gh release download "$TAG" -p "server-monitor-manager-manifest.*"
+gh release download "$TAG" -p "server-monitor-manager-manifest.json"
+gh release download "$TAG" -p "server-monitor-manager-manifest.sig"
+gh release download "$TAG" -p "server-monitor-manager-manifest.pem"
 
 sha256sum -c "$ARCHIVE.sha256"
 
 # Run setup steps through smm-setup.sh
 # "preflight, verify-release, установка Control, mesh-init"
 sudo bash smm-setup.sh preflight
-sudo bash smm-setup.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig
+sudo bash smm-setup.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem
 sudo bash smm-setup.sh verify-release "$ARCHIVE"
 sudo bash smm-setup.sh install-control "$ARCHIVE" 127.0.0.1 17443
 sudo bash smm-setup.sh mesh-init 127.0.0.1 51820

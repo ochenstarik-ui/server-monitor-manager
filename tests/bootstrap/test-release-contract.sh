@@ -16,7 +16,7 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.13"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.14"' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
     exit 1
@@ -51,6 +51,9 @@ grep -Fq 'tests/bootstrap/**' "$policy"
 grep -Fq 'v0.1.0-alpha.12' "$policy"
 grep -Fq "perl -pi -e 's/\\x0D$//' \"\$windows_dir/SHA256SUMS\"" "$workflow"
 grep -Fq 'sha256sum -c SHA256SUMS' "$workflow"
+grep -Fq -- '--output-certificate server-monitor-manager-manifest.pem' "$workflow"
+grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
+grep -Fq 'v0.1.0-alpha.13' "$policy"
 grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"
 grep -Fq 'publish a new, higher version tag' "$installer_contract"
 
@@ -63,6 +66,9 @@ grep -Fq 'SMM_ALLOW_UNSIGNED=1' "$manifest_test"
 grep -Fq 'SMM_ALLOW_UNSIGNED=0' "$manifest_test"
 grep -Fq -- '--tlog-upload=false' "$manifest_test"
 grep -Fq -- '--insecure-ignore-tlog' "$root/deploy/ochenstarik-server-monitor-manager.sh"
+grep -Fq 'verify_args=(--certificate "$certificate" --certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")' "$root/deploy/ochenstarik-server-monitor-manager.sh"
+grep -Fq 'verify-manifest MANIFEST SIGNATURE CERTIFICATE' "$root/deploy/ochenstarik-server-monitor-manager.sh"
+grep -Fq 'verify-manifest requires MANIFEST SIGNATURE CERTIFICATE' "$root/deploy/ochenstarik-server-monitor-manager.sh"
 [[ -s "$v1_fixture/server-monitor-manager-bootstrap-manifest.json" ]]
 [[ -d "$v1_fixture/archive-root" ]]
 grep -Fq '"schema": "smm-bootstrap-manifest/v1"' "$v1_fixture/server-monitor-manager-bootstrap-manifest.json"
@@ -112,7 +118,7 @@ chmod +x "$work/bin/curl"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_COMMAND=version' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.13/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.13/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
 
 printf '%s\n' 'RELEASE_CONTRACT=PASS'

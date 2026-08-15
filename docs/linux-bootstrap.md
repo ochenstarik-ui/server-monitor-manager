@@ -4,7 +4,32 @@ Server Monitor Manager устанавливает Control (Hub) и Agent (Node) 
 
 Текущая версия предназначена для alpha-тестирования на Ubuntu Server 22.04/24.04 и Debian 12/13 (`amd64`, `arm64`, systemd). Hub должен иметь публичный IPv4-адрес или DNS-имя и доступный UDP-порт. Node может находиться за NAT без белого IP.
 
-## Файлы релиза
+## Быстрая установка
+
+Скачайте и проверьте convenience installer из `v0.1.0-alpha.14`:
+
+```bash
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.14/smm-setup.sh
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.14/smm-setup.sh.sha256
+sha256sum -c smm-setup.sh.sha256
+chmod 700 smm-setup.sh
+```
+
+На Hub установка Control и инициализация Mesh выполняются одной командой. Порты можно не указывать: по умолчанию используются HTTPS `7443` и WireGuard `51820`.
+
+```bash
+sudo ./smm-setup.sh install-hub hub.example.com 7443 51820
+```
+
+На Node команда сама выбирает `linux-x64` или `linux-arm64`, скачивает и проверяет релиз, затем запрашивает код `SMMNODE2`:
+
+```bash
+sudo ./smm-setup.sh install-node
+```
+
+Обе команды публично скачивают архив, его checksum, manifest, подпись и Fulcio-сертификат из одного неизменяемого тега. Отсутствие любого файла подписи прерывает установку; автоматического перехода на unsigned-режим нет. Опции `--tag` и `--repository` предназначены для явного выбора другого источника. Остальные команды bootstrap по-прежнему можно передавать напрямую; `-- COMMAND` принудительно включает сквозной режим.
+
+## Ручная установка и файлы релиза
 
 Скачайте из одного GitHub Release:
 
@@ -19,7 +44,7 @@ Server Monitor Manager устанавливает Control (Hub) и Agent (Node) 
 
 Bootstrap проверяет подпись manifest, затем SHA-256 архива по manifest, и принимает в архиве только каталоги `agent`, `control`, `deploy` и `bootstrap`.
 
-## 1. Установка главного сервера (Hub)
+## 1. Ручная установка главного сервера (Hub)
 
 ```bash
 sha256sum -c ochenstarik-server-monitor-manager.sh.sha256

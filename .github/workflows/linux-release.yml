@@ -301,7 +301,10 @@ jobs:
       - name: Sign Manifest
         shell: bash
         run: |
-          cosign sign-blob --yes --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
+          cosign sign-blob --yes \
+            --output-signature server-monitor-manager-manifest.sig \
+            --output-certificate server-monitor-manager-manifest.pem \
+            server-monitor-manager-manifest.json
 
       - name: Attach artifacts to GitHub Release
         if: startsWith(github.ref, 'refs/tags/')
@@ -316,3 +319,4 @@ jobs:
             artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/*
             server-monitor-manager-manifest.json
             server-monitor-manager-manifest.sig
+            server-monitor-manager-manifest.pem

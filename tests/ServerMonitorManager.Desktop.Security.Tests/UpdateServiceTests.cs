@@ -21,8 +21,8 @@ namespace ServerMonitorManager.Desktop.Security.Tests
 
     public class MockSignatureVerifier : ISignatureVerifier
     {
-        public Func<string, string, Task> VerifySignatureAsyncFunc { get; set; } = (_, _) => Task.CompletedTask;
-        public Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default) => VerifySignatureAsyncFunc(signaturePath, manifestPath);
+        public Func<string, string, string, Task> VerifySignatureAsyncFunc { get; set; } = (_, _, _) => Task.CompletedTask;
+        public Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default) => VerifySignatureAsyncFunc(signaturePath, manifestPath, certificatePath);
     }
 
     public class MockFileStorage : IFileStorage
@@ -45,6 +45,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             ""assets"": [
                 { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
                 { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
+                { ""name"": ""server-monitor-manager-manifest.pem"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.pem"" },
                 { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
             ]
         }";
@@ -55,6 +56,16 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             ""tag_name"": ""v0.1.0-alpha.9"",
             ""assets"": [
                 { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+                { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
+            ]
+        }";
+
+        private const string NoCertificateReleaseJson = @"
+        {
+            ""tag_name"": ""v0.1.0-alpha.9"",
+            ""assets"": [
+                { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+                { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
                 { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
             ]
         }";
@@ -101,7 +112,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             var http = new MockHttpTransport { GetStringAsyncFunc = url => Task.FromResult(url.EndsWith("releases/latest") ? ValidReleaseJson : ValidManifestJson) };
             var verifier = new MockSignatureVerifier
             {
-                VerifySignatureAsyncFunc = (_, _) => throw new InvalidOperationException("Signature verification failed: identity mismatch")
+                VerifySignatureAsyncFunc = (_, _, _) => throw new InvalidOperationException("Signature verification failed: identity mismatch")
             };
             var storage = new MockFileStorage();
 
@@ -144,7 +155,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
-            Assert.Contains("Manifest or signature not found", ex.Message);
+            Assert.Contains("signature", ex.Message, StringComparison.OrdinalIgnoreCase);
         }
 
         [Fact]
@@ -153,7 +164,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             var http = new MockHttpTransport { GetStringAsyncFunc = url => Task.FromResult(url.EndsWith("releases/latest") ? ValidReleaseJson : ValidManifestJson) };
             var verifier = new MockSignatureVerifier
             {
-                VerifySignatureAsyncFunc = (_, _) => throw new InvalidOperationException("Signature verification failed: invalid signature format")
+                VerifySignatureAsyncFunc = (_, _, _) => throw new InvalidOperationException("Signature verification failed: invalid signature format")
             };
             var storage = new MockFileStorage();
 
@@ -169,7 +180,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
             bool signatureVerified = false;
             var verifier = new MockSignatureVerifier
             {
-                VerifySignatureAsyncFunc = (_, _) => { signatureVerified = true; return Task.CompletedTask; }
+                VerifySignatureAsyncFunc = (_, _, _) => { signatureVerified = true; return Task.CompletedTask; }
             };
             var storage = new MockFileStorage();
 
@@ -246,7 +257,8 @@ namespace ServerMonitorManager.Desktop.Security.Tests
                 ""tag_name"": ""v0.1.0-alpha.9"",
                 ""assets"": [
                     { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
-                    { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" }
+                    { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
+                    { ""name"": ""server-monitor-manager-manifest.pem"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.pem"" }
                 ]
             }";
             var http = new MockHttpTransport
@@ -263,6 +275,26 @@ namespace ServerMonitorManager.Desktop.Security.Tests
 
             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
             Assert.Contains("MSIX", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public async Task MissingCertificateAsset_IsRejected()
+        {
+            var http = new MockHttpTransport { GetStringAsyncFunc = _ => Task.FromResult(NoCertificateReleaseJson) };
+            var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
+
+            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
+            Assert.Contains("certificate", ex.Message, StringComparison.OrdinalIgnoreCase);
+        }
+
+        [Fact]
+        public void ProductionVerifierArguments_PinCertificateIssuerAndReleaseWorkflow()
+        {
+            var arguments = ProcessSignatureVerifier.BuildVerificationArguments("manifest.sig", "manifest.json", "manifest.pem");
+
+            Assert.Contains("--certificate \"manifest.pem\"", arguments, StringComparison.Ordinal);
+            Assert.Contains("--certificate-oidc-issuer \"https://token.actions.githubusercontent.com\"", arguments, StringComparison.Ordinal);
+            Assert.Contains("linux-release\\.yml@refs/tags/v.*$", arguments, StringComparison.Ordinal);
         }
     }
 }

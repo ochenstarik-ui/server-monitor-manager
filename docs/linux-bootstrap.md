@@ -10,9 +10,14 @@ Server Monitor Manager устанавливает Control (Hub) и Agent (Node) 
 
 - `ochenstarik-server-monitor-manager.sh` и `.sha256`;
 - `server-monitor-manager-linux-x64.tar.gz` или `server-monitor-manager-linux-arm64.tar.gz`;
-- соответствующий `.tar.gz.sha256`.
+- соответствующий `.tar.gz.sha256`;
+- `server-monitor-manager-manifest.json`, `server-monitor-manager-manifest.sig` и `server-monitor-manager-manifest.pem`.
 
-Bootstrap проверяет SHA-256 до распаковки и принимает в архиве только каталоги `agent`, `control`, `deploy` и `bootstrap`.
+Все файлы должны лежать в одном каталоге: `verify-release` ищет manifest, подпись и сертификат рядом с архивом. Без любого из трёх проверка отказывает и предлагает явный обход `SMM_ALLOW_UNSIGNED=1` — он предназначен только для сборок, выпущенных до появления подписи, и в обычной установке не используется.
+
+Сертификат нужен потому, что manifest подписывается keyless-режимом cosign: подпись проверяется эфемерным сертификатом, привязанным к workflow выпуска, а не постоянным ключом.
+
+Bootstrap проверяет подпись manifest, затем SHA-256 архива по manifest, и принимает в архиве только каталоги `agent`, `control`, `deploy` и `bootstrap`.
 
 ## 1. Установка главного сервера (Hub)
 

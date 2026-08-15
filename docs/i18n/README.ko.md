@@ -32,7 +32,7 @@ Hub에서 UDP `51820`과 TCP `7443`을 열고 Node 코드를 생성한 뒤 다�
 
 공유 root 암호가 없고 Node WireGuard 개인 키는 Node를 떠나지 않습니다. monitoring, terminal, Agent, Operator, AI automation identity는 분리됩니다. SSH는 shell/PTY/forwarding 없는 forced-command를 사용하고, mTLS는 역할을 제한하며, nftables는 명시된 Link만 허용합니다. SQLite는 방화벽 변경 전에 상태와 감사를 저장합니다.
 
-`v0.1.0-alpha.13`는 테스트 릴리스입니다. 현재 개발 branch에는 Windows client, Hub/Node installer, Links, mTLS, 인증서 폐기와 재등록, SQLite, 감사, event stream과 downsampling이 적용된 제한 offline buffer가 구현되었습니다. 재연결 조정, 50–100 Node 부하 시험과 서명된 Windows installer가 남아 있습니다.
+`v0.1.0-alpha.14`는 테스트 릴리스입니다. 현재 개발 branch에는 Windows client, Hub/Node installer, Links, mTLS, 인증서 폐기와 재등록, SQLite, 감사, event stream과 downsampling이 적용된 제한 offline buffer가 구현되었습니다. 재연결 조정, 50–100 Node 부하 시험과 서명된 Windows installer가 남아 있습니다.
 
 ## 라이선스
 

@@ -17,6 +17,8 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
 }
 bash -n "$setup"
 grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.14"' "$setup"
+grep -Fq 'install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]' "$setup"
+grep -Fxq '  install-node' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
     exit 1
@@ -54,6 +56,8 @@ grep -Fq 'sha256sum -c SHA256SUMS' "$workflow"
 grep -Fq -- '--output-certificate server-monitor-manager-manifest.pem' "$workflow"
 grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
 grep -Fq 'v0.1.0-alpha.13' "$policy"
+grep -Fq 'v0.1.0-alpha.14' "$policy"
+grep -Fq 'first release whose contract requires the manifest, keyless signature, and Fulcio certificate' "$policy"
 grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"
 grep -Fq 'publish a new, higher version tag' "$installer_contract"
 
@@ -86,10 +90,34 @@ trap 'rm -rf -- "$work"' EXIT
 mkdir -p "$work/bin" "$work/home"
 cat >"$work/inner.sh" <<'INNER'
 #!/usr/bin/env bash
-printf 'INNER_COMMAND=%s\n' "$1"
+set -Eeuo pipefail
+printf 'INNER_ARGS='
+printf '%s ' "$@"
+printf '\n'
+case "${1:-}" in
+    install-control|install-node)
+        archive="$2"
+        [[ "$archive" == */server-monitor-manager-linux-*.tar.gz ]] || exit 0
+        directory="$(dirname "$archive")"
+        for required in \
+            server-monitor-manager-manifest.json \
+            server-monitor-manager-manifest.sig \
+            server-monitor-manager-manifest.pem; do
+            [[ -s "$directory/$required" ]] || {
+                printf 'missing signed-release asset: %s\n' "$required" >&2
+                exit 1
+            }
+        done
+        ;;
+esac
 INNER
 chmod +x "$work/inner.sh"
 inner_hash="$(sha256sum "$work/inner.sh" | cut -d' ' -f1)"
+printf '%s\n' 'release archive fixture' >"$work/archive.tar.gz"
+archive_hash="$(sha256sum "$work/archive.tar.gz" | cut -d' ' -f1)"
+printf '%s\n' '{"schema":"smm-manifest/v2"}' >"$work/server-monitor-manager-manifest.json"
+printf '%s\n' 'fixture-signature' >"$work/server-monitor-manager-manifest.sig"
+printf '%s\n' 'fixture-certificate' >"$work/server-monitor-manager-manifest.pem"
 cat >"$work/bin/curl" <<EOF_CURL
 #!/usr/bin/env bash
 set -Eeuo pipefail
@@ -103,12 +131,26 @@ while [[ \$# -gt 0 ]]; do
     esac
 done
 printf '%s\n' "\$url" >>'$work/urls'
+asset="\${url##*/}"
+if [[ "\${SMM_TEST_MISSING_ASSET:-}" == "\$asset" ]]; then
+    printf 'fixture asset unavailable: %s\n' "\$asset" >&2
+    exit 22
+fi
 case "\$url" in
     */ochenstarik-server-monitor-manager.sh)
         cp '$work/inner.sh' "\$out"
         ;;
     */ochenstarik-server-monitor-manager.sh.sha256)
         printf '%s  %s\n' '$inner_hash' 'ochenstarik-server-monitor-manager.sh' >"\$out"
+        ;;
+    */server-monitor-manager-linux-x64.tar.gz|*/server-monitor-manager-linux-arm64.tar.gz)
+        cp '$work/archive.tar.gz' "\$out"
+        ;;
+    */server-monitor-manager-linux-x64.tar.gz.sha256|*/server-monitor-manager-linux-arm64.tar.gz.sha256)
+        printf '%s  %s\n' '$archive_hash' "\${asset%.sha256}" >"\$out"
+        ;;
+    */server-monitor-manager-manifest.json|*/server-monitor-manager-manifest.sig|*/server-monitor-manager-manifest.pem)
+        cp '$work/'"\$asset" "\$out"
         ;;
     *)
         printf 'unexpected URL: %s\n' "\$url" >&2
@@ -117,10 +159,62 @@ case "\$url" in
 esac
 EOF_CURL
 chmod +x "$work/bin/curl"
+cat >"$work/bin/uname" <<'EOF_UNAME'
+#!/usr/bin/env bash
+printf '%s\n' "${SMM_TEST_ARCH:-x86_64}"
+EOF_UNAME
+chmod +x "$work/bin/uname"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
-grep -Fq 'INNER_COMMAND=version' "$work/output"
+grep -Fq 'INNER_ARGS=version ' "$work/output"
 grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh' "$work/urls"
 grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+
+if HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-hub >"$work/invalid.out" 2>&1; then
+    printf '%s\n' 'install-hub accepted a missing PUBLIC_HOST' >&2
+    exit 1
+fi
+grep -Fq 'install-hub requires PUBLIC_HOST [HTTPS_PORT] [WG_PORT]' "$work/invalid.out"
+if HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-hub host 7443 51820 extra >"$work/invalid.out" 2>&1; then
+    printf '%s\n' 'install-hub accepted an extra argument' >&2
+    exit 1
+fi
+if HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-node extra >"$work/invalid.out" 2>&1; then
+    printf '%s\n' 'install-node accepted an argument' >&2
+    exit 1
+fi
+grep -Fq 'install-node takes no arguments' "$work/invalid.out"
+
+HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-hub hub.example.com 7443 51820 >"$work/hub.out"
+grep -Eq 'INNER_ARGS=install-control .*/server-monitor-manager-linux-x64.tar.gz hub.example.com 7443 ' "$work/hub.out"
+grep -Fq 'INNER_ARGS=mesh-init hub.example.com 51820 ' "$work/hub.out"
+
+HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-node >"$work/node.out"
+grep -Eq 'INNER_ARGS=install-node .*/server-monitor-manager-linux-x64.tar.gz ' "$work/node.out"
+
+SMM_TEST_ARCH=aarch64 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-node >"$work/arm-node.out"
+grep -Fq '/server-monitor-manager-linux-arm64.tar.gz' "$work/urls"
+
+HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" -- install-node legacy.tar.gz >"$work/pass-through.out"
+grep -Fq 'INNER_ARGS=install-node legacy.tar.gz ' "$work/pass-through.out"
+
+for required in \
+    server-monitor-manager-manifest.json \
+    server-monitor-manager-manifest.sig \
+    server-monitor-manager-manifest.pem; do
+    for mode in node hub; do
+        if [[ "$mode" == node ]]; then
+            install_arguments=(install-node)
+        else
+            install_arguments=(install-hub hub.example.com)
+        fi
+        if SMM_TEST_MISSING_ASSET="$required" HOME="$work/home" PATH="$work/bin:$PATH" \
+            bash "$setup" "${install_arguments[@]}" >"$work/missing.out" 2>&1; then
+            printf '%s continued without %s\n' "$mode" "$required" >&2
+            exit 1
+        fi
+        grep -Fq "required signed-release asset is unavailable: $required" "$work/missing.out"
+    done
+done
 
 printf '%s\n' 'RELEASE_CONTRACT=PASS'

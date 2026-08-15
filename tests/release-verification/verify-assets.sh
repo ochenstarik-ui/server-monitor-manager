@@ -30,6 +30,7 @@ smm-setup.sh
 smm-setup.sh.sha256
 server-monitor-manager-manifest.json
 server-monitor-manager-manifest.sig
+server-monitor-manager-manifest.pem
 EOF
 )
 

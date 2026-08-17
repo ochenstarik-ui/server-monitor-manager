@@ -60,6 +60,7 @@ builder.Services.AddSingleton<ControlEventBroker>();
 builder.Services.AddSingleton<ILinkPolicyApplier, LinkPolicyApplier>();
 builder.Services.AddSingleton<LinkService>();
 builder.Services.AddSingleton<CertificateLifecycleService>();
+builder.Services.AddSingleton<NodeEnrollmentService>();
 builder.Services.AddSingleton<ControlBackupService>();
 builder.Services.AddHostedService<LinkExpirationBackgroundService>();
 builder.Services.AddHostedService<LinkReconciliationBackgroundService>();
@@ -602,6 +603,32 @@ control.MapPost("/certificates/renew", async (
         return Results.Conflict(new ProblemDetails { Title = exception.Message });
     }
 });
+control.MapPost("/agents/{nodeId}/enrollment-code", async (
+    string nodeId,
+    HttpContext context,
+    NodeEnrollmentService enrollmentService,
+    CancellationToken cancellationToken) =>
+{
+    if (!NodeIdValidator.IsValid(nodeId))
+    {
+        return Results.ValidationProblem(new Dictionary<string, string[]>
+        {
+            ["nodeId"] = ["Node id must contain 1-63 lowercase letters, digits, or hyphens."]
+        });
+    }
+
+    var actor = context.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "unknown";
+    try
+    {
+        var response = await enrollmentService.CreateEnrollmentCodeAsync(
+            nodeId, actor, cancellationToken);
+        return Results.Ok(response);
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Conflict(new ProblemDetails { Title = exception.Message });
+    }
+}).RequireRateLimiting("enrollment");
 control.MapGet("/agents", async (ControlStore controlStore, CancellationToken cancellationToken) =>
     Results.Ok((await controlStore.ListAgentsAsync(cancellationToken)).ToArray()));
 control.MapGet("/provisioning/catalogs/system-base-install/1", () =>

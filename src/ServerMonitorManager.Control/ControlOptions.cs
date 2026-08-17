@@ -46,4 +46,20 @@ public sealed class ControlOptions
     public string HubHelperPath { get; set; } = "/usr/local/libexec/ochenstarik-smm-policy-apply";
 
     public string PrivilegeEscalationPath { get; set; } = "/usr/bin/sudo";
+
+    public string? PublicUrl { get; set; }
+
+    public string PublicUrlPath { get; set; } = "/etc/ochenstarik-server-monitor-manager/control-public-url";
+
+    public string MeshEnvironmentPath { get; set; } = "/etc/ochenstarik-server-monitor-manager/mesh.env";
+
+    public string MeshNodesPath { get; set; } = "/var/lib/ochenstarik-server-monitor-manager/mesh/nodes.tsv";
+
+    public string HubPublicKeyPath { get; set; } = "/etc/ochenstarik-server-monitor-manager/wireguard/hub.pub";
+
+    public string? HubEndpoint { get; set; }
+
+    public string? HubPublicKey { get; set; }
+
+    public string MeshNetwork { get; set; } = "10.77.0.0/24";
 }

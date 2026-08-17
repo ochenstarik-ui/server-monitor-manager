@@ -106,4 +106,18 @@ chmod 0755 "$install_path"
 run_ensure_cosign x86_64 "$(printf '0%.0s' {1..64})" "$(printf '0%.0s' {1..64})" "$install_path"
 [[ ! -s "$work/urls" ]]
 
+# Bash caches successful command lookups. The release acceptance test removes
+# its own provisioned cosign to exercise install-node from a clean state, so it
+# must clear that cache before checking PATH again.
+(
+    PATH="$work/installed:$work/bin:/usr/bin:/bin"
+    cosign version >/dev/null
+    rm -f -- "$install_path"
+    hash -r
+    if command -v cosign >/dev/null 2>&1; then
+        printf '%s\n' 'cosign remained discoverable after hash reset' >&2
+        exit 1
+    fi
+)
+
 printf '%s\n' 'COSIGN_PROVISIONING=PASS'

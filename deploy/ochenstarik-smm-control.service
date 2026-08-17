@@ -23,7 +23,7 @@ LockPersonality=true
 RestrictSUIDSGID=true
 RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 UMask=0077
-ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/control
+ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/control /var/lib/ochenstarik-server-monitor-manager/mesh
 
 [Install]
 WantedBy=multi-user.target

@@ -574,6 +574,7 @@ prepare_control_state() {
     chown -R "$CONTROL_USER:$CONTROL_USER" "$STATE_DIR/control"
     find "$STATE_DIR/control" -type d -exec chmod 0700 {} +
     find "$STATE_DIR/control" -type f -exec chmod 0600 {} +
+    repair_mesh_state_permissions
 }
 
 reverse_control_state_migration() {
@@ -682,6 +683,22 @@ read_mesh_value() {
     awk -F '=' -v key="$key" '$1 == key { print substr($0, index($0, "=") + 1); exit }' "$ETC_DIR/mesh.env"
 }
 
+ensure_mesh_state() {
+    install -d -m 0770 -o root -g "$CONTROL_USER" "$MESH_DIR"
+    touch "$MESH_DIR/nodes.tsv"
+    chown root:"$CONTROL_USER" "$MESH_DIR/nodes.tsv"
+    chmod 0660 "$MESH_DIR/nodes.tsv"
+}
+
+repair_mesh_state_permissions() {
+    [[ -d "$MESH_DIR" ]] || return 0
+    install -d -m 0770 -o root -g "$CONTROL_USER" "$MESH_DIR"
+    if [[ -e "$MESH_DIR/nodes.tsv" ]]; then
+        chown root:"$CONTROL_USER" "$MESH_DIR/nodes.tsv"
+        chmod 0660 "$MESH_DIR/nodes.tsv"
+    fi
+}
+
 render_hub_wireguard_config() {
     local private_key endpoint port node_id address public_key status
     private_key="$(cat "$WG_DIR/hub.key")"
@@ -719,8 +736,10 @@ mesh_init() {
     fi
     [[ "$public_endpoint" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]{0,251}[A-Za-z0-9])?$ ]] \
         || fail "Invalid WireGuard public endpoint."
+    ensure_system_user "$CONTROL_USER"
     ensure_mesh_packages
-    install -d -m 0700 "$WG_DIR" "$MESH_DIR" /etc/wireguard
+    install -d -m 0700 -o root -g root "$WG_DIR" /etc/wireguard
+    ensure_mesh_state
     if [[ ! -f "$WG_DIR/hub.key" ]]; then
         umask 077
         wg genkey >"$WG_DIR/hub.key"
@@ -736,8 +755,6 @@ HUB_PUBLIC_KEY=$hub_public
 MESH_NETWORK=$MESH_NETWORK
 EOF
     chmod 0644 "$ETC_DIR/mesh.env"
-    touch "$MESH_DIR/nodes.tsv"
-    chmod 0600 "$MESH_DIR/nodes.tsv"
     printf '%s\n' 'net.ipv4.ip_forward=1' >"/etc/sysctl.d/90-ochenstarik-smm-mesh.conf"
     sysctl --system >/dev/null
     write_mesh_firewall
@@ -761,9 +778,7 @@ EOF
 
 reserve_node_address() {
     local node_id="$1" existing host address
-    install -d -m 0700 "$MESH_DIR"
-    touch "$MESH_DIR/nodes.tsv"
-    chmod 0600 "$MESH_DIR/nodes.tsv"
+    ensure_mesh_state
     existing="$(awk -F '\t' -v node="$node_id" '$1 == node { print $2; exit }' "$MESH_DIR/nodes.tsv")"
     if [[ -n "$existing" ]]; then
         printf '%s\n' "$existing"
@@ -1359,7 +1374,8 @@ add_mesh_peer() {
     awk -F '\t' -v OFS='\t' -v node="$node_id" -v address="$address" -v key="$public_key" \
         '$1 == node { print node, address, key, "active"; found=1; next } { print } END { if (!found) exit 1 }' \
         "$MESH_DIR/nodes.tsv" >"$tmp" || { rm -f -- "$tmp"; fail "Peer reservation is missing."; }
-    chmod 0600 "$tmp"
+    chown root:"$CONTROL_USER" "$tmp"
+    chmod 0660 "$tmp"
     mv -- "$tmp" "$MESH_DIR/nodes.tsv"
     render_hub_wireguard_config
     systemctl restart wg-quick@smm0.service

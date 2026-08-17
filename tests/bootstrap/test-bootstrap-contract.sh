@@ -235,6 +235,7 @@ printf '%s' backup >"$control_state_fixture/backups/manifest.json"
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n' "$validate_control_state_migration_definition" "$prepare_control_state_definition")
     validate_control_state_migration
     prepare_control_state

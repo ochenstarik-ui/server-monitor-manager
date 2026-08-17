@@ -573,6 +573,13 @@ agents.MapPost("/provisioning/jobs/{id}/execution-grant", async (
     }
 });
 
+var console = app.MapGroup("/").RequireAuthorization("Operator");
+console.MapGet("/", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "index.html", "text/html; charset=utf-8"));
+console.MapGet("/index.html", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "index.html", "text/html; charset=utf-8"));
+console.MapGet("/style.css", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "style.css", "text/css; charset=utf-8"));
+console.MapGet("/app.js", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "app.js", "application/javascript; charset=utf-8"));
+console.MapGet("/console", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "index.html", "text/html; charset=utf-8"));
+
 var control = app.MapGroup("/api/v1/control").RequireAuthorization("Operator");
 control.MapPost("/certificates/renew", async (
     CertificateRenewalRequest request,
@@ -1053,6 +1060,36 @@ automation.MapGet("/links", async (
 
 await app.RunAsync();
 return 0;
+
+static IResult GetWebConsoleAsset(IWebHostEnvironment env, string fileName, string contentType)
+{
+    var webRoot = env.WebRootPath;
+    if (string.IsNullOrWhiteSpace(webRoot))
+    {
+        webRoot = Path.Combine(AppContext.BaseDirectory, "wwwroot");
+    }
+
+    var filePath = Path.Combine(webRoot, fileName);
+    if (File.Exists(filePath))
+    {
+        return Results.File(filePath, contentType);
+    }
+
+    var assembly = typeof(Program).Assembly;
+    var resourceName = assembly.GetManifestResourceNames()
+        .FirstOrDefault(name => name.EndsWith(fileName, StringComparison.OrdinalIgnoreCase));
+
+    if (resourceName is not null)
+    {
+        var stream = assembly.GetManifestResourceStream(resourceName);
+        if (stream is not null)
+        {
+            return Results.Stream(stream, contentType);
+        }
+    }
+
+    return Results.NotFound();
+}
 
 static async Task<IResult> ChangeProvisioningJobAsync(
     string id,

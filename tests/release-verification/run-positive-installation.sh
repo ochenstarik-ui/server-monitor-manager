@@ -87,6 +87,7 @@ NODE_CODE="$(sudo bash smm-setup.sh --tag "$TAG" node-code test-node)"
 # Remove only that test-provisioned copy so install-node is also exercised from
 # a host without cosign.
 sudo rm -f -- /usr/local/bin/cosign
+hash -r
 if command -v cosign >/dev/null 2>&1; then
     echo "FAIL: cosign is still present before the clean-host install-node test" >&2
     exit 1

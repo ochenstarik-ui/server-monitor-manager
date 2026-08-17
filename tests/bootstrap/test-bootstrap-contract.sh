@@ -7,6 +7,16 @@ bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 helper="$root/deploy/ochenstarik-smm-policy-apply"
 emergency="$root/deploy/ochenstarik-smm-emergency"
 acceptance="$root/tests/acceptance/three-server-mesh.sh"
+unified_setup="$root/deploy/smm-setup.sh"
+unified_test="$root/tests/bootstrap/test-unified-installer.sh"
+
+bash -n "$unified_setup" "$unified_test"
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck --severity=error "$unified_setup" "$unified_test"
+fi
+if [[ "$(uname -s)" != MINGW* ]]; then
+    bash "$unified_test"
+fi
 
 grep -Fq 'listing="$(/usr/sbin/nft -a list chain' "$helper" || {
     printf '%s\n' "policy status probe must fail closed when nftables cannot be inspected" >&2

@@ -96,7 +96,7 @@ public sealed class NodeEnrollmentCodeTests : IAsyncDisposable
         await conn.OpenAsync(TestContext.Current.CancellationToken);
         var cmd = conn.CreateCommand();
         cmd.CommandText = "SELECT COUNT(*) FROM enrollment_tokens;";
-        var count = Convert.ToInt32(await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken));
+        var count = Convert.ToInt32(await cmd.ExecuteScalarAsync(TestContext.Current.CancellationToken), System.Globalization.CultureInfo.InvariantCulture);
         Assert.Equal(0, count);
     }
 

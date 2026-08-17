@@ -128,7 +128,129 @@ public sealed class WebConsoleTests : IAsyncDisposable
         Assert.Contains("отпечаток", html, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task EmbeddedAssetsAreServedWhenDiskWebRootIsMissing()
+    {
+        await using var embeddedFactory = new WebConsoleEmbeddedOnlyTestFactory();
+        using var client = embeddedFactory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Identity", "operator-admin");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+
+        // 1. Root /
+        var rootResponse = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, rootResponse.StatusCode);
+        Assert.Contains("text/html", rootResponse.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
+        var rootHtml = await rootResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.NotEmpty(rootHtml);
+        Assert.Contains("id=\"nodes-table\"", rootHtml, StringComparison.Ordinal);
+        Assert.Contains("id=\"add-node-btn\"", rootHtml, StringComparison.Ordinal);
+
+        // 2. /index.html
+        var indexResponse = await client.GetAsync("/index.html", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, indexResponse.StatusCode);
+        Assert.Contains("text/html", indexResponse.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
+        var indexHtml = await indexResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.NotEmpty(indexHtml);
+        Assert.Contains("id=\"links-table\"", indexHtml, StringComparison.Ordinal);
+
+        // 3. /style.css
+        var cssResponse = await client.GetAsync("/style.css", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, cssResponse.StatusCode);
+        Assert.Contains("text/css", cssResponse.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
+        var cssContent = await cssResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.NotEmpty(cssContent);
+        Assert.Contains(".app-container", cssContent, StringComparison.Ordinal);
+
+        // 4. /app.js
+        var jsResponse = await client.GetAsync("/app.js", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, jsResponse.StatusCode);
+        Assert.Contains("javascript", jsResponse.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
+        var jsContent = await jsResponse.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+        Assert.NotEmpty(jsContent);
+        Assert.Contains("loadDashboardData", jsContent, StringComparison.Ordinal);
+
+        // 5. /console alias
+        var consoleResponse = await client.GetAsync("/console", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, consoleResponse.StatusCode);
+        Assert.Contains("text/html", consoleResponse.Content.Headers.ContentType?.MediaType, StringComparison.OrdinalIgnoreCase);
+    }
+
     public async ValueTask DisposeAsync() => await _factory.DisposeAsync();
+
+    private sealed class WebConsoleEmbeddedOnlyTestFactory : WebApplicationFactory<controlapp::Program>
+    {
+        private readonly string _directory = Path.Combine(
+            Path.GetTempPath(), $"smm-web-console-embedded-{Guid.NewGuid():N}");
+
+        public string DatabasePath => Path.Combine(_directory, "control.db");
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            Directory.CreateDirectory(_directory);
+            var emptyWebRoot = Path.Combine(_directory, "empty-webroot-no-files");
+            Directory.CreateDirectory(emptyWebRoot);
+            builder.UseWebRoot(emptyWebRoot);
+
+            var authorityPath = Path.Combine(_directory, "control-ca.pfx");
+            if (!File.Exists(authorityPath))
+            {
+                using var key = ECDsa.Create(ECCurve.NamedCurves.nistP256);
+                var request = new CertificateRequest("CN=SMM Web Console Embedded CA", key, HashAlgorithmName.SHA256);
+                request.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
+                request.CertificateExtensions.Add(new X509KeyUsageExtension(
+                    X509KeyUsageFlags.KeyCertSign | X509KeyUsageFlags.CrlSign, true));
+                using var certificate = request.CreateSelfSigned(
+                    DateTimeOffset.UtcNow.AddMinutes(-1), DateTimeOffset.UtcNow.AddDays(1));
+                File.WriteAllBytes(authorityPath, certificate.Export(X509ContentType.Pfx));
+            }
+
+            var publicUrlPath = Path.Combine(_directory, "control-public-url");
+            File.WriteAllText(publicUrlPath, "https://hub.example.com:7443\n");
+
+            var meshEnvPath = Path.Combine(_directory, "mesh.env");
+            File.WriteAllText(meshEnvPath, "HUB_ENDPOINT=hub.example.com:51820\nHUB_PUBLIC_KEY=mQZ/Y4yQpQhX6j0rL8vU2w==\nMESH_NETWORK=10.77.0.0/24\n");
+
+            var meshNodesPath = Path.Combine(_directory, "mesh", "nodes.tsv");
+
+            builder.ConfigureAppConfiguration((_, configuration) =>
+                configuration.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["Control:DatabasePath"] = DatabasePath,
+                    ["Control:CertificateAuthorityPath"] = authorityPath,
+                    ["Control:BackupDirectory"] = Path.Combine(_directory, "backups"),
+                    ["Control:PublicUrlPath"] = publicUrlPath,
+                    ["Control:MeshEnvironmentPath"] = meshEnvPath,
+                    ["Control:MeshNodesPath"] = meshNodesPath
+                }));
+
+            builder.ConfigureTestServices(services =>
+            {
+                services.RemoveAll<IHostedService>();
+                services.AddAuthentication(options =>
+                    {
+                        options.DefaultAuthenticateScheme = "Test";
+                        options.DefaultChallengeScheme = "Test";
+                    })
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>("Test", _ => { });
+            });
+        }
+
+        public override async ValueTask DisposeAsync()
+        {
+            await base.DisposeAsync();
+            try
+            {
+                if (Directory.Exists(_directory))
+                {
+                    Directory.Delete(_directory, recursive: true);
+                }
+            }
+            catch
+            {
+                // Ignored in test cleanup
+            }
+        }
+    }
 
     private sealed class WebConsoleTestFactory : WebApplicationFactory<controlapp::Program>
     {

@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SMM — Консоль оператора</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="app-container">
+    <header class="app-header">
+      <div class="header-brand">
+        <div class="brand-badge">SMM</div>
+        <div class="brand-titles">
+          <h1>Консоль оператора</h1>
+          <span class="brand-subtitle">Server Monitor Manager</span>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicator">
+          <span class="status-dot"></span>
+          <span id="connection-status">mTLS подключен</span>
+        </div>
+        <button id="refresh-btn" class="btn btn-secondary" title="Обновить данные">
+          <span class="btn-icon">↻</span>
+          <span>Обновить</span>
+        </button>
+        <button id="add-node-btn" class="btn btn-primary">
+          <span class="btn-icon">+</span>
+          <span>Добавить узел</span>
+        </button>
+      </div>
+    </header>
+
+    <main class="app-main">
+      <div id="global-alert" class="alert hidden" role="alert"></div>
+
+      <!-- Раздел: Узлы -->
+      <section class="dashboard-section" id="nodes-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2>Узлы мониторинга</h2>
+            <span id="nodes-count" class="counter-badge">0</span>
+          </div>
+          <span class="section-hint">Зарегистрированные агенты и их текущий статус</span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="nodes-table">
+            <thead>
+              <tr>
+                <th>Имя узла</th>
+                <th>Состояние</th>
+                <th>Версия агента</th>
+                <th>Последний Heartbeat</th>
+                <th>Сертификат</th>
+              </tr>
+            </thead>
+            <tbody id="nodes-table-body">
+              <tr class="loading-row">
+                <td colspan="5">Загрузка списка узлов...</td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="nodes-empty" class="empty-state hidden">
+            <div class="empty-state-icon">🖥️</div>
+            <div class="empty-state-text">Нет зарегистрированных узлов</div>
+            <p class="empty-state-subtext">Нажмите «Добавить узел», чтобы выпустить код регистрации и подключить первый сервер.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Раздел: Сетевые связи (Links) -->
+      <section class="dashboard-section" id="links-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2>Сетевые связи (Links)</h2>
+            <span id="links-count" class="counter-badge">0</span>
+          </div>
+          <span class="section-hint">Политики взаимодействия между узлами mesh-сети</span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="links-table">
+            <thead>
+              <tr>
+                <th>ID связи</th>
+                <th>Источник</th>
+                <th>Назначение</th>
+                <th>Протокол / Порт</th>
+                <th>Требуемое состояние</th>
+                <th>Фактическое состояние</th>
+                <th>Срок действия</th>
+              </tr>
+            </thead>
+            <tbody id="links-table-body">
+              <tr class="loading-row">
+                <td colspan="7">Загрузка сетевых связей...</td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="links-empty" class="empty-state hidden">
+            <div class="empty-state-icon">🔗</div>
+            <div class="empty-state-text">Нет активных связей</div>
+            <p class="empty-state-subtext">Сетевые политики взаимодействия между узлами ещё не созданы.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="app-footer">
+      <div class="footer-info">
+        <span>Server Monitor Manager v0.1.0</span>
+        <span class="footer-separator">•</span>
+        <span>Доступ авторизован по сертификату роли Operator</span>
+      </div>
+      <div class="footer-timestamp">
+        <span id="last-updated-text">Синхронизировано</span>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Модальное окно: Добавление узла -->
+  <div id="add-node-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-window">
+      <div class="modal-header">
+        <h3 id="modal-title">Выпуск кода регистрации узла</h3>
+        <button id="modal-close-btn" class="modal-close" aria-label="Закрыть">×</button>
+      </div>
+
+      <div class="modal-body">
+        <!-- Шаг 1: Форма ввода имени -->
+        <form id="enrollment-form">
+          <div class="form-group">
+            <label for="node-id-input">Имя нового узла (Node ID):</label>
+            <input
+              type="text"
+              id="node-id-input"
+              class="form-control"
+              placeholder="например: web-prod-01"
+              maxlength="63"
+              pattern="^[a-z0-9-]{1,63}$"
+              required
+              autocomplete="off"
+              spellcheck="false">
+            <span class="form-hint">От 1 до 63 символов: строчные латинские буквы, цифры и дефисы.</span>
+          </div>
+
+          <div id="modal-error" class="alert alert-error hidden" role="alert"></div>
+
+          <div class="form-actions">
+            <button type="button" id="modal-cancel-btn" class="btn btn-secondary">Отмена</button>
+            <button type="submit" id="generate-code-btn" class="btn btn-primary">
+              <span>Сгенерировать код</span>
+            </button>
+          </div>
+        </form>
+
+        <!-- Шаг 2: Результат генерации кода -->
+        <div id="enrollment-result" class="enrollment-result-container hidden">
+          <!-- Обязательное заметное предупреждение для оператора -->
+          <div class="security-warning-card" role="alert">
+            <div class="warning-badge-label">
+              <span class="warning-icon">⚠️</span>
+              <strong>ОБЯЗАТЕЛЬНО К ПРОВЕРКЕ ПЕРЕД ПОДТВЕРЖДЕНИЕМ УСТАНОВКИ</strong>
+            </div>
+            <p class="warning-text">
+              При выполнении установщика на сервере обязательно сверьте отпечаток CA, выведенный скриптом, с отпечатком ниже. Подтверждение без сверки обесценивает криптографическую проверку подписи!
+            </p>
+          </div>
+
+          <div class="result-field-group">
+            <div class="result-field-header">
+              <label for="ca-fingerprint-display">Отпечаток CA (SHA-256):</label>
+              <button id="copy-fingerprint-btn" class="btn btn-sm btn-outline" type="button" title="Скопировать отпечаток CA">
+                Копировать отпечаток
+              </button>
+            </div>
+            <div class="code-box fingerprint-box" id="ca-fingerprint-display" tabindex="0"></div>
+          </div>
+
+          <div class="result-field-group">
+            <div class="result-field-header">
+              <label for="enrollment-code-display">Код регистрации (SMMNODE2):</label>
+              <button id="copy-code-btn" class="btn btn-sm btn-primary" type="button" title="Скопировать код регистрации">
+                Скопировать код
+              </button>
+            </div>
+            <textarea
+              id="enrollment-code-display"
+              class="code-box enrollment-code-box"
+              readonly
+              rows="4"
+              spellcheck="false"></textarea>
+          </div>
+
+          <div class="result-meta-row">
+            <div class="expiration-info">
+              <span class="timer-icon">⏱️</span>
+              <span>Срок действия: <strong>10 минут</strong></span>
+              <span id="countdown-timer" class="countdown-badge">10:00</span>
+            </div>
+            <button type="button" id="result-done-btn" class="btn btn-secondary">Готово</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/app.js"></script>
+</body>
+</html>

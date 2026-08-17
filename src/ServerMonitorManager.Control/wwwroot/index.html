@@ -29,8 +29,17 @@
           <span class="btn-icon">+</span>
           <span>Добавить узел</span>
         </button>
+        <button id="logout-btn" class="btn btn-secondary hidden" title="Выйти из сессии">
+          <span class="btn-icon">🚪</span>
+          <span>Выйти</span>
+        </button>
       </div>
     </header>
+
+    <div id="testing-auth-warning" class="testing-banner hidden" role="status">
+      <span class="warning-icon">⚠️</span>
+      <span>Режим тестирования: включен вход по логину и паролю</span>
+    </div>
 
     <main class="app-main">
       <div id="global-alert" class="alert hidden" role="alert"></div>
@@ -118,6 +127,48 @@
         <span id="last-updated-text">Синхронизировано</span>
       </div>
     </footer>
+  <!-- Модальное окно: Вход по логину и паролю (для тестирования) -->
+  <div id="login-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
+    <div class="modal-window login-modal-window">
+      <div class="modal-header">
+        <h3 id="login-modal-title">Вход в консоль оператора</h3>
+      </div>
+      <div class="modal-body">
+        <div class="testing-notice-box">
+          <span class="warning-icon">ℹ️</span>
+          <span>Вход по логину и паролю предназначен исключительно для тестирования.</span>
+        </div>
+        <form id="login-form">
+          <div class="form-group">
+            <label for="login-username">Логин (Username):</label>
+            <input
+              type="text"
+              id="login-username"
+              class="form-control"
+              placeholder="operator"
+              required
+              autocomplete="username"
+              spellcheck="false">
+          </div>
+          <div class="form-group">
+            <label for="login-password">Пароль (Password):</label>
+            <input
+              type="password"
+              id="login-password"
+              class="form-control"
+              placeholder="••••••••"
+              required
+              autocomplete="current-password">
+          </div>
+          <div id="login-error" class="alert alert-error hidden" role="alert"></div>
+          <div class="form-actions">
+            <button type="submit" id="login-submit-btn" class="btn btn-primary btn-block">
+              <span>Войти</span>
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   </div>
 
   <!-- Модальное окно: Добавление узла -->

@@ -14,10 +14,13 @@
   const linksEmpty = document.getElementById('links-empty');
   const lastUpdatedText = document.getElementById('last-updated-text');
   const globalAlert = document.getElementById('global-alert');
+  const connectionStatus = document.getElementById('connection-status');
+  const testingBanner = document.getElementById('testing-auth-warning');
 
   // Action Elements
   const refreshBtn = document.getElementById('refresh-btn');
   const addNodeBtn = document.getElementById('add-node-btn');
+  const logoutBtn = document.getElementById('logout-btn');
 
   // Modal Elements
   const modalBackdrop = document.getElementById('add-node-modal');
@@ -30,6 +33,14 @@
   const enrollmentResult = document.getElementById('enrollment-result');
   const resultDoneBtn = document.getElementById('result-done-btn');
 
+  // Login Modal Elements
+  const loginModal = document.getElementById('login-modal');
+  const loginForm = document.getElementById('login-form');
+  const loginUsername = document.getElementById('login-username');
+  const loginPassword = document.getElementById('login-password');
+  const loginSubmitBtn = document.getElementById('login-submit-btn');
+  const loginError = document.getElementById('login-error');
+
   // Result Displays & Copy Buttons
   const caFingerprintDisplay = document.getElementById('ca-fingerprint-display');
   const enrollmentCodeDisplay = document.getElementById('enrollment-code-display');
@@ -41,11 +52,15 @@
   let countdownInterval = null;
   let autoRefreshInterval = null;
   let isModalOpen = false;
+  let isPasswordLoginEnabled = false;
+
+  const TOKEN_KEY = 'smm_session_token';
 
   // Initialize
-  document.addEventListener('DOMContentLoaded', () => {
+  document.addEventListener('DOMContentLoaded', async () => {
     bindEvents();
-    loadDashboardData();
+    await checkAuthStatus();
+    await loadDashboardData();
     startAutoRefresh();
   });
 
@@ -66,6 +81,12 @@
     });
 
     enrollmentForm.addEventListener('submit', handleEnrollmentSubmit);
+    if (loginForm) {
+      loginForm.addEventListener('submit', handleLoginSubmit);
+    }
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', handleLogout);
+    }
 
     copyCodeBtn.addEventListener('click', () => {
       copyToClipboard(enrollmentCodeDisplay.value, copyCodeBtn, 'Скопировать код');
@@ -82,10 +103,50 @@
     });
   }
 
+  async function checkAuthStatus() {
+    try {
+      const res = await fetch('/api/v1/auth/status');
+      if (res.ok) {
+        const data = await res.json();
+        isPasswordLoginEnabled = !!data?.enabledForTesting;
+        if (isPasswordLoginEnabled && testingBanner) {
+          testingBanner.classList.remove('hidden');
+        }
+      }
+    } catch {
+      // Ignored if status endpoint unavailable
+    }
+  }
+
+  function getStoredToken() {
+    return sessionStorage.getItem(TOKEN_KEY) || '';
+  }
+
+  function setStoredToken(token) {
+    if (token) {
+      sessionStorage.setItem(TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(TOKEN_KEY);
+    }
+  }
+
+  async function authFetch(url, options = {}) {
+    const headers = options.headers ? { ...options.headers } : {};
+    const token = getStoredToken();
+    if (token && !headers['Authorization']) {
+      headers['Authorization'] = `Bearer ${token}`;
+    }
+    if (!headers['Accept']) {
+      headers['Accept'] = 'application/json';
+    }
+
+    return await fetch(url, { ...options, headers });
+  }
+
   function startAutoRefresh() {
     if (autoRefreshInterval) clearInterval(autoRefreshInterval);
     autoRefreshInterval = setInterval(() => {
-      if (!isModalOpen) {
+      if (!isModalOpen && (!loginModal || loginModal.classList.contains('hidden'))) {
         loadDashboardData(false);
       }
     }, 10000);
@@ -99,16 +160,20 @@
 
     try {
       const [agentsRes, linksRes] = await Promise.all([
-        fetch('/api/v1/control/agents', { headers: { Accept: 'application/json' } }),
-        fetch('/api/v1/control/links', { headers: { Accept: 'application/json' } })
+        authFetch('/api/v1/control/agents'),
+        authFetch('/api/v1/control/links')
       ]);
 
       if (agentsRes.status === 401 || linksRes.status === 401) {
-        showGlobalAlert('Ошибка аутентификации: требуется клиентский сертификат роли Operator.', 'error');
+        if (isPasswordLoginEnabled && !getStoredToken()) {
+          showLoginModal();
+          return;
+        }
+        showGlobalAlert('Ошибка аутентификации: требуется клиентский сертификат роли Operator или авторизация по паролю.', 'error');
         return;
       }
       if (agentsRes.status === 403 || linksRes.status === 403) {
-        showGlobalAlert('Доступ запрещён: сертификат не имеет роли Operator.', 'error');
+        showGlobalAlert('Доступ запрещён: пользователь или сертификат не имеет роли Operator.', 'error');
         return;
       }
 
@@ -122,6 +187,14 @@
       renderNodes(agents);
       renderLinks(links);
       hideGlobalAlert();
+      hideLoginModal();
+
+      if (getStoredToken() && logoutBtn) {
+        logoutBtn.classList.remove('hidden');
+        if (connectionStatus) {
+          connectionStatus.textContent = 'Пароль (Operator)';
+        }
+      }
 
       const now = new Date();
       lastUpdatedText.textContent = `Обновлено в ${now.toLocaleTimeString()}`;
@@ -133,6 +206,103 @@
         refreshBtn.disabled = false;
         refreshBtn.querySelector('.btn-icon').textContent = '↻';
       }
+    }
+  }
+
+  function showLoginModal() {
+    if (loginModal) {
+      loginModal.classList.remove('hidden');
+      if (loginUsername) loginUsername.focus();
+    }
+  }
+
+  function hideLoginModal() {
+    if (loginModal) {
+      loginModal.classList.add('hidden');
+      hideLoginError();
+    }
+  }
+
+  function showLoginError(msg) {
+    if (loginError) {
+      loginError.textContent = msg;
+      loginError.classList.remove('hidden');
+    }
+  }
+
+  function hideLoginError() {
+    if (loginError) {
+      loginError.textContent = '';
+      loginError.classList.add('hidden');
+    }
+  }
+
+  async function handleLoginSubmit(e) {
+    e.preventDefault();
+    const username = (loginUsername.value || '').trim();
+    const password = loginPassword.value || '';
+
+    if (!username || !password) {
+      showLoginError('Заполните логин и пароль.');
+      return;
+    }
+
+    hideLoginError();
+    loginSubmitBtn.disabled = true;
+    loginSubmitBtn.querySelector('span').textContent = 'Вход...';
+
+    try {
+      const res = await fetch('/api/v1/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify({ username, password })
+      });
+
+      if (res.status === 401) {
+        showLoginError('Неверный логин или пароль.');
+        return;
+      }
+
+      if (res.status === 429) {
+        showLoginError('Превышено количество попыток входа (лимит 5/мин). Подождите перед повторной попыткой.');
+        return;
+      }
+
+      if (!res.ok) {
+        showLoginError('Вход по паролю отключён на этом сервере.');
+        return;
+      }
+
+      const data = await res.json();
+      if (data?.token) {
+        setStoredToken(data.token);
+        hideLoginModal();
+        await loadDashboardData(true);
+      }
+    } catch (err) {
+      showLoginError(`Ошибка сети: ${err.message}`);
+    } finally {
+      loginSubmitBtn.disabled = false;
+      loginSubmitBtn.querySelector('span').textContent = 'Войти';
+    }
+  }
+
+  async function handleLogout() {
+    try {
+      await authFetch('/api/v1/auth/logout', { method: 'POST' });
+    } catch {
+      // Ignore network errors on logout
+    }
+    setStoredToken('');
+    if (logoutBtn) logoutBtn.classList.add('hidden');
+    if (connectionStatus) connectionStatus.textContent = 'Сессия завершена';
+    if (isPasswordLoginEnabled) {
+      showLoginModal();
+    } else {
+      window.location.reload();
     }
   }
 
@@ -208,15 +378,12 @@
     generateCodeBtn.textContent = 'Генерация...';
 
     try {
-      const res = await fetch(`/api/v1/control/agents/${encodeURIComponent(nodeId)}/enrollment-code`, {
-        method: 'POST',
-        headers: {
-          'Accept': 'application/json'
-        }
+      const res = await authFetch(`/api/v1/control/agents/${encodeURIComponent(nodeId)}/enrollment-code`, {
+        method: 'POST'
       });
 
       if (res.status === 401) {
-        showModalError('Требуется клиентский сертификат роли Operator.');
+        showModalError('Требуется авторизация роли Operator.');
         return;
       }
       if (res.status === 403) {

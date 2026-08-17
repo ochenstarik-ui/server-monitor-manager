@@ -630,6 +630,41 @@ body {
   color: var(--border-color);
 }
 
+/* Testing Banner & Login Modal */
+.testing-banner {
+  background-color: var(--warning-bg);
+  border-bottom: 1px solid var(--warning-border);
+  color: var(--warning-text);
+  padding: 0.5rem 2rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.testing-notice-box {
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.login-modal-window {
+  max-width: 440px;
+}
+
+.btn-block {
+  width: 100%;
+}
+
 /* Utilities */
 .hidden {
   display: none !important;
@@ -648,5 +683,9 @@ body {
   }
   .modal-window {
     margin: 0.5rem;
+  }
+  .testing-banner {
+    padding: 0.5rem 1rem;
+    font-size: 0.8rem;
   }
 }

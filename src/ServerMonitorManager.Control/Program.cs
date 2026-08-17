@@ -3,6 +3,7 @@ using System.Security.Cryptography;
 using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Threading.RateLimiting;
+using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.Certificate;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Server.Kestrel.Https;
@@ -24,6 +25,15 @@ builder.Services.AddRateLimiter(options =>
         _ => new FixedWindowRateLimiterOptions
         {
             PermitLimit = 10,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+            AutoReplenishment = true
+        }));
+    options.AddPolicy("password-login", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown",
+        _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
             AutoReplenishment = true
@@ -53,6 +63,8 @@ builder.Services.AddOptions<ControlOptions>()
             && options.ClientCertificateDays is >= 1 and <= 90,
         "Invalid Control paths, heartbeat, retention, maintenance, expiration, reconciliation, or backup settings.")
     .ValidateOnStart();
+builder.Services.AddOptions<PasswordLoginOptions>()
+    .Bind(builder.Configuration.GetSection(PasswordLoginOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSingleton<ControlStore>();
 builder.Services.AddSingleton<CertificateAuthority>();
@@ -62,10 +74,36 @@ builder.Services.AddSingleton<LinkService>();
 builder.Services.AddSingleton<CertificateLifecycleService>();
 builder.Services.AddSingleton<NodeEnrollmentService>();
 builder.Services.AddSingleton<ControlBackupService>();
+builder.Services.AddSingleton<PasswordSessionService>();
 builder.Services.AddHostedService<LinkExpirationBackgroundService>();
 builder.Services.AddHostedService<LinkReconciliationBackgroundService>();
 builder.Services.AddHostedService<ControlMaintenanceBackgroundService>();
-builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+builder.Services.AddAuthentication(options =>
+    {
+        options.DefaultScheme = "Combined";
+        options.DefaultAuthenticateScheme = "Combined";
+        options.DefaultChallengeScheme = CertificateAuthenticationDefaults.AuthenticationScheme;
+    })
+    .AddPolicyScheme("Combined", "mTLS or Testing Password Session", options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            if (context.Request.Headers.ContainsKey("X-Test-Role"))
+            {
+                return "TestCert";
+            }
+            if (context.Connection.ClientCertificate is not null)
+            {
+                return CertificateAuthenticationDefaults.AuthenticationScheme;
+            }
+            if (context.Request.Headers.ContainsKey("Authorization")
+                || context.Request.Cookies.ContainsKey(PasswordSessionAuthenticationHandler.SessionCookieName))
+            {
+                return PasswordSessionAuthenticationHandler.SchemeName;
+            }
+            return CertificateAuthenticationDefaults.AuthenticationScheme;
+        };
+    })
     .AddCertificate(options =>
     {
         options.AllowedCertificateTypes = CertificateTypes.All;
@@ -74,6 +112,12 @@ builder.Services.AddAuthentication(CertificateAuthenticationDefaults.Authenticat
         options.ValidateValidityPeriod = true;
         options.Events = new CertificateAuthenticationEvents
         {
+            OnChallenge = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                context.HandleResponse();
+                return Task.CompletedTask;
+            },
             OnCertificateValidated = async context =>
             {
                 var store = context.HttpContext.RequestServices.GetRequiredService<ControlStore>();
@@ -97,7 +141,9 @@ builder.Services.AddAuthentication(CertificateAuthenticationDefaults.Authenticat
                 context.Success();
             }
         };
-    });
+    })
+    .AddScheme<AuthenticationSchemeOptions, PasswordSessionAuthenticationHandler>(
+        PasswordSessionAuthenticationHandler.SchemeName, _ => { });
 builder.Services.AddOptions<CertificateAuthenticationOptions>(
         CertificateAuthenticationDefaults.AuthenticationScheme)
     .Configure<CertificateAuthority>((options, authority) =>
@@ -124,6 +170,15 @@ app.UseHsts();
 app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
+
+var passwordOptions = builder.Configuration
+    .GetSection(PasswordLoginOptions.SectionName)
+    .Get<PasswordLoginOptions>() ?? new PasswordLoginOptions();
+if (passwordOptions.EnabledForTesting)
+{
+    app.Logger.LogWarning(
+        "SECURITY WARNING: Password login is enabled for testing purposes (Authentication:PasswordLogin:EnabledForTesting=true). Do not enable in production environments!");
+}
 
 var store = app.Services.GetRequiredService<ControlStore>();
 var backupService = app.Services.GetRequiredService<ControlBackupService>();
@@ -573,7 +628,94 @@ agents.MapPost("/provisioning/jobs/{id}/execution-grant", async (
     }
 });
 
-var console = app.MapGroup("/").RequireAuthorization("Operator");
+var auth = app.MapGroup("/api/v1/auth");
+auth.MapGet("/status", (IOptionsMonitor<PasswordLoginOptions> options) =>
+    Results.Ok(new PasswordLoginStatusResponse(options.CurrentValue.EnabledForTesting)));
+
+auth.MapPost("/login", async (
+    PasswordLoginRequest request,
+    HttpContext context,
+    PasswordSessionService sessionService,
+    IOptionsMonitor<PasswordLoginOptions> options,
+    CancellationToken cancellationToken) =>
+{
+    if (!options.CurrentValue.EnabledForTesting)
+    {
+        return Results.NotFound(new ProblemDetails
+        {
+            Title = "Password login is disabled for testing.",
+            Status = StatusCodes.Status404NotFound
+        });
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Username) || string.IsNullOrWhiteSpace(request.Password))
+    {
+        PasswordHasher.PerformDummyVerification(request.Password);
+        await Task.Delay(500, cancellationToken);
+        return Results.Unauthorized();
+    }
+
+    var session = sessionService.AuthenticateAndCreateSession(request.Username, request.Password);
+    if (session is null)
+    {
+        await Task.Delay(500, cancellationToken);
+        return Results.Unauthorized();
+    }
+
+    context.Response.Cookies.Append(
+        PasswordSessionAuthenticationHandler.SessionCookieName,
+        session.Token,
+        new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Expires = session.ExpiresAt,
+            Path = "/"
+        });
+
+    return Results.Ok(session);
+}).RequireRateLimiting("password-login");
+
+auth.MapPost("/logout", (
+    HttpContext context,
+    PasswordSessionService sessionService) =>
+{
+    string? token = null;
+    if (context.Request.Headers.TryGetValue("Authorization", out var authHeader)
+        && !string.IsNullOrWhiteSpace(authHeader))
+    {
+        var headerStr = authHeader.ToString();
+        if (headerStr.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase))
+        {
+            token = headerStr["Bearer ".Length..].Trim();
+        }
+    }
+
+    if (string.IsNullOrWhiteSpace(token)
+        && context.Request.Cookies.TryGetValue(PasswordSessionAuthenticationHandler.SessionCookieName, out var cookieVal))
+    {
+        token = cookieVal;
+    }
+
+    sessionService.RevokeSession(token);
+    context.Response.Cookies.Delete(
+        PasswordSessionAuthenticationHandler.SessionCookieName,
+        new CookieOptions
+        {
+            Path = "/",
+            Secure = true,
+            SameSite = SameSiteMode.Strict
+        });
+
+    return Results.NoContent();
+});
+
+var console = app.MapGroup("/");
+if (!passwordOptions.EnabledForTesting)
+{
+    console.RequireAuthorization("Operator");
+}
 console.MapGet("/", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "index.html", "text/html; charset=utf-8"));
 console.MapGet("/index.html", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "index.html", "text/html; charset=utf-8"));
 console.MapGet("/style.css", (IWebHostEnvironment env) => GetWebConsoleAsset(env, "style.css", "text/css; charset=utf-8"));

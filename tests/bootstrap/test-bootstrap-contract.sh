@@ -291,6 +291,7 @@ cp "$alpha7_fixture/etc/control.env" "$alpha7_fixture/original.env"
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n%s\n%s\n' \
         "$validate_control_state_migration_definition" \
         "$prepare_control_state_definition" \
@@ -372,6 +373,7 @@ tar -C "$archive_root" -czf "$recovery_fixture/bootstrap-backups/alpha7.tar.gz" 
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n%s\n' \
         "$record_control_legacy_state_definition" \
         "$prepare_control_state_definition" \

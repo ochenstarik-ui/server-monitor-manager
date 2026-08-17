@@ -263,7 +263,14 @@ install -m 0644 "$temporary_directory/$INNER_ASSET.sha256" "$cached_checksum"
 
 download_required_asset() {
     local asset="$1"
-    download "$release_base/$asset" "$temporary_directory/$asset" || die "required release asset is unavailable: $asset"
+    if ! download "$release_base/$asset" "$temporary_directory/$asset"; then
+        case "$asset" in
+            server-monitor-manager-manifest.json|server-monitor-manager-manifest.sig|server-monitor-manager-manifest.pem)
+                die "required signed-release asset is unavailable: $asset"
+                ;;
+            *) die "required release asset is unavailable: $asset" ;;
+        esac
+    fi
 }
 
 download_platform_release() {

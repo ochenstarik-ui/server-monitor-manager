@@ -6,7 +6,7 @@ using ServerMonitorManager.Core;
 
 namespace ServerMonitorManager.Control;
 
-public sealed class NodeEnrollmentService
+public sealed class NodeEnrollmentService : IDisposable
 {
     private readonly IOptions<ControlOptions> _options;
     private readonly ControlStore _store;
@@ -59,13 +59,9 @@ public sealed class NodeEnrollmentService
         _broker.Publish(
             "agent.enrollment_code.issued",
             nodeId,
-            JsonSerializer.Serialize(new
-            {
-                node_id = nodeId,
-                actor,
-                node_address = nodeAddress,
-                expires_at = expiresAt
-            }));
+            JsonSerializer.Serialize(
+                new NodeEnrollmentCodeIssuedDetails(nodeId, actor, nodeAddress, expiresAt),
+                SmmJsonContext.Default.NodeEnrollmentCodeIssuedDetails));
 
         var code = string.Join(".",
             "SMMNODE2",
@@ -219,5 +215,10 @@ public sealed class NodeEnrollmentService
             .TrimEnd('=')
             .Replace('+', '-')
             .Replace('/', '_');
+    }
+
+    public void Dispose()
+    {
+        _meshLock.Dispose();
     }
 }

@@ -5,3 +5,9 @@ public sealed record NodeEnrollmentCodeResponse(
     string Code,
     string CaFingerprint,
     DateTimeOffset ExpiresAt);
+
+public sealed record NodeEnrollmentCodeIssuedDetails(
+    string NodeId,
+    string Actor,
+    string NodeAddress,
+    DateTimeOffset ExpiresAt);

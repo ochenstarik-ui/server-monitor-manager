@@ -36,7 +36,12 @@ jobs:
         run: ./tests/windows/Test-DesktopContracts.ps1
 
       - name: Test Desktop security
-        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release -p:RestoreLockedMode=true
+        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release -p:RestoreLockedMode=true --filter Category!=LiveRelease
+
+      - name: Test Desktop security (live release)
+        env:
+          SMM_TEST_RELEASE_TAG: v0.1.0-alpha.18
+        run: dotnet test tests/ServerMonitorManager.Desktop.Security.Tests/ServerMonitorManager.Desktop.Security.Tests.csproj --configuration Release -p:RestoreLockedMode=true --filter Category=LiveRelease
 
       - name: Build test-signed MSIX installer
         shell: pwsh

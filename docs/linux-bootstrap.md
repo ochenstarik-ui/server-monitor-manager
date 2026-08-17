@@ -6,11 +6,11 @@ Server Monitor Manager устанавливает Control (Hub) и Agent (Node) 
 
 ## Быстрая установка
 
-Скачайте и проверьте convenience installer из `v0.1.0-alpha.16`:
+Скачайте и проверьте convenience installer из `v0.1.0-alpha.18`:
 
 ```bash
-curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.16/smm-setup.sh
-curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.16/smm-setup.sh.sha256
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.18/smm-setup.sh
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.18/smm-setup.sh.sha256
 sha256sum -c smm-setup.sh.sha256
 chmod 700 smm-setup.sh
 ```

@@ -444,6 +444,32 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
         return token;
     }
 
+    public async Task RecordEnrollmentCodeIssuedAsync(
+        string nodeId,
+        string actor,
+        string nodeAddress,
+        DateTimeOffset expiresAt,
+        CancellationToken cancellationToken = default)
+    {
+        await using var connection = await OpenAsync(cancellationToken);
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        await WriteAuditAsync(
+            connection,
+            transaction,
+            actor,
+            "agent.enrollment_code.issued",
+            nodeId,
+            JsonSerializer.Serialize(new
+            {
+                node_id = nodeId,
+                actor,
+                node_address = nodeAddress,
+                expires_at = expiresAt
+            }),
+            cancellationToken);
+        await transaction.CommitAsync(cancellationToken);
+    }
+
     public async Task<string> CreateDeviceEnrollmentTokenAsync(
         string deviceId,
         TimeSpan lifetime,

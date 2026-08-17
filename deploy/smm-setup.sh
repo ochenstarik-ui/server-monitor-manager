@@ -3,7 +3,7 @@ set -Eeuo pipefail
 IFS=$'\n\t'
 
 readonly PROGRAM_NAME="smm-setup"
-readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.16"
+readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.18"
 readonly DEFAULT_REPOSITORY="ochenstarik-ui/server-monitor-manager"
 readonly INNER_ASSET="ochenstarik-server-monitor-manager.sh"
 
@@ -27,7 +27,7 @@ force pass-through. Common bootstrap commands:
   backup-create | backup-restore | version
 
 Environment overrides:
-  SMM_TAG         Release tag (default: v0.1.0-alpha.16)
+  SMM_TAG         Release tag (default: v0.1.0-alpha.18)
   SMM_REPOSITORY  GitHub repository (default: ochenstarik-ui/server-monitor-manager)
   SMM_CACHE_DIR   Verified-download cache directory
 USAGE
@@ -114,7 +114,7 @@ curl -fsSL "$release_base/$INNER_ASSET.sha256" -o "$temporary_directory/$INNER_A
 
 (
     cd "$temporary_directory"
-    sha256sum -c "$INNER_ASSET.sha256"
+    sha256sum -c "$INNER_ASSET.sha256" >/dev/null
 ) || die "checksum verification failed for $RELEASE_TAG/$INNER_ASSET"
 
 install -m 0755 "$temporary_directory/$INNER_ASSET" "$cached_script"

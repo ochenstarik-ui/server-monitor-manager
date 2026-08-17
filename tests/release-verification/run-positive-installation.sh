@@ -22,6 +22,11 @@ METRICS_SCRIPT="/usr/local/libexec/ochenstarik-smm-metrics"
 
 echo "Running positive installation test for $TAG..."
 
+if command -v cosign >/dev/null 2>&1; then
+    echo "FAIL: cosign is already present before the clean-host installation test" >&2
+    exit 1
+fi
+
 download() {
     local name="$1"
     curl --fail --silent --show-error --location --retry 3 \
@@ -49,14 +54,19 @@ download server-monitor-manager-manifest.json
 download server-monitor-manager-manifest.sig
 download server-monitor-manager-manifest.pem
 
+sudo bash smm-setup.sh --tag "$TAG" install-hub 127.0.0.1 "$CONTROL_PORT" 51820
+[[ "$(command -v cosign)" == "/usr/local/bin/cosign" ]] \
+    || { echo "FAIL: installer did not provision /usr/local/bin/cosign" >&2; exit 1; }
+cosign version >/dev/null
+
+# Exercise the direct bootstrap paths after the short install-hub path has
+# provisioned cosign on the otherwise clean runner.
 sudo bash smm-setup.sh --tag "$TAG" preflight
 sudo bash smm-setup.sh --tag "$TAG" verify-manifest \
     server-monitor-manager-manifest.json \
     server-monitor-manager-manifest.sig \
     server-monitor-manager-manifest.pem
 sudo bash smm-setup.sh --tag "$TAG" verify-release "$ARCHIVE"
-sudo bash smm-setup.sh --tag "$TAG" install-control "$ARCHIVE" 127.0.0.1 "$CONTROL_PORT"
-sudo bash smm-setup.sh --tag "$TAG" mesh-init 127.0.0.1 51820
 
 echo "Checking Control healthz..."
 for _ in {1..30}; do
@@ -73,9 +83,19 @@ sudo curl --fail --silent --show-error \
 
 echo "Enrolling a node..."
 NODE_CODE="$(sudo bash smm-setup.sh --tag "$TAG" node-code test-node)"
+# The file did not exist before this test and was created by install-hub above.
+# Remove only that test-provisioned copy so install-node is also exercised from
+# a host without cosign.
+sudo rm -f -- /usr/local/bin/cosign
+if command -v cosign >/dev/null 2>&1; then
+    echo "FAIL: cosign is still present before the clean-host install-node test" >&2
+    exit 1
+fi
 SMM_ENROLL_CODE="$NODE_CODE" SMM_ACCEPT_CA_FINGERPRINT=1 \
     sudo --preserve-env=SMM_ENROLL_CODE,SMM_ACCEPT_CA_FINGERPRINT \
-    bash smm-setup.sh --tag "$TAG" install-node "$ARCHIVE"
+    bash smm-setup.sh --tag "$TAG" install-node
+[[ "$(command -v cosign)" == "/usr/local/bin/cosign" ]] \
+    || { echo "FAIL: install-node did not provision /usr/local/bin/cosign" >&2; exit 1; }
 
 sudo systemctl is-active --quiet ochenstarik-smm-agent.service
 sudo systemctl is-active --quiet ochenstarik-smm-control.service

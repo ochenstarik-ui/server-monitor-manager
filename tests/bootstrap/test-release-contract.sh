@@ -4,7 +4,9 @@ IFS=$'\n\t'
 
 root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 setup="$root/deploy/smm-setup.sh"
+bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 workflow="$root/.github/workflows/linux-release.yml"
+verification_workflow="$root/.github/workflows/release-verification.yml"
 windows_workflow="$root/.github/workflows/windows-release.yml"
 policy="$root/docs/release-policy.md"
 installer_contract="$root/docs/installer-contract.md"
@@ -16,7 +18,7 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.14"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.15"' "$setup"
 grep -Fq 'install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]' "$setup"
 grep -Fxq '  install-node' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
@@ -57,7 +59,21 @@ grep -Fq -- '--output-certificate server-monitor-manager-manifest.pem' "$workflo
 grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
 grep -Fq 'v0.1.0-alpha.13' "$policy"
 grep -Fq 'v0.1.0-alpha.14' "$policy"
-grep -Fq 'first release whose contract requires the manifest, keyless signature, and Fulcio certificate' "$policy"
+grep -Fq 'v0.1.0-alpha.15' "$policy"
+grep -Fq 'readonly COSIGN_VERSION="v3.1.3"' "$bootstrap"
+grep -Fq 'readonly COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"' "$bootstrap"
+grep -Fq 'readonly COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"' "$bootstrap"
+grep -Fq 'readonly COSIGN_INSTALL_PATH="/usr/local/bin/cosign"' "$bootstrap"
+grep -Fq 'ensure_cosign' "$bootstrap"
+grep -Fq 'workflow_run:' "$verification_workflow"
+grep -Fq 'workflows: ["Release pipeline"]' "$verification_workflow"
+grep -Fq "github.event.workflow_run.conclusion == 'success'" "$verification_workflow"
+grep -Fq "startsWith(github.event.workflow_run.head_branch, 'v')" "$verification_workflow"
+grep -Fq 'workflow_dispatch:' "$verification_workflow"
+if grep -Fq 'sigstore/cosign-installer' "$verification_workflow"; then
+    printf '%s\n' 'Release Verification must test installer-provisioned cosign' >&2
+    exit 1
+fi
 grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"
 grep -Fq 'publish a new, higher version tag' "$installer_contract"
 
@@ -167,8 +183,8 @@ chmod +x "$work/bin/uname"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_ARGS=version ' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.14/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.15/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.15/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
 
 if HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-hub >"$work/invalid.out" 2>&1; then
     printf '%s\n' 'install-hub accepted a missing PUBLIC_HOST' >&2
@@ -216,5 +232,7 @@ for required in \
         grep -Fq "required signed-release asset is unavailable: $required" "$work/missing.out"
     done
 done
+
+bash "$root/tests/bootstrap/test-cosign-provisioning.sh"
 
 printf '%s\n' 'RELEASE_CONTRACT=PASS'

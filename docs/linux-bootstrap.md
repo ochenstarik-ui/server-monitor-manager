@@ -6,11 +6,11 @@ Server Monitor Manager устанавливает Control (Hub) и Agent (Node) 
 
 ## Быстрая установка
 
-Скачайте и проверьте convenience installer из `v0.1.0-alpha.14`:
+Скачайте и проверьте convenience installer из `v0.1.0-alpha.15`:
 
 ```bash
-curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.14/smm-setup.sh
-curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.14/smm-setup.sh.sha256
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.15/smm-setup.sh
+curl -fsSLO https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.15/smm-setup.sh.sha256
 sha256sum -c smm-setup.sh.sha256
 chmod 700 smm-setup.sh
 ```
@@ -41,6 +41,15 @@ sudo ./smm-setup.sh install-node
 Все файлы должны лежать в одном каталоге: `verify-release` ищет manifest, подпись и сертификат рядом с архивом. Без любого из трёх проверка отказывает и предлагает явный обход `SMM_ALLOW_UNSIGNED=1` — он предназначен только для сборок, выпущенных до появления подписи, и в обычной установке не используется.
 
 Сертификат нужен потому, что manifest подписывается keyless-режимом cosign: подпись проверяется эфемерным сертификатом, привязанным к workflow выпуска, а не постоянным ключом.
+
+Bootstrap сам обеспечивает `cosign`, если пригодный бинарь ещё не найден в `PATH`. Поставка закреплена на `cosign v3.1.3`: установщик публично скачивает официальный `cosign-linux-amd64` или `cosign-linux-arm64`, проверяет SHA-256 до первого запуска и устанавливает проверенный файл как `/usr/local/bin/cosign` с режимом `0755`. Уже установленный `cosign` не заменяется, но должен успешно выполнять `cosign version`.
+
+Закреплённые контрольные суммы:
+
+- `cosign-linux-amd64`: `4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71`;
+- `cosign-linux-arm64`: `c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a`.
+
+Смена версии или любой из сумм является осознанным обновлением поставки и должна проходить через новый релиз. Если GitHub недоступен, установка останавливается с сообщением, содержащим версию, ожидаемую сумму, URL и путь `/usr/local/bin/cosign`, чтобы оператор мог вручную поставить ровно этот бинарь и проверить его до запуска.
 
 Bootstrap проверяет подпись manifest, затем SHA-256 архива по manifest, и принимает в архиве только каталоги `agent`, `control`, `deploy` и `bootstrap`.
 

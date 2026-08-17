@@ -26,6 +26,10 @@ readonly HUB_MESH_ADDRESS="10.77.0.1/24"
 # Trust anchors — see docs/release-policy.md for the full signing and identity contract.
 readonly COSIGN_ISSUER="https://token.actions.githubusercontent.com"
 readonly COSIGN_IDENTITY_REGEXP="^https://github.com/ochenstarik-ui/server-monitor-manager/\.github/workflows/linux-release\.yml@refs/tags/v.*$"
+readonly COSIGN_VERSION="v3.1.3"
+readonly COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"
+readonly COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"
+readonly COSIGN_INSTALL_PATH="/usr/local/bin/cosign"
 
 TEMP_DIR=""
 MESH_PEER_CODE=""
@@ -118,6 +122,57 @@ require_root() {
 
 require_command() {
     command -v "$1" >/dev/null 2>&1 || fail "Required command is missing: $1"
+}
+
+ensure_cosign() {
+    local existing architecture expected_sha256 download_url download_path actual_sha256
+    if existing="$(command -v cosign 2>/dev/null)"; then
+        "$existing" version >/dev/null 2>&1 \
+            || fail "Existing cosign cannot run: $existing"
+        return 0
+    fi
+
+    require_root
+    require_command curl
+    require_command sha256sum
+    require_command mktemp
+    require_command install
+
+    case "$(uname -m)" in
+        x86_64)
+            architecture="amd64"
+            expected_sha256="$COSIGN_SHA256_AMD64"
+            ;;
+        aarch64|arm64)
+            architecture="arm64"
+            expected_sha256="$COSIGN_SHA256_ARM64"
+            ;;
+        *) fail "Cannot provision cosign $COSIGN_VERSION for unsupported architecture: $(uname -m)" ;;
+    esac
+
+    download_url="https://github.com/sigstore/cosign/releases/download/${COSIGN_VERSION}/cosign-linux-${architecture}"
+    TEMP_DIR="$(mktemp -d -t smm-cosign.XXXXXXXX)"
+    chmod 700 "$TEMP_DIR"
+    download_path="$TEMP_DIR/cosign-linux-${architecture}"
+
+    log "Downloading cosign $COSIGN_VERSION for $architecture."
+    if ! curl --fail --silent --show-error --location --retry 3 \
+        --output "$download_path" "$download_url"; then
+        fail "Could not download cosign $COSIGN_VERSION. Expected SHA-256: $expected_sha256. Install path: $COSIGN_INSTALL_PATH. Download URL: $download_url. Install this exact binary manually and verify its checksum."
+    fi
+
+    actual_sha256="$(sha256sum "$download_path" | awk '{ print $1 }')"
+    if [[ "${actual_sha256,,}" != "${expected_sha256,,}" ]]; then
+        fail "cosign $COSIGN_VERSION checksum mismatch. Expected SHA-256: $expected_sha256. Actual SHA-256: $actual_sha256. Install path: $COSIGN_INSTALL_PATH."
+    fi
+
+    install -m 0755 "$download_path" "$COSIGN_INSTALL_PATH" \
+        || fail "Could not install cosign $COSIGN_VERSION at $COSIGN_INSTALL_PATH after verifying SHA-256 $expected_sha256."
+    "$COSIGN_INSTALL_PATH" version >/dev/null 2>&1 \
+        || fail "Installed cosign $COSIGN_VERSION cannot run at $COSIGN_INSTALL_PATH. Expected SHA-256: $expected_sha256."
+    rm -rf -- "$TEMP_DIR"
+    TEMP_DIR=""
+    log "Installed cosign $COSIGN_VERSION at $COSIGN_INSTALL_PATH."
 }
 
 validate_platform() {
@@ -295,7 +350,7 @@ verify_manifest() {
         log "WARNING: Signature verification skipped due to SMM_ALLOW_UNSIGNED=1."
         return 0
     fi
-    require_command cosign
+    ensure_cosign
     [[ -f "$manifest" ]] || fail "Manifest not found: $manifest"
     [[ -f "$signature" ]] || fail "Signature not found: $signature"
     log "Verifying manifest signature..."
@@ -1483,6 +1538,7 @@ preflight() {
     for command_name in openssl sha256sum tar systemctl getent useradd groupadd; do
         require_command "$command_name"
     done
+    ensure_cosign
     log "Supported platform: $(. /etc/os-release; printf '%s %s' "$ID" "$VERSION_ID"), $(uname -m)"
 }
 

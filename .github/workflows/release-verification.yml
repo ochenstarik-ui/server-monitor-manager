@@ -1,8 +1,9 @@
 name: Release Verification
 
 on:
-  release:
-    types: [published]
+  workflow_run:
+    workflows: ["Release pipeline"]
+    types: [completed]
   workflow_dispatch:
     inputs:
       tag:
@@ -14,6 +15,10 @@ permissions:
 
 jobs:
   verify:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' &&
+      startsWith(github.event.workflow_run.head_branch, 'v'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout tests
@@ -24,17 +29,20 @@ jobs:
             tests/contracts/monitor-snapshot-v1.txt
           sparse-checkout-cone-mode: false
 
-      - name: Setup cosign
-        uses: sigstore/cosign-installer@v3.5.0
-
       - name: Determine Tag
         id: tag
+        env:
+          MANUAL_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.workflow_run.head_branch }}
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "tag=${{ github.event.inputs.tag }}" >> $GITHUB_OUTPUT
+            tag="$MANUAL_TAG"
           else
-            echo "tag=${{ github.event.release.tag_name }}" >> $GITHUB_OUTPUT
+            tag="$RELEASE_TAG"
           fi
+          [[ "$tag" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
+            || { echo "Invalid release tag: $tag" >&2; exit 1; }
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
       - name: Verify Assets List
         env:

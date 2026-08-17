@@ -7,6 +7,16 @@ bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
 helper="$root/deploy/ochenstarik-smm-policy-apply"
 emergency="$root/deploy/ochenstarik-smm-emergency"
 acceptance="$root/tests/acceptance/three-server-mesh.sh"
+unified_setup="$root/deploy/smm-setup.sh"
+unified_test="$root/tests/bootstrap/test-unified-installer.sh"
+
+bash -n "$unified_setup" "$unified_test"
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck --severity=error "$unified_setup" "$unified_test"
+fi
+if [[ "$(uname -s)" != MINGW* ]]; then
+    bash "$unified_test"
+fi
 
 grep -Fq 'listing="$(/usr/sbin/nft -a list chain' "$helper" || {
     printf '%s\n' "policy status probe must fail closed when nftables cannot be inspected" >&2
@@ -235,6 +245,7 @@ printf '%s' backup >"$control_state_fixture/backups/manifest.json"
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n' "$validate_control_state_migration_definition" "$prepare_control_state_definition")
     validate_control_state_migration
     prepare_control_state
@@ -290,6 +301,7 @@ cp "$alpha7_fixture/etc/control.env" "$alpha7_fixture/original.env"
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n%s\n%s\n' \
         "$validate_control_state_migration_definition" \
         "$prepare_control_state_definition" \
@@ -371,6 +383,7 @@ tar -C "$archive_root" -czf "$recovery_fixture/bootstrap-backups/alpha7.tar.gz" 
         command install "${arguments[@]}"
     }
     chown() { :; }
+    repair_mesh_state_permissions() { :; }
     source <(printf '%s\n%s\n%s\n' \
         "$record_control_legacy_state_definition" \
         "$prepare_control_state_definition" \
@@ -527,7 +540,18 @@ rm -rf "$role_fixture/lib/agent"
 rm -rf -- "$role_fixture"
 
 grep -Fq 'UMask=0077' "$root/deploy/ochenstarik-smm-control.service"
-grep -Fq 'ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/control' "$root/deploy/ochenstarik-smm-control.service"
+grep -Fq 'ReadWritePaths=/var/lib/ochenstarik-server-monitor-manager/control /var/lib/ochenstarik-server-monitor-manager/mesh' "$root/deploy/ochenstarik-smm-control.service"
+grep -Fq 'install -d -m 0770 -o root -g "$CONTROL_USER" "$MESH_DIR"' "$bootstrap"
+grep -Fq 'chown root:"$CONTROL_USER" "$MESH_DIR/nodes.tsv"' "$bootstrap"
+grep -Fq 'chmod 0660 "$MESH_DIR/nodes.tsv"' "$bootstrap"
+grep -Fq 'install -d -m 0700 -o root -g root "$WG_DIR" /etc/wireguard' "$bootstrap"
+mesh_init_definition="$(extract_bootstrap_function mesh_init)"
+grep -Fq '    ensure_system_user "$CONTROL_USER"' <<<"$mesh_init_definition"
+[[ "$(grep -Fc '    ensure_mesh_state' "$bootstrap")" -eq 3 ]]
+grep -Fq '    repair_mesh_state_permissions' <<<"$prepare_control_state_definition"
+if [[ "$(uname -s)" != MINGW* ]] && command -v sudo >/dev/null 2>&1; then
+    bash "$root/tests/bootstrap/test-mesh-state-permissions.sh"
+fi
 native_smoke="$root/tests/bootstrap/run-native-systemd-smoke.sh"
 grep -Fq 'node_code="$(sudo "$system_bootstrap" node-code smoke-node)"' "$native_smoke"
 grep -Fq 'export SMM_ENROLL_CODE="$node_code"' "$native_smoke"
@@ -870,4 +894,3 @@ grep -Fq 'record_installed_version agent' "$bootstrap" || {
 }
 
 printf '%s\n' "BOOTSTRAP_CONTRACT=PASS"
-

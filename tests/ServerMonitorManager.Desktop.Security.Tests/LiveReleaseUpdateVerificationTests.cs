@@ -121,10 +121,20 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
 
         // Alter manifest content by tampering with the hash
         var originalManifest = await File.ReadAllTextAsync(manifestPath, TestContext.Current.CancellationToken);
-        var tamperedManifest = originalManifest.Replace(
-            "710813668ac5efacc245472afd4da6dca6739c042b5189bd12c2bbbd3c6b7e19",
-            "0000000000000000000000000000000000000000000000000000000000000000",
-            StringComparison.Ordinal);
+        var node = JsonNode.Parse(originalManifest);
+        Assert.NotNull(node);
+        if (node["hashes"]?["ServerMonitorManager-win-x64.msix"] is not null)
+        {
+            node["hashes"]!["ServerMonitorManager-win-x64.msix"] = "0000000000000000000000000000000000000000000000000000000000000000";
+        }
+        else
+        {
+            node["hashes"] = new JsonObject
+            {
+                ["ServerMonitorManager-win-x64.msix"] = "0000000000000000000000000000000000000000000000000000000000000000"
+            };
+        }
+        var tamperedManifest = node.ToJsonString();
 
         var tamperedManifestPath = Path.Combine(_tempDir, "tampered-manifest.json");
         await File.WriteAllTextAsync(tamperedManifestPath, tamperedManifest, TestContext.Current.CancellationToken);

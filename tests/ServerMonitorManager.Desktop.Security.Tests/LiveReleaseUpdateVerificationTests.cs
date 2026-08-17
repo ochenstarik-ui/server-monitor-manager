@@ -2,6 +2,7 @@ using System;
 using System.IO;
 using System.Net.Http;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
@@ -50,7 +51,7 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Acceptance_RealReleaseManifestAndSignatureAreAccepted()
+    public async Task AcceptanceRealReleaseManifestAndSignatureAreAccepted()
     {
         var (manifestPath, sigPath, pemPath) = await DownloadReleaseArtifactsAsync();
 
@@ -108,17 +109,17 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
         var updateInfo = await service.CheckForUpdatesAsync(cancellationToken: TestContext.Current.CancellationToken);
 
         Assert.NotNull(updateInfo);
-        Assert.Equal("v999.999.999-intentional-failure", updateInfo.Version);
+        Assert.Equal(_tag, updateInfo.Version);
         Assert.Equal(msixHash, updateInfo.ExpectedHash);
         Assert.Contains(_tag, updateInfo.DownloadUrl, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]
-    public async Task Negative1_TamperedHashInRealManifestIsRejected()
+    public async Task Negative1TamperedHashInRealManifestIsRejected()
     {
         var (manifestPath, sigPath, pemPath) = await DownloadReleaseArtifactsAsync();
 
-        // Alter the manifest content by tampering with the hash
+        // Alter manifest content by tampering with the hash
         var originalManifest = await File.ReadAllTextAsync(manifestPath, TestContext.Current.CancellationToken);
         var tamperedManifest = originalManifest.Replace(
             "710813668ac5efacc245472afd4da6dca6739c042b5189bd12c2bbbd3c6b7e19",
@@ -139,7 +140,7 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Negative2_RealManifestWithSignatureFromDifferentIdentityIsRejected()
+    public async Task Negative2RealManifestWithSignatureFromDifferentIdentityIsRejected()
     {
         var (manifestPath, _, pemPath) = await DownloadReleaseArtifactsAsync();
 
@@ -162,7 +163,7 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Negative3_MissingCertificateIsRejected()
+    public async Task Negative3MissingCertificateIsRejected()
     {
         var (manifestPath, sigPath, _) = await DownloadReleaseArtifactsAsync();
         var nonExistentPemPath = Path.Combine(_tempDir, "non-existent-certificate.pem");
@@ -177,13 +178,13 @@ public sealed class LiveReleaseUpdateVerificationTests : IAsyncDisposable
     }
 
     [Fact]
-    public async Task Negative4_CertificateFromDifferentWorkflowIsRejected()
+    public async Task Negative4CertificateFromDifferentWorkflowIsRejected()
     {
         var (manifestPath, sigPath, _) = await DownloadReleaseArtifactsAsync();
 
         // Create a custom self-signed certificate with a different subject/workflow identity
         using var ecdsa = ECDsa.Create(ECCurve.NamedCurves.nistP256);
-        var req = new System.Security.Cryptography.X509Certificates.CertificateRequest(
+        var req = new CertificateRequest(
             "CN=Untrusted Workflow Fake Cert",
             ecdsa,
             HashAlgorithmName.SHA256);

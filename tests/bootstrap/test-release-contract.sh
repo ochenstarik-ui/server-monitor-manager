@@ -18,7 +18,7 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.15"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.18"' "$setup"
 grep -Fq 'install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]' "$setup"
 grep -Fxq '  install-node' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
@@ -60,6 +60,12 @@ grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
 grep -Fq 'v0.1.0-alpha.13' "$policy"
 grep -Fq 'v0.1.0-alpha.14' "$policy"
 grep -Fq 'v0.1.0-alpha.15' "$policy"
+grep -Fq 'v0.1.0-alpha.16' "$policy"
+grep -Fq 'v0.1.0-alpha.17' "$policy"
+grep -Fq 'v0.1.0-alpha.18' "$policy"
+grep -Fq 'hash -r' "$root/tests/release-verification/run-positive-installation.sh"
+grep -Fq -- '--use-signing-config=false --new-bundle-format=false' \
+    "$root/tests/release-verification/run-negative-tests.sh"
 grep -Fq 'readonly COSIGN_VERSION="v3.1.3"' "$bootstrap"
 grep -Fq 'readonly COSIGN_SHA256_AMD64="4629c757b7618056f8ddd7e2625ae9fdd94c0372a65049520bc7d9df9efc7f71"' "$bootstrap"
 grep -Fq 'readonly COSIGN_SHA256_ARM64="c5d324e091826b0d7a78eb16fef316450b4eb9aaec045611c08ba06f5e73220a"' "$bootstrap"
@@ -107,6 +113,10 @@ mkdir -p "$work/bin" "$work/home"
 cat >"$work/inner.sh" <<'INNER'
 #!/usr/bin/env bash
 set -Eeuo pipefail
+if [[ "${1:-}" == "node-code" ]]; then
+    printf '%s\n' 'SMMNODE1.fixture'
+    exit 0
+fi
 printf 'INNER_ARGS='
 printf '%s ' "$@"
 printf '\n'
@@ -183,8 +193,14 @@ chmod +x "$work/bin/uname"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_ARGS=version ' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.15/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.15/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.18/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.18/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+
+node_code="$(HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" node-code fixture-node)"
+[[ "$node_code" == 'SMMNODE1.fixture' ]] || {
+    printf 'machine-readable node-code output was contaminated: %q\n' "$node_code" >&2
+    exit 1
+}
 
 if HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" install-hub >"$work/invalid.out" 2>&1; then
     printf '%s\n' 'install-hub accepted a missing PUBLIC_HOST' >&2

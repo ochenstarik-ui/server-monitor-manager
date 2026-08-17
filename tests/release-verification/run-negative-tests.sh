@@ -72,6 +72,7 @@ echo "Test 4: Signature made by another identity"
 export COSIGN_PASSWORD=""
 cosign generate-key-pair >/dev/null
 cosign sign-blob --yes --key cosign.key \
+    --use-signing-config=false --new-bundle-format=false \
     --output-signature fake.sig server-monitor-manager-manifest.json >/dev/null
 if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json \
     fake.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then

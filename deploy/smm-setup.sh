@@ -23,9 +23,10 @@ Usage:
   smm-setup.sh [--tag TAG] [--repository OWNER/REPO] COMMAND [ARG...]
 
 With no arguments, an interactive terminal guides a complete Hub or Node
-installation. Non-interactive commands remain available:
+installation or a full removal. Non-interactive commands remain available:
   install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]
   install-node
+  uninstall-system --confirm-uninstall [--purge-data --confirm-destroy-data]
 
 Other commands are passed to the verified ochenstarik-server-monitor-manager.sh
 asset. Use -- before a command to force pass-through. Common commands:
@@ -45,6 +46,7 @@ smm-setup: interactive installation requires a terminal on stdin and stdout.
 For automation, choose an explicit command:
   sudo ./smm-setup.sh install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]
   sudo ./smm-setup.sh install-node
+  sudo ./smm-setup.sh uninstall-system --confirm-uninstall
 Run ./smm-setup.sh --help for pass-through commands.
 HELP
 }
@@ -168,7 +170,7 @@ inspect_node_code() {
 choose_interactive_action() {
     local role host https_port wg_port existing default_host
     show_machine
-    read -r -p 'Choose role: 1) Hub  2) Node: ' role
+    read -r -p 'Choose role: 1) Hub  2) Node  3) Uninstall: ' role
     case "${role,,}" in
         1|hub)
             action=install-hub; existing="$(role_status Hub)"
@@ -186,7 +188,12 @@ choose_interactive_action() {
             [[ -n "$node_code" ]] || die "SMMNODE2 code is empty"
             action_args=()
             ;;
-        *) die "choose Hub (1) or Node (2)" ;;
+        3|uninstall|remove)
+            action=uninstall-system
+            action_args=()
+            return
+            ;;
+        *) die "choose Hub (1), Node (2), or Uninstall (3)" ;;
     esac
     if [[ "$existing" == "installed" ]] && ! confirm "This role is already installed. Reinstall or update it?"; then
         printf 'No changes were made.\n'; exit 0
@@ -199,6 +206,31 @@ choose_interactive_action() {
         confirm 'Do these Hub and CA fingerprint values match the operator application?' \
             || die "installation cancelled: Hub identity was not confirmed"
     fi
+}
+
+run_interactive_uninstall() {
+    local depth answer
+    local -a plan_args=()
+    printf '\nRemoval depth:\n'
+    printf '%s\n' '  1) Remove programs and accounts; preserve Control database, backups, and CA'
+    printf '%s\n' '  2) Permanently remove everything, including Control database, backups, and CA'
+    read -r -p 'Choose removal depth [1]: ' depth
+    case "${depth:-1}" in
+        1|preserve) ;;
+        2|purge) plan_args=(--purge-data) ;;
+        *) die "choose removal depth 1 or 2" ;;
+    esac
+
+    printf '\n'
+    "$cached_script" uninstall-system-plan "${plan_args[@]}"
+    read -r -p 'Type UNINSTALL to remove the objects listed above: ' answer
+    [[ "$answer" == "UNINSTALL" ]] || die "removal cancelled: confirmation word did not match"
+    if (( ${#plan_args[@]} > 0 )); then
+        read -r -p 'Type DESTROY-DATA to permanently delete Control data, backups, and CA: ' answer
+        [[ "$answer" == "DESTROY-DATA" ]] || die "removal cancelled: data-destruction confirmation did not match"
+        exec "$cached_script" uninstall-system --confirm-uninstall --purge-data --confirm-destroy-data
+    fi
+    exec "$cached_script" uninstall-system --confirm-uninstall
 }
 
 original_count=$#
@@ -232,6 +264,15 @@ if (( pass_through == 0 )); then
     case "$action" in
         install-hub) [[ ${#action_args[@]} -ge 1 && ${#action_args[@]} -le 3 ]] || die "install-hub requires PUBLIC_HOST [HTTPS_PORT] [WG_PORT]" ;;
         install-node) [[ ${#action_args[@]} -eq 0 ]] || die "install-node takes no arguments" ;;
+        uninstall-system)
+            if (( interactive == 0 )); then
+                [[ ( ${#action_args[@]} -eq 1 && "${action_args[0]}" == "--confirm-uninstall" ) \
+                    || ( ${#action_args[@]} -eq 3 && "${action_args[0]}" == "--confirm-uninstall" \
+                        && "${action_args[1]}" == "--purge-data" \
+                        && "${action_args[2]}" == "--confirm-destroy-data" ) ]] \
+                    || die "uninstall-system requires --confirm-uninstall [--purge-data --confirm-destroy-data]"
+            fi
+            ;;
     esac
 fi
 
@@ -310,6 +351,10 @@ case "$action" in
         else
             exec "$cached_script" install-node "$archive"
         fi
+        ;;
+    uninstall-system)
+        if (( interactive == 1 )); then run_interactive_uninstall; fi
+        exec "$cached_script" "$action" "${action_args[@]}"
         ;;
     *) exec "$cached_script" "$action" "${action_args[@]}" ;;
 esac

@@ -9,13 +9,15 @@ emergency="$root/deploy/ochenstarik-smm-emergency"
 acceptance="$root/tests/acceptance/three-server-mesh.sh"
 unified_setup="$root/deploy/smm-setup.sh"
 unified_test="$root/tests/bootstrap/test-unified-installer.sh"
+uninstall_test="$root/tests/bootstrap/test-uninstall-mode.sh"
 
-bash -n "$unified_setup" "$unified_test"
+bash -n "$unified_setup" "$unified_test" "$uninstall_test"
 if command -v shellcheck >/dev/null 2>&1; then
-    shellcheck --severity=error "$unified_setup" "$unified_test"
+    shellcheck --severity=error "$unified_setup" "$unified_test" "$uninstall_test"
 fi
 if [[ "$(uname -s)" != MINGW* ]]; then
     bash "$unified_test"
+    bash "$uninstall_test"
 fi
 
 grep -Fq 'listing="$(/usr/sbin/nft -a list chain' "$helper" || {
@@ -147,7 +149,8 @@ if ! bash "$bootstrap" >/dev/null 2>&1; then
     exit 1
 fi
 for action in verify-release install-control install-agent install-node mesh-init peer-add \
-    update-control update-agent rollback node-code control-device-code node-token uninstall-control; do
+    update-control update-agent rollback node-code control-device-code node-token uninstall-control \
+    uninstall-system; do
     if bash "$bootstrap" "$action" >/dev/null 2>&1; then
         printf 'bootstrap action accepted missing arguments: %s\n' "$action" >&2
         exit 1

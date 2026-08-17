@@ -19,8 +19,8 @@ extract_function() {
     local name="$1"
     awk -v name="$name" '
         $0 == name "() {" { capture=1 }
+        capture && $0 != name "() {" && /^[A-Za-z_][A-Za-z0-9_]*\(\) \{$/ { exit }
         capture { print }
-        capture && $0 == "}" { exit }
     ' "$bootstrap"
 }
 

@@ -691,12 +691,7 @@ ensure_mesh_state() {
 }
 
 repair_mesh_state_permissions() {
-    [[ -d "$MESH_DIR" ]] || return 0
-    install -d -m 0770 -o root -g "$CONTROL_USER" "$MESH_DIR"
-    if [[ -e "$MESH_DIR/nodes.tsv" ]]; then
-        chown root:"$CONTROL_USER" "$MESH_DIR/nodes.tsv"
-        chmod 0660 "$MESH_DIR/nodes.tsv"
-    fi
+    ensure_mesh_state
 }
 
 render_hub_wireguard_config() {

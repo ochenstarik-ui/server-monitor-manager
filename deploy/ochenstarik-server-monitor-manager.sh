@@ -11,13 +11,18 @@ readonly ENROLLMENT_DIR="${STATE_DIR}-enrollment"
 readonly BACKUP_DIR="${STATE_DIR}/bootstrap-backups"
 readonly CONTROL_USER="ochenstarik-smm-control"
 readonly AGENT_USER="ochenstarik-smm-agent"
+readonly MONITOR_USER="ochenstarik-monitor"
+readonly MONITOR_HOME="/var/lib/ochenstarik-monitor"
 readonly CONTROL_UNIT="ochenstarik-smm-control.service"
 readonly AGENT_UNIT="ochenstarik-smm-agent.service"
 readonly PROVISIONING_HELPER_UNIT="ochenstarik-smm-provisioning-helper.service"
 readonly POLICY_HELPER="/usr/local/libexec/ochenstarik-smm-policy-apply"
 readonly EMERGENCY_COMMAND="/usr/local/sbin/ochenstarik-smm-emergency"
 readonly BOOTSTRAP_COMMAND="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"
+readonly METRICS_SCRIPT="/usr/local/libexec/ochenstarik-smm-metrics"
 readonly SUDOERS_FILE="/etc/sudoers.d/ochenstarik-smm-control"
+readonly SYSCTL_FILE="/etc/sysctl.d/90-ochenstarik-smm-mesh.conf"
+readonly SYSTEM_WG_CONFIG="/etc/wireguard/smm0.conf"
 readonly MESH_DIR="${STATE_DIR}/mesh"
 readonly WG_DIR="${ETC_DIR}/wireguard"
 readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
@@ -91,6 +96,8 @@ Usage:
   ochenstarik-server-monitor-manager.sh status
   ochenstarik-server-monitor-manager.sh uninstall-agent [--purge]
   ochenstarik-server-monitor-manager.sh uninstall-control --confirm-destroy-control
+  ochenstarik-server-monitor-manager.sh uninstall-system-plan [--purge-data]
+  ochenstarik-server-monitor-manager.sh uninstall-system --confirm-uninstall [--purge-data --confirm-destroy-data]
   ochenstarik-server-monitor-manager.sh version
 
 ARCHIVE must have a matching ARCHIVE.sha256 file. Agent enrollment reads the
@@ -1438,10 +1445,9 @@ install_monitor() {
     local public_key="$1"
     require_root
     validate_platform
-    
-    local metrics_script="/usr/local/libexec/ochenstarik-smm-metrics"
-    local monitor_user="ochenstarik-monitor"
-    local monitor_home="/var/lib/ochenstarik-monitor"
+    local metrics_script="$METRICS_SCRIPT"
+    local monitor_user="$MONITOR_USER"
+    local monitor_home="$MONITOR_HOME"
     
     if ! id -u "$monitor_user" >/dev/null 2>&1; then
         useradd -r -s /usr/sbin/nologin -d "$monitor_home" -M "$monitor_user"
@@ -1516,9 +1522,9 @@ EOF
 
 uninstall_monitor() {
     require_root
-    local monitor_user="ochenstarik-monitor"
-    local monitor_home="/var/lib/ochenstarik-monitor"
-    local metrics_script="/usr/local/libexec/ochenstarik-smm-metrics"
+    local monitor_user="$MONITOR_USER"
+    local monitor_home="$MONITOR_HOME"
+    local metrics_script="$METRICS_SCRIPT"
 
     if id -u "$monitor_user" >/dev/null 2>&1; then
         userdel -f "$monitor_user" || true
@@ -1541,6 +1547,215 @@ uninstall_control() {
     remove_shared_ca_if_unused
     systemctl daemon-reload
     log "Control role and its state were removed."
+}
+
+owned_unit_exists() {
+    local unit="$1"
+    [[ -e "/etc/systemd/system/$unit" || -L "/etc/systemd/system/$unit" ]] && return 0
+    systemctl list-unit-files "$unit" --no-legend 2>/dev/null | grep -q "^${unit}[[:space:]]"
+}
+
+path_has_content() {
+    local path="$1"
+    [[ -f "$path" || -L "$path" ]] && return 0
+    [[ -d "$path" ]] || return 1
+    find "$path" -mindepth 1 -maxdepth 1 -print -quit 2>/dev/null | grep -q .
+}
+
+uninstall_system_plan() {
+    local purge_data="${1:-}" found=0 unit user path
+    local -a units=(
+        "$CONTROL_UNIT" "$AGENT_UNIT" "$PROVISIONING_HELPER_UNIT"
+        "$FIREWALL_UNIT" wg-quick@smm0.service
+    )
+    local -a users=("$CONTROL_USER" "$AGENT_USER" "$MONITOR_USER")
+    local -a files=(
+        "$POLICY_HELPER" "$METRICS_SCRIPT" "$EMERGENCY_COMMAND" "$BOOTSTRAP_COMMAND"
+        "$SUDOERS_FILE" "$SYSCTL_FILE" "$SYSTEM_WG_CONFIG"
+    )
+    local -a program_paths=("$LIB_DIR" "$MONITOR_HOME" "$ENROLLMENT_DIR")
+    printf '%s\n' 'Server Monitor Manager objects found on this machine:'
+    for unit in "${units[@]}"; do
+        if owned_unit_exists "$unit"; then
+            printf '  unit: %s\n' "$unit"
+            found=1
+        fi
+    done
+    for user in "${users[@]}"; do
+        if id -u "$user" >/dev/null 2>&1; then
+            printf '  user/group: %s\n' "$user"
+            found=1
+        fi
+    done
+    if command -v nft >/dev/null 2>&1 \
+        && nft list table inet ochenstarik_smm >/dev/null 2>&1; then
+        printf '%s\n' '  nftables table: inet ochenstarik_smm'
+        found=1
+    fi
+    if command -v ip >/dev/null 2>&1 && ip link show smm0 >/dev/null 2>&1; then
+        printf '%s\n' '  network interface: smm0'
+        found=1
+    fi
+    for path in "${files[@]}" "${program_paths[@]}"; do
+        if path_has_content "$path"; then
+            printf '  path: %s\n' "$path"
+            found=1
+        fi
+    done
+    for path in "$ETC_DIR" "$STATE_DIR"; do
+        if path_has_content "$path"; then
+            if [[ "$purge_data" == "--purge-data" ]]; then
+                printf '  data path: %s\n' "$path"
+            else
+                printf '  program files under: %s (Control database, backups, and CA are preserved)\n' "$path"
+            fi
+            found=1
+        fi
+    done
+    if [[ "$found" == "0" ]]; then
+        printf '%s\n' '  nothing installed'
+    fi
+}
+
+stop_owned_services() {
+    local unit
+    local -a units=(
+        "$CONTROL_UNIT" "$AGENT_UNIT" "$PROVISIONING_HELPER_UNIT"
+        "$FIREWALL_UNIT" wg-quick@smm0.service
+    )
+    for unit in "${units[@]}"; do
+        systemctl disable --now "$unit" >/dev/null 2>&1 || true
+    done
+}
+
+terminate_owned_processes() {
+    local user running=0
+    local -a users=("$CONTROL_USER" "$AGENT_USER" "$MONITOR_USER")
+    for user in "${users[@]}"; do
+        if id -u "$user" >/dev/null 2>&1 && pgrep -u "$user" >/dev/null 2>&1; then
+            pkill -TERM -u "$user" || true
+            running=1
+        fi
+    done
+    [[ "$running" == "0" ]] || sleep 1
+    for user in "${users[@]}"; do
+        if id -u "$user" >/dev/null 2>&1 && pgrep -u "$user" >/dev/null 2>&1; then
+            pkill -KILL -u "$user" || true
+        fi
+    done
+    for user in "${users[@]}"; do
+        if id -u "$user" >/dev/null 2>&1 && pgrep -u "$user" >/dev/null 2>&1; then
+            fail "Processes owned by $user are still running."
+        fi
+    done
+}
+
+remove_owned_accounts() {
+    local user
+    local -a users=("$CONTROL_USER" "$AGENT_USER" "$MONITOR_USER")
+    for user in "${users[@]}"; do
+        if id -u "$user" >/dev/null 2>&1; then
+            userdel "$user"
+        fi
+    done
+    for user in "${users[@]}"; do
+        if getent group "$user" >/dev/null 2>&1; then
+            groupdel "$user" || log "Group $user remains because it is still in use."
+        fi
+    done
+}
+
+remove_owned_network() {
+    if command -v ip >/dev/null 2>&1 && ip link show smm0 >/dev/null 2>&1; then
+        ip link delete smm0
+    fi
+    if command -v nft >/dev/null 2>&1 \
+        && nft list table inet ochenstarik_smm >/dev/null 2>&1; then
+        nft delete table inet ochenstarik_smm
+    fi
+}
+
+remove_owned_files() {
+    local purge_data="$1"
+    rm -f -- \
+        "/etc/systemd/system/$CONTROL_UNIT" \
+        "/etc/systemd/system/$AGENT_UNIT" \
+        "/etc/systemd/system/$PROVISIONING_HELPER_UNIT" \
+        "/etc/systemd/system/$FIREWALL_UNIT" \
+        "$POLICY_HELPER" "$METRICS_SCRIPT" "$EMERGENCY_COMMAND" \
+        "$SUDOERS_FILE" "$SYSCTL_FILE" "$SYSTEM_WG_CONFIG"
+    rm -rf -- "$LIB_DIR" "$MONITOR_HOME" "$ENROLLMENT_DIR"
+    if [[ "$purge_data" == "--purge-data" ]]; then
+        rm -rf -- "$ETC_DIR" "$STATE_DIR"
+    else
+        rm -f -- \
+            "$ETC_DIR/agent.env" "$ETC_DIR/control.env" \
+            "$ETC_DIR/control-public-url" "$ETC_DIR/control-server.pfx" \
+            "$ETC_DIR/mesh.env" "$ETC_DIR/mesh.nft" \
+            "$ETC_DIR/installed-version-agent" "$ETC_DIR/installed-version-control"
+        rm -rf -- "$WG_DIR" "$STATE_DIR/agent" "$STATE_DIR/mesh" "$STATE_DIR/provisioning"
+    fi
+    rm -f -- "$BOOTSTRAP_COMMAND"
+    rmdir "$ETC_DIR" "$STATE_DIR" 2>/dev/null || true
+    systemctl daemon-reload
+    systemctl reset-failed >/dev/null 2>&1 || true
+}
+
+port_state() {
+    local port="$1"
+    if command -v ss >/dev/null 2>&1 \
+        && ss -H -lntu "sport = :$port" 2>/dev/null | grep -q .; then
+        printf '%s' 'in-use'
+    else
+        printf '%s' 'free'
+    fi
+}
+
+show_uninstall_result() {
+    local unit user units=() users=()
+    printf 'port-7443: %s\n' "$(port_state 7443)"
+    printf 'port-51820: %s\n' "$(port_state 51820)"
+    if command -v ip >/dev/null 2>&1 \
+        && ip route show 2>/dev/null | grep -Fq '10.77.0.'; then
+        printf '%s\n' 'mesh-routes: present'
+    else
+        printf '%s\n' 'mesh-routes: absent'
+    fi
+    while IFS= read -r unit; do
+        [[ -n "$unit" ]] && units+=("${unit%%[[:space:]]*}")
+    done < <(systemctl list-unit-files 'ochenstarik-smm-*' --no-legend 2>/dev/null || true)
+    if (( ${#units[@]} == 0 )); then
+        printf '%s\n' 'owned-units: absent'
+    else
+        printf 'owned-units: present (%s)\n' "${units[*]}"
+    fi
+    for user in "$CONTROL_USER" "$AGENT_USER" "$MONITOR_USER"; do
+        id -u "$user" >/dev/null 2>&1 && users+=("$user")
+    done
+    if (( ${#users[@]} == 0 )); then
+        printf '%s\n' 'owned-users: absent'
+    else
+        printf 'owned-users: present (%s)\n' "${users[*]}"
+    fi
+}
+
+uninstall_system() {
+    local confirmation="${1:-}" purge_data="${2:-}" data_confirmation="${3:-}"
+    [[ "$confirmation" == "--confirm-uninstall" ]] \
+        || fail "System removal requires --confirm-uninstall"
+    if [[ -n "$purge_data" ]]; then
+        [[ "$purge_data" == "--purge-data" && "$data_confirmation" == "--confirm-destroy-data" ]] \
+            || fail "Permanent data removal requires --purge-data --confirm-destroy-data"
+    fi
+    require_root
+    uninstall_system_plan "$purge_data"
+    stop_owned_services
+    terminate_owned_processes
+    remove_owned_network
+    remove_owned_files "$purge_data"
+    remove_owned_accounts
+    show_uninstall_result
+    log "System removal completed${purge_data:+, including Control data and CA}."
 }
 
 preflight() {
@@ -1580,6 +1795,8 @@ main() {
         status) [[ $# -eq 0 ]] || fail "status takes no arguments"; show_status ;;
         uninstall-agent) [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--purge" ) ]] || fail "uninstall-agent accepts only [--purge]"; uninstall_agent "${1:-}" ;;
         uninstall-control) [[ $# -eq 1 ]] || fail "uninstall-control requires confirmation"; uninstall_control "$1" ;;
+        uninstall-system-plan) [[ $# -eq 0 || ( $# -eq 1 && "$1" == "--purge-data" ) ]] || fail "uninstall-system-plan accepts only [--purge-data]"; uninstall_system_plan "${1:-}" ;;
+        uninstall-system) [[ $# -eq 1 || $# -eq 3 ]] || fail "uninstall-system requires --confirm-uninstall [--purge-data --confirm-destroy-data]"; uninstall_system "$@" ;;
         *) fail "Unknown action: $action (run with --help)" ;;
     esac
 }

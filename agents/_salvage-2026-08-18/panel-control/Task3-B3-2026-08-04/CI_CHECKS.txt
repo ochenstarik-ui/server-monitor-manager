@@ -1,0 +1,20 @@
+PR #16 final GitHub checks before merge
+TOTAL=14
+PASS=14
+SKIPPING=0
+NON_GREEN=0
+
+pass	Linux platform matrix	Ubuntu 24.04 arm64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126248
+pass	Linux platform matrix	Debian 12 arm64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126264
+pass	Linux platform matrix	Debian 13 arm64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126266
+pass	Linux platform matrix	Ubuntu 22.04 x64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126244
+pass	Linux platform matrix	Debian 12 x64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126254
+pass	Linux platform matrix	Ubuntu 22.04 arm64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126256
+pass	Linux platform matrix	Debian 13 x64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126267
+pass	Linux platform matrix	Ubuntu 24.04 x64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205126238
+pass	Linux platform matrix	Release archive (linux-arm64)	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205021217
+pass	Linux control and agent	build-and-test	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550739/job/93205021097
+pass	Windows build	build	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550779/job/93205021260
+pass	Linux platform matrix	Release archive (linux-x64)	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297550751/job/93205021196
+pass	Windows build	build	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297533697/job/93204978562
+pass	Linux control and agent	build-and-test	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31297533702/job/93204978548

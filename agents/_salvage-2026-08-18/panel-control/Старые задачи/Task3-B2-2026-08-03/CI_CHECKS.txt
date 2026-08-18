@@ -1,0 +1,14 @@
+Debian 12 arm64 systemd restart	pass	26s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266685	
+Debian 12 x64 systemd restart	pass	31s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266677	
+Debian 13 arm64 systemd restart	pass	29s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266707	
+Debian 13 x64 systemd restart	pass	36s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266764	
+Release archive (linux-arm64)	pass	1m2s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616037239	
+Release archive (linux-x64)	pass	1m16s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616037167	
+Ubuntu 22.04 arm64 native VM	pass	15s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266729	
+Ubuntu 22.04 x64 native VM	pass	19s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266723	
+Ubuntu 24.04 arm64 native VM	pass	18s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266681	
+Ubuntu 24.04 x64 native VM	pass	20s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574112/job/91616266719	
+build	pass	2m33s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791571112/job/91616028411	
+build	pass	3m17s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574137/job/91616037130	
+build-and-test	pass	1m57s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791571142/job/91616028152	
+build-and-test	pass	1m52s	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/30791574147/job/91616037352	

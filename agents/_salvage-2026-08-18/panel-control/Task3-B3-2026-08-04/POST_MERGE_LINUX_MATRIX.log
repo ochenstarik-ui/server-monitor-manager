@@ -1,0 +1,1556 @@
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push less than a minute ago
+
+JOBS
+* Release archive (linux-arm64) (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push less than a minute ago
+
+JOBS
+* Release archive (linux-arm64) (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+* Release archive (linux-arm64) (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+* Release archive (linux-arm64) (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+* Release archive (linux-arm64) (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  * Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+* Release archive (linux-x64) (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  * Upload release archive
+  * Post Set up .NET 10
+  * Post Checkout
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+* Ubuntu 24.04 arm64 native VM (ID 93205441087)
+* Ubuntu 24.04 x64 native VM (ID 93205441088)
+* Debian 12 arm64 systemd restart (ID 93205441104)
+* Ubuntu 22.04 x64 native VM (ID 93205441105)
+* Debian 13 arm64 systemd restart (ID 93205441107)
+* Debian 12 x64 systemd restart (ID 93205441109)
+* Debian 13 x64 systemd restart (ID 93205441119)
+* Ubuntu 22.04 arm64 native VM (ID 93205441130)
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+* Ubuntu 24.04 arm64 native VM (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Ubuntu 24.04 x64 native VM (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Debian 12 arm64 systemd restart (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 x64 native VM (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  * Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 arm64 native VM (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  * Download release archive
+  * Install twice and restart services
+  * Post Checkout
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+* Ubuntu 24.04 arm64 native VM (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Ubuntu 24.04 x64 native VM (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Debian 12 arm64 systemd restart (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 x64 native VM (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 arm64 native VM (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Ubuntu 24.04 x64 native VM (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  * Post Checkout
+* Debian 12 arm64 systemd restart (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 x64 native VM (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Ubuntu 22.04 arm64 native VM (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart services
+  * Post Checkout
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 12 arm64 systemd restart (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 12 arm64 systemd restart (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  * Complete job
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 12 arm64 systemd restart in 23s (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 13 arm64 systemd restart (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 12 arm64 systemd restart in 23s (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 13 arm64 systemd restart in 30s (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  * Install twice and restart systemd container
+  * Post Checkout
+* Debian 13 x64 systemd restart (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux platform matrix · 31297680541
+Triggered via push about 1 minute ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 12 arm64 systemd restart in 23s (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 13 arm64 systemd restart in 30s (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+* Debian 12 x64 systemd restart (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 13 x64 systemd restart in 31s (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+✓ main Linux platform matrix · 31297680541
+Triggered via push about 2 minutes ago
+
+JOBS
+✓ Release archive (linux-arm64) in 1m8s (ID 93205329085)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Release archive (linux-x64) in 1m18s (ID 93205329121)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Publish compatible release
+  ✓ Upload release archive
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 arm64 native VM in 11s (ID 93205441087)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 24.04 x64 native VM in 16s (ID 93205441088)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 12 arm64 systemd restart in 23s (ID 93205441104)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 x64 native VM in 16s (ID 93205441105)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 13 arm64 systemd restart in 30s (ID 93205441107)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 12 x64 systemd restart in 35s (ID 93205441109)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Debian 13 x64 systemd restart in 31s (ID 93205441119)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart systemd container
+  ✓ Post Checkout
+  ✓ Complete job
+✓ Ubuntu 22.04 arm64 native VM in 17s (ID 93205441130)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Download release archive
+  ✓ Install twice and restart services
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-arm64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+Release archive (linux-x64): src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+

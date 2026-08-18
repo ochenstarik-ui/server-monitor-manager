@@ -2,6 +2,11 @@ name: Release pipeline
 
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to rehearse (for example v0.1.0-alpha.20)'
+        required: false
+        type: string
   push:
     tags:
       - 'v*'
@@ -40,6 +45,8 @@ jobs:
 
       - name: Package bootstrap
         shell: bash
+        env:
+          REHEARSAL_TAG: ${{ inputs.tag }}
         run: |
           set -Eeuo pipefail
           DIST_DIR=dist
@@ -47,10 +54,19 @@ jobs:
           install -m 0755 deploy/ochenstarik-server-monitor-manager.sh "$DIST_DIR/ochenstarik-server-monitor-manager.sh"
           install -m 0755 deploy/smm-setup.sh "$DIST_DIR/smm-setup.sh"
           
-          # Substitute PROGRAM_VERSION from tag
+          # A branch rehearsal with an explicit tag must exercise the same
+          # version-consistency gate as an immutable tag build.
+          RELEASE_TAG=""
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
-            sed -i "s/^PROGRAM_VERSION=.*$/PROGRAM_VERSION=\"${GITHUB_REF_NAME}\"/" "$DIST_DIR/ochenstarik-server-monitor-manager.sh"
-            grep -Fq "readonly DEFAULT_RELEASE_TAG=\"${GITHUB_REF_NAME}\"" "$DIST_DIR/smm-setup.sh"
+            RELEASE_TAG="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "$REHEARSAL_TAG" ]]; then
+            RELEASE_TAG="$REHEARSAL_TAG"
+          fi
+          if [[ -n "$RELEASE_TAG" ]]; then
+            [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] \
+              || { printf 'Invalid release tag: %s\n' "$RELEASE_TAG" >&2; exit 1; }
+            sed -i "s/^PROGRAM_VERSION=.*$/PROGRAM_VERSION=\"${RELEASE_TAG}\"/" "$DIST_DIR/ochenstarik-server-monitor-manager.sh"
+            grep -Fq "readonly DEFAULT_RELEASE_TAG=\"${RELEASE_TAG}\"" "$DIST_DIR/smm-setup.sh"
           fi
           
           (
@@ -86,9 +102,13 @@ jobs:
       - name: Set Version
         id: version
         shell: bash
+        env:
+          REHEARSAL_TAG: ${{ inputs.tag }}
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "$REHEARSAL_TAG" ]]; then
+            VERSION="${REHEARSAL_TAG#v}"
           else
             VERSION="0.2.0-dev"
           fi
@@ -176,9 +196,13 @@ jobs:
       - name: Set Version
         id: version
         shell: bash
+        env:
+          REHEARSAL_TAG: ${{ inputs.tag }}
         run: |
           if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
             VERSION="${GITHUB_REF_NAME#v}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "$REHEARSAL_TAG" ]]; then
+            VERSION="${REHEARSAL_TAG#v}"
           else
             VERSION="0.2.0-dev"
           fi
@@ -235,6 +259,8 @@ jobs:
 
       - name: Generate Manifest v2
         shell: bash
+        env:
+          REHEARSAL_TAG: ${{ inputs.tag }}
         run: |
           set -Eeuo pipefail
 
@@ -248,8 +274,11 @@ jobs:
           )
           
           # Version fallback for non-tag runs
-          VERSION="${GITHUB_REF_NAME}"
-          if [[ ! "${GITHUB_REF}" == refs/tags/* ]]; then
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF_NAME}"
+          elif [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && -n "$REHEARSAL_TAG" ]]; then
+            VERSION="$REHEARSAL_TAG"
+          else
             VERSION="0.0.0-dev"
           fi
           

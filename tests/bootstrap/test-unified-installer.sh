@@ -20,6 +20,12 @@ case "$1" in
         [[ -n "${SMM_ENROLL_CODE:-}" && "${SMM_ACCEPT_CA_FINGERPRINT:-}" == 1 ]]
         printf '%s\n' 'SMMPEER1.test-node.test-address.test-key'
         ;;
+    uninstall-system-plan)
+        printf '%s\n' 'Server Monitor Manager objects found on this machine:'
+        printf '%s\n' '  unit: ochenstarik-smm-control.service'
+        [[ "${2:-}" != "--purge-data" ]] || printf '%s\n' '  data path: /var/lib/ochenstarik-server-monitor-manager'
+        ;;
+    uninstall-system) printf 'FAKE_UNINSTALL=%s\n' "$*" ;;
     *) printf 'PASSTHROUGH=%s\n' "$*" ;;
 esac
 INNER
@@ -100,6 +106,21 @@ grep -Fq 'WireGuard Hub: hub.example:51820' "$fixture/node.out"
 grep -Fq 'CA SHA-256:' "$fixture/node.out"
 grep -Fq 'SMMPEER1.test-node.test-address.test-key' "$fixture/node.out"
 grep -Fq 'operator application' "$fixture/node.out"
+
+run_tty $'3\n1\nUNINSTALL\n' "$fixture/uninstall-preserve.out"
+grep -Fq 'unit: ochenstarik-smm-control.service' "$fixture/uninstall-preserve.out"
+grep -Fq 'FAKE_UNINSTALL=uninstall-system --confirm-uninstall' "$fixture/uninstall-preserve.out"
+
+run_tty $'3\n2\nUNINSTALL\nDESTROY-DATA\n' "$fixture/uninstall-purge.out"
+grep -Fq 'data path: /var/lib/ochenstarik-server-monitor-manager' "$fixture/uninstall-purge.out"
+grep -Fq 'FAKE_UNINSTALL=uninstall-system --confirm-uninstall --purge-data --confirm-destroy-data' "$fixture/uninstall-purge.out"
+
+if PATH="$fixture/bin:$PATH" FIXTURE_RELEASE="$fixture/release" SMM_CACHE_DIR="$fixture/cache" \
+    bash "$setup" uninstall-system >"$fixture/uninstall-refused.out" 2>&1; then
+    printf '%s\n' 'uninstall without confirmation flag unexpectedly succeeded' >&2
+    exit 1
+fi
+grep -Fq 'requires --confirm-uninstall' "$fixture/uninstall-refused.out"
 
 tampered_ca_part="$(printf '%s' 'not-a-certificate' | b64url)"
 tampered_code="SMMNODE2.$control_part.$tampered_ca_part.$node_part.$token_part.$endpoint_part.$hub_key_part.$address_part.$network_part"

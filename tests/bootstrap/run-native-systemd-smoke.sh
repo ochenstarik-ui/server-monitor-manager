@@ -2,11 +2,13 @@
 set -Eeuo pipefail
 IFS=$'\n\t'
 
-archive="${1:?usage: run-native-systemd-smoke.sh ARCHIVE BOOTSTRAP}"
-bootstrap="${2:?usage: run-native-systemd-smoke.sh ARCHIVE BOOTSTRAP}"
+archive="$(realpath "${1:?usage: run-native-systemd-smoke.sh ARCHIVE BOOTSTRAP}")"
+bootstrap="$(realpath "${2:?usage: run-native-systemd-smoke.sh ARCHIVE BOOTSTRAP}")"
 port="${SMM_SMOKE_PORT:-17443}"
 system_bootstrap="/usr/local/sbin/ochenstarik-server-monitor-manager.sh"
 probe_dir=""
+foreign_user="smm-uninstall-foreign"
+foreign_unit="smm-uninstall-foreign.service"
 
 # If manifest+sig are not shipped alongside the archive (CI-only builds),
 # allow unsigned verification via .sha256 fallback.
@@ -19,8 +21,11 @@ cleanup() {
     if [[ -n "$probe_dir" ]]; then
         rm -rf -- "$probe_dir"
     fi
-    sudo "$system_bootstrap" uninstall-agent --purge >/dev/null 2>&1 || true
-    sudo "$system_bootstrap" uninstall-control --confirm-destroy-control >/dev/null 2>&1 || true
+    sudo "$bootstrap" uninstall-system --confirm-uninstall --purge-data \
+        --confirm-destroy-data >/dev/null 2>&1 || true
+    sudo rm -f -- "/etc/systemd/system/$foreign_unit"
+    sudo userdel "$foreign_user" >/dev/null 2>&1 || true
+    sudo systemctl daemon-reload >/dev/null 2>&1 || true
 }
 trap cleanup EXIT
 
@@ -115,5 +120,31 @@ sudo systemctl is-active --quiet ochenstarik-smm-agent.service
 sudo curl --fail --silent --show-error --retry 15 --retry-all-errors --retry-delay 1 \
     --cacert /etc/ochenstarik-server-monitor-manager/control-ca.crt \
     "https://127.0.0.1:$port/healthz"
+
+sudo install -d -m 0700 /var/lib/ochenstarik-server-monitor-manager/bootstrap-backups
+sudo touch /var/lib/ochenstarik-server-monitor-manager/bootstrap-backups/smoke-preserve
+sudo useradd --system --no-create-home "$foreign_user"
+printf '[Unit]\nDescription=Foreign smoke unit\n' | sudo tee "/etc/systemd/system/$foreign_unit" >/dev/null
+sudo "$system_bootstrap" uninstall-system --confirm-uninstall
+sudo test -s /var/lib/ochenstarik-server-monitor-manager/control/control.db
+sudo test -f /var/lib/ochenstarik-server-monitor-manager/bootstrap-backups/smoke-preserve
+sudo test -f /etc/ochenstarik-server-monitor-manager/control-ca.pfx
+sudo test -f /etc/ochenstarik-server-monitor-manager/control-ca.crt
+sudo id "$foreign_user"
+sudo test -f "/etc/systemd/system/$foreign_unit"
+if sudo ss -H -ltn "sport = :$port" | grep -q .; then
+    printf 'Control port survived uninstall: %s\n' "$port" >&2
+    exit 1
+fi
+
+sudo "$bootstrap" uninstall-system --confirm-uninstall --purge-data --confirm-destroy-data
+sudo test ! -e /etc/ochenstarik-server-monitor-manager
+sudo test ! -e /var/lib/ochenstarik-server-monitor-manager
+sudo test ! -e /var/lib/ochenstarik-server-monitor-manager-enrollment
+sudo id "$foreign_user"
+sudo test -f "/etc/systemd/system/$foreign_unit"
+empty_uninstall_output="$(sudo "$bootstrap" uninstall-system --confirm-uninstall \
+    --purge-data --confirm-destroy-data)"
+grep -Fq 'nothing installed' <<<"$empty_uninstall_output"
 
 printf '%s\n' "NATIVE_SYSTEMD_SMOKE=PASS"

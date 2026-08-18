@@ -11,6 +11,7 @@ windows_workflow="$root/.github/workflows/windows-release.yml"
 policy="$root/docs/release-policy.md"
 installer_contract="$root/docs/installer-contract.md"
 manifest_test="$root/tests/bootstrap/test-manifest-verification.sh"
+version_consistency_test="$root/tests/bootstrap/test-release-version-consistency.sh"
 v1_fixture="$root/tests/fixtures/alpha8-v1-release"
 
 [[ -s "$setup" ]] || {
@@ -18,7 +19,12 @@ v1_fixture="$root/tests/fixtures/alpha8-v1-release"
     exit 1
 }
 bash -n "$setup"
-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.18"' "$setup"
+grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.20"' "$setup"
+bash -n "$version_consistency_test"
+if command -v shellcheck >/dev/null 2>&1; then
+    shellcheck --severity=error "$version_consistency_test"
+fi
+bash "$version_consistency_test"
 grep -Fq 'install-hub PUBLIC_HOST [HTTPS_PORT] [WG_PORT]' "$setup"
 grep -Fxq '  install-node' "$setup"
 if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
@@ -63,6 +69,7 @@ grep -Fq 'v0.1.0-alpha.15' "$policy"
 grep -Fq 'v0.1.0-alpha.16' "$policy"
 grep -Fq 'v0.1.0-alpha.17' "$policy"
 grep -Fq 'v0.1.0-alpha.18' "$policy"
+grep -Fq 'v0.1.0-alpha.19' "$policy"
 grep -Fq 'hash -r' "$root/tests/release-verification/run-positive-installation.sh"
 grep -Fq -- '--use-signing-config=false --new-bundle-format=false' \
     "$root/tests/release-verification/run-negative-tests.sh"
@@ -193,8 +200,8 @@ chmod +x "$work/bin/uname"
 
 HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
 grep -Fq 'INNER_ARGS=version ' "$work/output"
-grep -Fq '/releases/download/v0.1.0-alpha.18/ochenstarik-server-monitor-manager.sh' "$work/urls"
-grep -Fq '/releases/download/v0.1.0-alpha.18/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.20/ochenstarik-server-monitor-manager.sh' "$work/urls"
+grep -Fq '/releases/download/v0.1.0-alpha.20/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
 
 node_code="$(HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" node-code fixture-node)"
 [[ "$node_code" == 'SMMNODE1.fixture' ]] || {

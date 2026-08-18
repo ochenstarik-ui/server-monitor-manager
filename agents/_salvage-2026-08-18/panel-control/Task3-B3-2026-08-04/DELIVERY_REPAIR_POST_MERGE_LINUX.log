@@ -1,0 +1,656 @@
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  * Verify formatting
+  * Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  * Verify formatting
+  * Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  * Verify formatting
+  * Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  * Verify formatting
+  * Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  * Verify formatting
+  * Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push less than a minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  * Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  * Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  * Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  * Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  * Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 1 minute ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  * Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  ✓ Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  ✓ Build systemd smoke release
+  * Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+Refreshing run status every 3 seconds. Press Ctrl+C to quit.
+
+* main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+* build-and-test (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  ✓ Build systemd smoke release
+  ✓ Verify repeated systemd installation
+  * Clean up systemd smoke installation
+  * Post Set up .NET 10
+  * Post Checkout
+✓ main Linux control and agent · 31309549384
+Triggered via push about 2 minutes ago
+
+JOBS
+✓ build-and-test in 2m23s (ID 93235108242)
+  ✓ Set up job
+  ✓ Checkout
+  ✓ Set up .NET 10
+  ✓ Restore
+  ✓ Build
+  ✓ Test
+  ✓ Verify formatting
+  ✓ Verify three-server acceptance harness
+  ✓ Verify standalone bootstrap
+  ✓ Publish agent amd64
+  ✓ Publish agent arm64
+  ✓ Publish provisioning helper amd64
+  ✓ Publish provisioning helper arm64
+  ✓ Build systemd smoke release
+  ✓ Verify repeated systemd installation
+  ✓ Clean up systemd smoke installation
+  ✓ Post Set up .NET 10
+  ✓ Post Checkout
+  ✓ Complete job
+
+ANNOTATIONS
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#550
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#471
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#389
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#263
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#157
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningStore.cs#81
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#171
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#196
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningBaseInstallPlanStore.cs#99
+
+! Using member 'System.Text.Json.JsonSerializer.Serialize<TValue>(TValue, JsonSerializerOptions)' which has 'RequiresUnreferencedCodeAttribute' can break functionality when trimming application code. JSON serialization and deserialization might require types that cannot be statically analyzed. Use the overload that takes a JsonTypeInfo or JsonSerializerContext, or make sure all of the required types are preserved.
+build-and-test: src/ServerMonitorManager.Control/ProvisioningFactsStore.cs#72
+

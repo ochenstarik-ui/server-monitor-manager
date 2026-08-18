@@ -1,0 +1,52 @@
+## VERDICT: **CHANGES_REQUESTED**
+
+Not safe to commit or open a PR yet.
+
+### BLOCKING
+None.
+
+### HIGH
+
+1. **Certificate reenrollment is outside the per-Link serialization boundary, allowing a revoked node’s Link to be reactivated.**  
+   - `src/ServerMonitorManager.Control/CertificateLifecycleService.cs:32-59`
+   - `src/ServerMonitorManager.Control/LinkService.cs:122-160`
+   - `ControlStore.SetLinkActualStateAsync` also updates actual state without checking the current desired state.
+   - Concrete interleaving:
+     1. Reconciliation reads `DesiredState=Active`.
+     2. Reenrollment persists `DesiredState=Disabled` and disconnects/verifies the rule absent.
+     3. Reconciliation observes the absent rule, reconnects it based on its stale expectation, and persists `ActualState=Active`.
+     4. Final state can be `DesiredState=Disabled`, `ActualState=Active`, with the nftables rule active.
+   - The in-memory semaphore protects Create/Disable/Reconcile/TTL, but `CertificateLifecycleService` neither acquires it nor uses a conditional/versioned persistence operation.
+
+2. **Idempotency replays do not resume incomplete privileged operations, so an interrupted kill switch can remain active indefinitely.**  
+   - `src/ServerMonitorManager.Control/LinkService.cs:85-100`, especially replay return at `91-94`
+   - `src/ServerMonitorManager.Control/CertificateLifecycleService.cs:19-28`
+   - Disable and reenrollment commit desired-state changes before invoking the helper. If Control is cancelled or terminates after the database commit but before successful factual verification, retrying the same idempotency key immediately returns the cached/current record without probing or retrying the firewall operation.
+   - For manual links (`TTL=0`), no TTL worker will recover this. A normal heartbeat also does not necessarily request reconciliation when the agent remained online. The persisted state can therefore remain `Disconnecting` while the allow rule remains active.
+   - Existing tests cover successful sequential replay, but not interruption after mutation commit followed by replay.
+
+### MEDIUM
+None.
+
+### LOW
+None.
+
+## Verification map
+
+| Area | Result |
+|---|---|
+| Create/Disable/Reconcile/TTL serialization | Correct among `LinkService` operations; reenrollment is not serialized and creates a HIGH race |
+| Helper fail-closed behavior | Reviewed: nftables listing failure exits nonzero; status output is strict `active`/`disabled` |
+| Helper argv safety | Reviewed: `.ArgumentList` and quoted Bash variables avoid shell interpolation |
+| Factual vs desired persistence/events | Normal sequential paths verify factual state, but reenrollment races and replay short-circuiting undermine correctness |
+| Desktop bindings/semantics | Desired, actual, drift, error, and version bindings are coherent |
+| Acceptance script | New factual status assertions are honest and argv-safe; physical acceptance remains unexecuted |
+| Test adequacy | Missing concurrent reenrollment/reconciliation test and interrupted disable/reenrollment replay-recovery tests |
+| `bash -n` | PASS for all changed shell scripts |
+| Bootstrap contract | PASS: `BOOTSTRAP_CONTRACT=PASS` |
+| `git diff --check ba14d29` | PASS |
+| Control tests | Could not independently rerun: `dotnet` is unavailable in this reviewer environment. Parent-provided evidence reports 66/66 PASS |
+| Physical acceptance | Not run; required environment inputs are unset |
+
+- **Files created or modified:** None; review was read-only.
+- **Issue encountered:** Local `dotnet` executable was unavailable.

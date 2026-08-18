@@ -1,0 +1,9 @@
+  ServerMonitorManager.Core -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Core\bin\Release\net10.0\ServerMonitorManager.Core.dll
+  ServerMonitorManager.Agent -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Agent\bin\Release\net10.0\ochenstarik-smm-agent.dll
+  ServerMonitorManager.Provisioning.Helper -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Provisioning.Helper\bin\Release\net10.0\ochenstarik-smm-provisioning-helper.dll
+  ServerMonitorManager.Control -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Control\bin\Release\net10.0\ochenstarik-smm-control.dll
+  ServerMonitorManager.Control.Tests -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\tests\ServerMonitorManager.Control.Tests\bin\Release\net10.0\ServerMonitorManager.Control.Tests.dll
+Тестовый запуск для C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\tests\ServerMonitorManager.Control.Tests\bin\Release\net10.0\ServerMonitorManager.Control.Tests.dll (.NETCoreApp,Version=v10.0)
+Общее количество тестовых файлов (1), соответствующих указанному шаблону.
+
+Пройден!   : не пройдено     0, пройдено    93, пропущено     0, всего    93, длительность 6 s. - ServerMonitorManager.Control.Tests.dll (net10.0)

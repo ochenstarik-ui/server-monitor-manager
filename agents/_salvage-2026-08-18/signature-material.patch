@@ -1,0 +1,103 @@
+diff --git a/.github/workflows/linux-release.yml b/.github/workflows/linux-release.yml
+index 1341fbe..eb8d394 100644
+--- a/.github/workflows/linux-release.yml
++++ b/.github/workflows/linux-release.yml
+@@ -292,7 +292,10 @@ jobs:
+       - name: Sign Manifest
+         shell: bash
+         run: |
+-          cosign sign-blob --yes --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
++          cosign sign-blob --yes \
++            --output-signature server-monitor-manager-manifest.sig \
++            --output-certificate server-monitor-manager-manifest.pem \
++            server-monitor-manager-manifest.json
+ 
+       - name: Attach artifacts to GitHub Release
+         if: startsWith(github.ref, 'refs/tags/')
+@@ -307,3 +310,4 @@ jobs:
+             artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/*
+             server-monitor-manager-manifest.json
+             server-monitor-manager-manifest.sig
++            server-monitor-manager-manifest.pem
+diff --git a/tests/bootstrap/test-manifest-verification.sh b/tests/bootstrap/test-manifest-verification.sh
+index 535f0c7..f5af135 100644
+--- a/tests/bootstrap/test-manifest-verification.sh
++++ b/tests/bootstrap/test-manifest-verification.sh
+@@ -34,11 +34,12 @@ cat <<EOF > server-monitor-manager-manifest.json
+ }
+ EOF
+ 
+-cosign sign-blob --yes --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
+-CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig)
++cosign sign-blob --yes --tlog-upload=false --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
++printf '%s\n' 'test-key flow does not consume this certificate placeholder' >server-monitor-manager-manifest.pem
++CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem)
+ 
+ echo "Test 1: Valid signature and hash"
+-if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig; then
++if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem; then
+     echo "FAIL: Valid payload rejected"
+     exit 1
+ fi
+@@ -65,20 +66,27 @@ cat <<EOF > server-monitor-manager-manifest.json
+   }
+ }
+ EOF
+-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
++if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Substituted hash accepted"
+     exit 1
+ fi
+ echo "PASS: Substituted hash rejected"
+ 
+ echo "Test 4: Manifest without signature"
+-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
++if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Missing signature accepted"
+     exit 1
+ fi
+ echo "PASS: Missing signature rejected"
+ 
+-echo "Test 5: Real alpha.8 manifest fallback matching (REQUIRES_NETWORK)"
++echo "Test 5: Manifest without certificate"
++if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig "" >/dev/null 2>&1; then
++    echo "FAIL: Missing certificate accepted"
++    exit 1
++fi
++echo "PASS: Missing certificate rejected"
++
++echo "Test 6: Legacy alpha.8 release without certificate is rejected (REQUIRES_NETWORK)"
+ ALPHA8_ARCHIVE="ochenstarik-server-monitor-manager-linux-x64.tar.gz"
+ if ! wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz; then
+     echo "SKIP: Could not download alpha.8 archive (network unavailable)"
+@@ -86,13 +94,13 @@ else
+     wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
+     wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
+     CLEANUP_FILES+=("$ALPHA8_ARCHIVE")
+-    # Use keyless verification against real Sigstore/Rekor (requires network)
++    # Production verification requires certificate material. Legacy alpha.8 has none.
+     unset SMM_TEST_PUBKEY
+-    if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
+-        echo "FAIL: Alpha.8 real release verification failed"
++    if bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
++        echo "FAIL: Alpha.8 legacy release without certificate was accepted"
+         exit 1
+     fi
+-    echo "PASS: Alpha.8 real release verification succeeded"
++    echo "PASS: Alpha.8 legacy release without certificate rejected"
+ fi
+ 
+ echo "All tests passed."
+diff --git a/tests/bootstrap/test-release-contract.sh b/tests/bootstrap/test-release-contract.sh
+index fa764ce..71db4a1 100644
+--- a/tests/bootstrap/test-release-contract.sh
++++ b/tests/bootstrap/test-release-contract.sh
+@@ -26,6 +26,8 @@ grep -Fq 'dist/smm-setup.sh' "$workflow"
+ grep -Fq "      - 'v*'" "$workflow"
+ grep -Fq 'contents: write' "$workflow"
+ grep -Fq 'softprops/action-gh-release@' "$workflow"
++grep -Fq -- '--output-certificate server-monitor-manager-manifest.pem' "$workflow"
++grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
+ grep -Fq 'workflow_dispatch:' "$windows_workflow"
+ if grep -Eq '^[[:space:]]+tags:' "$windows_workflow"; then
+     printf '%s\n' 'Windows packaging workflow must not trigger on tags' >&2

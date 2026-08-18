@@ -1,0 +1,23 @@
+{
+  "schema": "smm-manifest/v2",
+  "version": "v0.1.0-alpha.9",
+  "components": {
+    "control": "v0.1.0-alpha.9",
+    "agent": "v0.1.0-alpha.9",
+    "helper": "v0.1.0-alpha.9",
+    "desktop": "v0.1.0-alpha.9"
+  },
+  "protocols": {
+    "helper_protocol": "v1"
+  },
+  "hashes": {
+    "ochenstarik-server-monitor-manager.sh": "f1720e00f4b0e116a6e3462b238078343b613dd4ff03536925b1df84c7581d79",
+    "smm-setup.sh": "00417243c63b91d895fb4b80c4a72ddd4a0012ae59057b38eee07042f901e1f6",
+    "server-monitor-manager-linux-x64.tar.gz": "2a49214cce9ae81dd93b0e2a34cc7440326fa700a63e641c054adf8e3c93686d",
+    "server-monitor-manager-linux-arm64.tar.gz": "b292eef9c23282796e5ab7240c33d7497e76aa7235580e5ed19091ca368dbae6",
+    "ServerMonitorManager-win-x64.msix": "8a089c75af0f1bd514460f60330035e01aa71b5c8c0bd38d97b302309a901ba8",
+    "server-monitor-manager-linux-x64-sbom.json": "b4d6e5442fa972f658dda895a6b4c5d6e7d0093c2a4c04c483747c722d465223",
+    "server-monitor-manager-linux-arm64-sbom.json": "9412296ddf45827d71fda1872429bdec26a426e9d373d4f748a155d14c1e032c",
+    "server-monitor-manager-win-x64-sbom.json": "f97f15ec9f454d7ce23f99edd39012a35a469bb5d150ace3359858bc15e0c973"
+  }
+}

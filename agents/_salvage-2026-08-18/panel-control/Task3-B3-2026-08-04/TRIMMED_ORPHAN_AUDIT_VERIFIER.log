@@ -1,0 +1,7 @@
+PUBLISH_CONTROL_SHA256=e829099870ac8713515600123007bd602abb6e9d290c00c7aafbfa34936a29f5
+EXECUTED_CONTROL_SHA256=e829099870ac8713515600123007bd602abb6e9d290c00c7aafbfa34936a29f5
+Unhandled exception. System.TypeLoadException: Method 'SetStateMachine' in type '<InitializeAsync>d__4' from assembly 'ochenstarik-smm-control, Version=0.1.0.0, Culture=neutral, PublicKeyToken=null' does not have an implementation.
+   at ServerMonitorManager.Control.ControlStore.InitializeAsync(CancellationToken cancellationToken)
+   at Program.<Main>$(String[] args) in /tmp/hermes-b3r-linux.Qx5SYwBt/trimmed-orphan-verifier/Program.cs:line 21
+   at Program.<Main>(String[] args)
+bash: line 1: 106451 Aborted                    dotnet "$output/TrimmedOrphanVerifier.dll"

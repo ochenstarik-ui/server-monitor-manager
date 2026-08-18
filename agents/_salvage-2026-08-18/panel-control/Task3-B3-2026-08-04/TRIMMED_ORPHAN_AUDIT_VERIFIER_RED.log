@@ -1,0 +1,8 @@
+PUBLISH_CONTROL_SHA256=6fb07792500363337842478701f040e4320046ceddc1bba86a3bc861f38cdb93
+EXECUTED_CONTROL_SHA256=6fb07792500363337842478701f040e4320046ceddc1bba86a3bc861f38cdb93
+Unhandled exception. System.MissingMethodException: Method not found: 'Void ServerMonitorManager.Control.ControlOptions.set_DatabasePath(System.String)'.
+   at Program.<Main>$(String[] args)
+   at System.Runtime.CompilerServices.AsyncMethodBuilderCore.Start[TStateMachine](TStateMachine& stateMachine)
+   at Program.<Main>$(String[] args)
+   at Program.<Main>(String[] args)
+bash: line 1: 103271 Aborted                    dotnet "$output/TrimmedOrphanVerifier.dll"

@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <InvariantGlobalization>true</InvariantGlobalization>
+  </PropertyGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="2.1.12" />
+    <Reference Include="ochenstarik-smm-control">
+      <HintPath>../src/ServerMonitorManager.Control/bin/Release/net10.0/ochenstarik-smm-control.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+    <Reference Include="ServerMonitorManager.Core">
+      <HintPath>../src/ServerMonitorManager.Core/bin/Release/net10.0/ServerMonitorManager.Core.dll</HintPath>
+      <Private>true</Private>
+    </Reference>
+  </ItemGroup>
+</Project>

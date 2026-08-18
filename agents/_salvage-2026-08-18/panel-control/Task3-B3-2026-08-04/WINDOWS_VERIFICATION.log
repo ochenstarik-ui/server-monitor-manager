@@ -1,0 +1,45 @@
+=== WINDOWS CONTROL RESTORE ===
+  Определение проектов для восстановления...
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Provisioning.Helper\ServerMonitorManager.Provisioning.Helper.csproj (за 604 мс).
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Core\ServerMonitorManager.Core.csproj (за 37 мс).
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Agent\ServerMonitorManager.Agent.csproj (за 8,27 с).
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Control\ServerMonitorManager.Control.csproj (за 8,24 с).
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\tests\ServerMonitorManager.Control.Tests\ServerMonitorManager.Control.Tests.csproj (за 9,25 с).
+
+=== WINDOWS CONTROL TESTS ===
+  ServerMonitorManager.Core -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Core\bin\Release\net10.0\ServerMonitorManager.Core.dll
+  ServerMonitorManager.Agent -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Agent\bin\Release\net10.0\ochenstarik-smm-agent.dll
+  ServerMonitorManager.Provisioning.Helper -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Provisioning.Helper\bin\Release\net10.0\ochenstarik-smm-provisioning-helper.dll
+  ServerMonitorManager.Control -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Control\bin\Release\net10.0\ochenstarik-smm-control.dll
+  ServerMonitorManager.Control.Tests -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\tests\ServerMonitorManager.Control.Tests\bin\Release\net10.0\ServerMonitorManager.Control.Tests.dll
+Тестовый запуск для C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\tests\ServerMonitorManager.Control.Tests\bin\Release\net10.0\ServerMonitorManager.Control.Tests.dll (.NETCoreApp,Version=v10.0)
+Общее количество тестовых файлов (1), соответствующих указанному шаблону.
+
+Пройден!   : не пройдено     0, пройдено    93, пропущено     0, всего    93, длительность 9 s. - ServerMonitorManager.Control.Tests.dll (net10.0)
+
+=== BASH SYNTAX ===
+BASH_SYNTAX=PASS
+
+=== BOOTSTRAP CONTRACT ===
+BOOTSTRAP_CONTRACT=PASS
+
+=== DESKTOP RESTORE ===
+  Определение проектов для восстановления...
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Core\ServerMonitorManager.Core.csproj (за 770 мс).
+  Восстановлен C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Desktop\ServerMonitorManager.Desktop.csproj (за 1,33 с).
+
+=== DESKTOP BUILD ===
+  ServerMonitorManager.Core -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Core\bin\Release\net10.0\ServerMonitorManager.Core.dll
+  ServerMonitorManager.Desktop -> C:\Users\Ochenstarik\projects\server-monitor-manager-task3-b3\src\ServerMonitorManager.Desktop\bin\Release\net10.0-windows10.0.26100.0\win-x64\ServerMonitorManager.Desktop.dll
+
+Сборка успешно завершена.
+    Предупреждений: 0
+    Ошибок: 0
+
+Прошло времени 00:01:25.27
+
+=== DESKTOP CONTRACTS ===
+Windows desktop contracts passed.
+
+=== DIFF CHECK ===
+DIFF_CHECK=PASS

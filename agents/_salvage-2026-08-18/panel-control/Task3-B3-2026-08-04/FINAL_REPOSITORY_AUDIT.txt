@@ -1,0 +1,6 @@
+BRANCH=main
+HEAD=d645812d29d077e9a4dee1596ef09a70dc138090
+ORIGIN_MAIN=d645812d29d077e9a4dee1596ef09a70dc138090
+ 25 files changed, 1904 insertions(+), 161 deletions(-)
+{"mergeCommit":{"oid":"00dadf27cebbb8f311337f21ebdeadd90c1a9f8c"},"number":16,"state":"MERGED","url":"https://github.com/ochenstarik-ui/server-monitor-manager/pull/16"}
+{"mergeCommit":{"oid":"d645812d29d077e9a4dee1596ef09a70dc138090"},"number":17,"state":"MERGED","url":"https://github.com/ochenstarik-ui/server-monitor-manager/pull/17"}

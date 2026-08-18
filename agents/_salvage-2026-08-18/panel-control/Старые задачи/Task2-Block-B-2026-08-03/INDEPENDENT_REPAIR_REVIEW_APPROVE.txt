@@ -1,0 +1,31 @@
+## VERDICT: APPROVE
+
+### Findings
+- No blocking, HIGH, or MEDIUM defects found.
+- No deadlock, stale-policy disconnect regression, or fail-open state-persistence path identified in the reviewed repair diff.
+
+### Verification map
+- **Prior HIGH #1 — CLOSED**
+  - Create holds both endpoint node locks before mutation/application: `LinkService.cs:20-21`.
+  - Reconciliation holds sorted endpoint locks before the per-Link lock and refreshes the effective policy under lock: `LinkService.cs:131-138`.
+  - Reenrollment holds the revoked node lock through mutation and kill-switch convergence: `CertificateLifecycleService.cs:19-38`.
+  - Node locks are globally sorted, partially acquired locks are released on cancellation/failure, and successful leases release in reverse order: `LinkService.cs:263-290`, `342-350`.
+  - All paths acquiring both lock classes use node → Link ordering; Link-only paths do not subsequently request node locks. No lock-order cycle found.
+
+- **Prior HIGH #2 — CLOSED**
+  - Disable replay returns early only for completed `ActualState == "Disabled"`; interrupted states resume convergence: `LinkService.cs:88-102`.
+  - Common convergence reloads current desired state, probes factual state, disconnects when active, verifies, persists `Disabled`, and records `Partial` on failure: `LinkService.cs:292-323`.
+  - Reenrollment replay enumerates current effective desired-Disabled links and reconverges each: `CertificateLifecycleService.cs:31-38`.
+  - Create replay resumes when still `Connecting`: `LinkService.cs:24-28`.
+  - Added tests directly cover interrupted Disable replay, reenrollment replay, and reconnect/reenrollment serialization.
+
+### Checks
+- `bash -n` for helper, acceptance, and bootstrap scripts: **PASS**
+- Bootstrap contract: `BOOTSTRAP_CONTRACT=PASS`
+- `git diff --check`: **PASS**
+- Independent .NET rerun was unavailable because `dotnet` is not installed/on this review shell’s PATH. The supplied fresh verifier evidence reports Control **69/69 PASS** and Desktop security **12/12 PASS**.
+- Physical acceptance remains externally blocked by unset SSH/topology inputs, as documented.
+
+### Workspace
+- Files created or modified by reviewer: **none**
+- Review was read-only; existing worktree modifications were left untouched.

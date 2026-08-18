@@ -19,7 +19,11 @@ grep -Fq "SMM_TAG         Release tag (default: $default_tag)" "$setup" || {
     exit 1
 }
 
-windows_tag="$(sed -n 's/^[[:space:]]*SMM_TEST_RELEASE_TAG:[[:space:]]*\([^[:space:]]*\)$/\1/p' "$windows_workflow")"
+windows_tag="$(
+    grep -E '^[[:space:]]*SMM_TEST_RELEASE_TAG:' "$windows_workflow" \
+        | grep -Eo 'v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?' \
+        | sort -u
+)"
 [[ "$windows_tag" == "$default_tag" ]] || {
     printf 'Windows live-release tag %s does not match %s\n' "$windows_tag" "$default_tag" >&2
     exit 1

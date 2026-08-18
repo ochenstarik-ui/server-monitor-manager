@@ -59,4 +59,7 @@ namespace ServerMonitorManager.Core;
 [JsonSerializable(typeof(ProvisioningEvent[]))]
 [JsonSerializable(typeof(NodeEnrollmentCodeResponse))]
 [JsonSerializable(typeof(NodeEnrollmentCodeIssuedDetails))]
+[JsonSerializable(typeof(PasswordLoginRequest))]
+[JsonSerializable(typeof(PasswordLoginResponse))]
+[JsonSerializable(typeof(PasswordLoginStatusResponse))]
 public sealed partial class SmmJsonContext : JsonSerializerContext;

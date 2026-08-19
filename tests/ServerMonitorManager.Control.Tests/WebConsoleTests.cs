@@ -103,18 +103,33 @@ public sealed class WebConsoleTests : IAsyncDisposable
 
         // Header & Actions
         Assert.Contains("id=\"add-node-btn\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"create-link-btn\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"refresh-btn\"", html, StringComparison.Ordinal);
 
         // Tables & Counts
         Assert.Contains("id=\"nodes-table\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"links-table\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"events-table\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"nodes-count\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"links-count\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"events-count\"", html, StringComparison.Ordinal);
 
-        // Modal & Form
+        // Add Node Modal & Form
         Assert.Contains("id=\"add-node-modal\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"node-id-input\"", html, StringComparison.Ordinal);
         Assert.Contains("id=\"generate-code-btn\"", html, StringComparison.Ordinal);
+
+        // Create Link Modal & Form
+        Assert.Contains("id=\"create-link-modal\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"create-link-form\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-source-node\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-target-node\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-protocol\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-port\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-ttl\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-reason\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-direction-summary\"", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-modal-submit-btn\"", html, StringComparison.Ordinal);
 
         // Result displays
         Assert.Contains("id=\"ca-fingerprint-display\"", html, StringComparison.Ordinal);
@@ -126,6 +141,34 @@ public sealed class WebConsoleTests : IAsyncDisposable
         // Security verification requirement for CA fingerprint
         Assert.Contains("ОБЯЗАТЕЛЬНО К ПРОВЕРКЕ", html, StringComparison.Ordinal);
         Assert.Contains("отпечаток", html, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task WebConsoleProvidesLinkManagementAndEventsJournal()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-Identity", "operator-admin");
+        client.DefaultRequestHeaders.Add("X-Test-Role", "Operator");
+
+        var response = await client.GetAsync("/", TestContext.Current.CancellationToken);
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        var html = await response.Content.ReadAsStringAsync(TestContext.Current.CancellationToken);
+
+        // Desired & Actual state separation in table headers
+        Assert.Contains("Желаемое", html, StringComparison.Ordinal);
+        Assert.Contains("Фактическое", html, StringComparison.Ordinal);
+        Assert.Contains("Причина", html, StringComparison.Ordinal);
+        Assert.Contains("Срок действия", html, StringComparison.Ordinal);
+        Assert.Contains("Действия", html, StringComparison.Ordinal);
+
+        // Directional confirmation text in modal
+        Assert.Contains("Подтверждение направления правила доступа", html, StringComparison.Ordinal);
+        Assert.Contains("id=\"link-direction-summary\"", html, StringComparison.Ordinal);
+
+        // Event journal section
+        Assert.Contains("id=\"events-section\"", html, StringComparison.Ordinal);
+        Assert.Contains("Журнал событий", html, StringComparison.Ordinal);
     }
 
     [Fact]

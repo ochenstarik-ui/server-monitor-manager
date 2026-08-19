@@ -1,0 +1,260 @@
+diff --git a/README.md b/README.md
+index 39ce4d5..7c29b76 100644
+--- a/README.md
++++ b/README.md
+@@ -57,9 +57,9 @@ tests/                              Control-plane tests
+ docs/                               Architecture, security, roadmap, translations
+ ```
+ 
+-Self-contained Control and Agent binaries are published with [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases). The project-owned Linux bootstrap is specified but is not yet included in the current alpha release. Until it is implemented, checksummed, and tested, the project does not publish a one-command Hub/Node installation instruction.
++Self-contained Control and Agent binaries are published with [Server Monitor Manager releases](https://github.com/ochenstarik-ui/server-monitor-manager/releases). The tracked convenience installer, `deploy/smm-setup.sh`, and the project-owned bootstrap are released with standalone SHA-256 checksums; the installer downloads only same-tag bootstrap assets and verifies the bootstrap checksum before execution. The release workflow also publishes the signed compatibility manifest and checksummed platform artifacts.
+ 
+-The planned bootstrap, helper, schemas, and compatibility manifest will be maintained and released only from this repository. See the [Linux bootstrap contract](docs/installer-contract.md). Do not use an installer from another project as a Server Monitor Manager component.
++The bootstrap, helper, schemas, and compatibility manifest are maintained and released only from this repository. See the [Linux bootstrap contract](docs/installer-contract.md). Do not use an installer from another project as a Server Monitor Manager component.
+ 
+ The `SMMDEV1` flow enrolls the Windows application: the app creates its operator key locally, confirms the Hub CA fingerprint, obtains a separate certificate, and protects it with Windows DPAPI.
+ 
+@@ -98,11 +98,11 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
+ 
+ ## Current status
+ 
+-`v0.1.0-alpha.5` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
++`v0.1.0-alpha.10` is the current testing prerelease, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, the tracked checksum-verifying bootstrap, SHA-256 checksums, and the signed compatibility manifest are automated in GitHub Actions.
+ 
+ The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
+ 
+-Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Control also expires TTL Links through the firewall helper, prunes bounded operational data, versions its SQLite schema, and creates verified backups of SQLite state and the Control CA. The Provisioning control plane persists versioned jobs, enforces TTL/audit/idempotency and one active job per Node, and supports confirmation, progress, reconciliation, retry, and rollback states. A restricted root helper accepts only versioned, module-hashed allowlisted requests through a local Unix socket. It executes read-only Linux `preflight` and builds a deterministic, non-mutating `system.base-install` plan from catalog-backed parameters. Control independently validates and stores that immutable plan before the job enters `AwaitingConfirmation`. After confirmation, Control can issue an idempotent, audited, two-minute ECDSA execution grant bound to the exact job, Node, plan hash, and Control CA; confirmed base-install jobs remain safely queued until the helper consumes this grant and factual verification is implemented. Typed desired and factual states are persisted, versioned, idempotent, and compared through fixed drift codes exposed to Operators. CI exercises process boundaries, authorization, Agent parsing, Desktop contracts, and concurrent heartbeat/replay. Still required are mutating Provisioning actions with factual-state verification, physical WireGuard/nftables/reboot acceptance, trusted public code signing, Xray, and clients for additional platforms.
++Reconnect reconciliation is implemented with a durable SQLite marker: after a Node returns, the Hub reapplies the latest effective disabled policies and clears the marker only after the firewall confirms success. Control also expires TTL Links through the firewall helper, prunes bounded operational data, versions its SQLite schema, and creates verified backups of SQLite state and the Control CA. The Provisioning control plane persists versioned jobs, enforces TTL/audit/idempotency and one active job per Node, and supports confirmation, progress, reconciliation, retry, and rollback states. A restricted root helper accepts only versioned, module-hashed allowlisted requests through a local Unix socket. It executes read-only Linux `preflight` and builds a deterministic, non-mutating `system.base-install` plan from catalog-backed parameters. Control independently validates and stores that immutable plan before the job enters `AwaitingConfirmation`. After confirmation, Control can issue an idempotent, audited, two-minute ECDSA execution grant bound to the exact job, Node, plan hash, and Control CA; confirmed base-install jobs remain safely queued until the helper consumes this grant and factual verification is implemented. Typed desired and factual states are persisted, versioned, idempotent, and compared through fixed drift codes exposed to Operators. CI exercises process boundaries, authorization, Agent parsing, Desktop contracts, and concurrent heartbeat/replay. Still required are mutating Provisioning actions with factual-state verification, owner-run physical WireGuard/nftables/reboot acceptance, trusted Windows code signing, Xray, and clients for additional platforms.
+ 
+ ## License and project policy
+ 
+diff --git a/deploy/smm-setup.sh b/deploy/smm-setup.sh
+index 5ef182e..c2ecdcc 100644
+--- a/deploy/smm-setup.sh
++++ b/deploy/smm-setup.sh
+@@ -3,7 +3,7 @@ set -Eeuo pipefail
+ IFS=$'\n\t'
+ 
+ readonly PROGRAM_NAME="smm-setup"
+-readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.9"
++readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.10"
+ readonly DEFAULT_REPOSITORY="ochenstarik-ui/server-monitor-manager"
+ readonly INNER_ASSET="ochenstarik-server-monitor-manager.sh"
+ 
+@@ -22,7 +22,7 @@ asset from the selected immutable GitHub release. Common commands:
+   backup-create | backup-restore | version
+ 
+ Environment overrides:
+-  SMM_TAG         Release tag (default: v0.1.0-alpha.9)
++  SMM_TAG         Release tag (default: v0.1.0-alpha.10)
+   SMM_REPOSITORY  GitHub repository (default: ochenstarik-ui/server-monitor-manager)
+   SMM_CACHE_DIR   Verified-download cache directory
+ USAGE
+diff --git a/docs/i18n/README.ar.md b/docs/i18n/README.ar.md
+index 09c1f7f..1172dad 100644
+--- a/docs/i18n/README.ar.md
++++ b/docs/i18n/README.ar.md
+@@ -32,7 +32,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
+ 
+ لا توجد كلمة مرور root مشتركة ولا يغادر مفتاح WireGuard الخاص عقدته. هويات monitoring وterminal وAgent وOperator وأتمتة AI منفصلة. يستخدم SSH أمراً إجبارياً بلا shell أو PTY أو forwarding؛ يقيّد mTLS الصلاحيات؛ تسمح nftables بالروابط الصريحة فقط؛ ويحفظ SQLite الحالة المطلوبة والتدقيق قبل تعديل الجدار الناري.
+ 
+-الإصدار `v0.1.0-alpha.4` للاختبار. يتضمن فرع التطوير الحالي عميل Windows ومثبت Hub/Node وLinks وmTLS وإلغاء الشهادات وإعادة التسجيل وSQLite والتدقيق والأحداث ومخزناً محدوداً دون اتصال مع downsampling. المتبقي: مصالحة إعادة الاتصال، اختبار 50–100 Node ومثبت Windows موقّع.
++الإصدار `v0.1.0-alpha.10` هو الإصدار التجريبي الحالي للاختبار. يتضمن المستودع bootstrap متتبّعاً مع checksum بتنسيق SHA-256 وcompatibility manifest موقّعاً. تبقى المصادقة الفعلية على أجهزة حقيقية وتوقيع Windows الموثوق قيد التنفيذ.
+ 
+ ## الترخيص
+ 
+diff --git a/docs/i18n/README.de.md b/docs/i18n/README.de.md
+index 5fe473d..a197edb 100644
+--- a/docs/i18n/README.de.md
++++ b/docs/i18n/README.de.md
+@@ -32,7 +32,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
+ 
+ Es gibt kein gemeinsames Root-Passwort; der private WireGuard-Schlüssel bleibt auf dem Node. Monitoring-, Terminal-, Agent-, Operator- und KI-Automationsidentitäten sind getrennt. SSH nutzt einen forced-command ohne Shell/PTY/Forwarding; mTLS begrenzt Rollen; nftables erlaubt nur explizite Links; SQLite speichert Sollzustand und Audit vor der Firewalländerung.
+ 
+-`v0.1.0-alpha.4` ist eine Testversion. Der aktuelle Entwicklungszweig enthält Windows-Client, Hub/Node-Installer, Links, mTLS, Zertifikatswiderruf und erneute Registrierung, SQLite, Audit, Events, einen begrenzten Offline-Puffer mit Downsampling und dauerhaften Reconnect-Abgleich. Offen sind der Lasttest mit 50–100 Nodes und ein signierter Windows-Installer.
++`v0.1.0-alpha.10` ist die aktuelle Vorabversion für Tests. Ein versionierter Bootstrap mit SHA-256-Prüfsumme und signiertem Kompatibilitätsmanifest ist vorhanden. Die physische Abnahme auf echter Hardware und eine vertrauenswürdige Windows-Codesignatur bleiben offen.
+ 
+ ## Lizenz
+ 
+diff --git a/docs/i18n/README.es.md b/docs/i18n/README.es.md
+index 951e66e..1a53508 100644
+--- a/docs/i18n/README.es.md
++++ b/docs/i18n/README.es.md
+@@ -34,7 +34,7 @@ Abra UDP `51820` y TCP `7443` en el Hub, cree códigos para los Nodes e instále
+ 
+ No hay contraseña root compartida ni claves WireGuard privadas de Nodes en el Hub. Las identidades de monitorización, terminal, Agent, Operator y automatización IA están separadas. SSH usa un forced-command sin shell, PTY ni forwarding; mTLS limita cada rol; nftables permite únicamente Links explícitos; SQLite conserva estado y auditoría antes de aplicar cambios.
+ 
+-`v0.1.0-alpha.4` es una versión de prueba. La rama actual incluye cliente Windows, instalador Hub/Node, Links, mTLS, revocación y reinscripción de certificados, SQLite, auditoría, eventos y un búfer offline limitado con downsampling. Faltan la reconciliación tras reconexión, prueba de 50–100 Nodes e instalador Windows firmado.
++`v0.1.0-alpha.10` es la versión preliminar actual para pruebas. El repositorio incluye un bootstrap versionado con checksum SHA-256 y un manifiesto de compatibilidad firmado. Siguen pendientes la aceptación física en hardware real y la firma de confianza para Windows.
+ 
+ ## Licencia
+ 
+diff --git a/docs/i18n/README.fr.md b/docs/i18n/README.fr.md
+index 2724333..c253fcb 100644
+--- a/docs/i18n/README.fr.md
++++ b/docs/i18n/README.fr.md
+@@ -32,7 +32,7 @@ Ouvrez UDP `51820` et TCP `7443` sur le Hub, créez les codes et installez les a
+ 
+ Aucun mot de passe root n'est partagé et la clé WireGuard privée reste sur le Node. Les identités monitoring, terminal, Agent, Operator et automatisation IA sont séparées. SSH emploie une forced-command sans shell/PTY/forwarding ; mTLS limite les rôles ; nftables n'autorise que les Links explicites ; SQLite enregistre état et audit avant le changement de pare-feu.
+ 
+-`v0.1.0-alpha.4` est destiné aux tests. La branche actuelle contient le client Windows, l'installateur Hub/Node, les Links, mTLS, la révocation et le ré-enrôlement des certificats, SQLite, l'audit, les événements et un tampon hors ligne limité avec downsampling. Restent la réconciliation, le test de 50–100 Nodes et l'installateur Windows signé.
++`v0.1.0-alpha.10` est la préversion actuelle destinée aux tests. Le dépôt contient un bootstrap suivi avec sa somme SHA-256 et un manifeste de compatibilité signé. La recette physique sur du matériel réel et la signature Windows de confiance restent ouvertes.
+ 
+ ## Licence
+ 
+diff --git a/docs/i18n/README.hi.md b/docs/i18n/README.hi.md
+index 44d734e..ea259c7 100644
+--- a/docs/i18n/README.hi.md
++++ b/docs/i18n/README.hi.md
+@@ -32,7 +32,7 @@ Hub पर UDP `51820` और TCP `7443` खोलें, Node codes बना
+ 
+ Shared root password नहीं है और Node की WireGuard private key Node से बाहर नहीं जाती। Monitoring, terminal, Agent, Operator और AI automation identities अलग हैं। SSH forced-command shell/PTY/forwarding नहीं देता; mTLS roles सीमित करता है; nftables केवल explicit Links स्वीकारता है; SQLite पहले desired state और audit सहेजता है।
+ 
+-`v0.1.0-alpha.4` testing release है। Current development branch में Windows client, Hub/Node installer, Links, mTLS, certificate revocation और re-enrollment, SQLite, audit, event stream, downsampling वाला सीमित offline buffer और durable reconnect reconciliation तैयार हैं। 50–100 Node load test और signed Windows installer अभी बाकी हैं।
++`v0.1.0-alpha.10` वर्तमान testing prerelease है। Repository में tracked bootstrap, उसका SHA-256 checksum और signed compatibility manifest मौजूद हैं। वास्तविक hardware पर physical acceptance और trusted Windows signing अभी बाकी हैं।
+ 
+ ## लाइसेंस
+ 
+diff --git a/docs/i18n/README.ja.md b/docs/i18n/README.ja.md
+index 3a47873..171df8b 100644
+--- a/docs/i18n/README.ja.md
++++ b/docs/i18n/README.ja.md
+@@ -32,7 +32,7 @@ Hub で UDP `51820` と TCP `7443` を開き、Node コードを作成して他
+ 
+ 共有 root パスワードはなく、Node の WireGuard 秘密鍵は Node 外に出ません。monitoring、terminal、Agent、Operator、AI automation の ID は分離されています。SSH は shell/PTY/forwarding のない forced-command、mTLS はロール制限、nftables は明示 Link のみを許可し、SQLite は firewall 変更前に状態と監査を保存します。
+ 
+-`v0.1.0-alpha.4` はテスト版です。現在の開発ブランチには Windows client、Hub/Node installer、Links、mTLS、証明書失効と再登録、SQLite、監査、イベント、downsampling 付きの制限オフラインバッファが実装済みです。再接続調整、50–100 Node 負荷試験、署名付き Windows installer は今後の課題です。
++`v0.1.0-alpha.10` は現在のテスト用 prerelease です。リポジトリには追跡対象の bootstrap、SHA-256 checksum、署名済み compatibility manifest があります。実機での physical acceptance と信頼された Windows 署名は未完了です。
+ 
+ ## ライセンス
+ 
+diff --git a/docs/i18n/README.ko.md b/docs/i18n/README.ko.md
+index 74a68ab..cd454f1 100644
+--- a/docs/i18n/README.ko.md
++++ b/docs/i18n/README.ko.md
+@@ -32,7 +32,7 @@ Hub에서 UDP `51820`과 TCP `7443`을 열고 Node 코드를 생성한 뒤 다
+ 
+ 공유 root 암호가 없고 Node WireGuard 개인 키는 Node를 떠나지 않습니다. monitoring, terminal, Agent, Operator, AI automation identity는 분리됩니다. SSH는 shell/PTY/forwarding 없는 forced-command를 사용하고, mTLS는 역할을 제한하며, nftables는 명시된 Link만 허용합니다. SQLite는 방화벽 변경 전에 상태와 감사를 저장합니다.
+ 
+-`v0.1.0-alpha.4`는 테스트 릴리스입니다. 현재 개발 branch에는 Windows client, Hub/Node installer, Links, mTLS, 인증서 폐기와 재등록, SQLite, 감사, event stream과 downsampling이 적용된 제한 offline buffer가 구현되었습니다. 재연결 조정, 50–100 Node 부하 시험과 서명된 Windows installer가 남아 있습니다.
++`v0.1.0-alpha.10`은 현재 테스트용 prerelease입니다. 저장소에는 추적되는 bootstrap, SHA-256 checksum 및 서명된 compatibility manifest가 있습니다. 실제 하드웨어의 physical acceptance와 신뢰할 수 있는 Windows 서명은 아직 완료되지 않았습니다.
+ 
+ ## 라이선스
+ 
+diff --git a/docs/i18n/README.pt-BR.md b/docs/i18n/README.pt-BR.md
+index a803004..2057b50 100644
+--- a/docs/i18n/README.pt-BR.md
++++ b/docs/i18n/README.pt-BR.md
+@@ -32,7 +32,7 @@ Abra UDP `51820` e TCP `7443` no Hub, gere códigos e instale os demais servidor
+ 
+ Não há senha root compartilhada e a chave WireGuard privada nunca sai do Node. As identidades de monitoramento, terminal, Agent, Operator e automação de IA são separadas. SSH usa forced-command sem shell/PTY/forwarding; mTLS restringe funções; nftables permite apenas Links explícitos; SQLite registra estado e auditoria antes da mudança no firewall.
+ 
+-`v0.1.0-alpha.4` é uma versão de teste. A branch atual contém cliente Windows, instalador Hub/Node, Links, mTLS, revogação e novo registro de certificados, SQLite, auditoria, eventos e buffer offline limitado com downsampling. Restam reconciliação, teste com 50–100 Nodes e instalador Windows assinado.
++`v0.1.0-alpha.10` é a pré-versão atual para testes. O repositório contém um bootstrap rastreado com checksum SHA-256 e um manifesto de compatibilidade assinado. A aceitação física em hardware real e a assinatura confiável do Windows continuam pendentes.
+ 
+ ## Licença
+ 
+diff --git a/docs/i18n/README.ru.md b/docs/i18n/README.ru.md
+index 4d0e608..e58288c 100644
+--- a/docs/i18n/README.ru.md
++++ b/docs/i18n/README.ru.md
+@@ -38,7 +38,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
+ 
+ Нет общих root-паролей; приватный WireGuard-ключ Node не покидает Node. Идентичности monitoring, terminal, Agent, Operator и AI-автоматизации разделены. Monitoring SSH использует forced-command без shell/PTY/forwarding. Agent может отправлять heartbeat только своего узла, Operator управляет inventory и Links. Отключение Link сначала сохраняется в SQLite, затем удаляет разрешение nftables; повтор запроса не повторяет побочный эффект.
+ 
+-`v0.1.0-alpha.4` предназначен для тестирования. В текущей ветке разработки уже готовы Windows SSH-monitoring, Hub/Node installer, Links, mTLS, отзыв и повторная регистрация сертификатов, SQLite, аудит, поток событий, ограниченный offline-буфер Agent с downsampling и долговечный reconnect reconciliation. Остались нагрузочный тест 50–100 Node и подписанный Windows installer. До стабильного релиза используйте тестовые или резервируемые серверы.
++`v0.1.0-alpha.10` — текущий prerelease для тестирования. В репозитории есть отслеживаемый bootstrap с SHA-256 checksum и подписанный compatibility manifest. Физическая приёмка на реальном оборудовании и доверенная подпись Windows остаются открытыми. До стабильного релиза используйте тестовые или резервируемые серверы.
+ 
+ ## Лицензия
+ 
+diff --git a/docs/i18n/README.tr.md b/docs/i18n/README.tr.md
+index 0c69247..0f96f36 100644
+--- a/docs/i18n/README.tr.md
++++ b/docs/i18n/README.tr.md
+@@ -32,7 +32,7 @@ Hub üzerinde UDP `51820` ve TCP `7443` açın, Node kodlarını üretin ve diğ
+ 
+ Ortak root parolası yoktur ve Node'un WireGuard özel anahtarı Node'dan çıkmaz. Monitoring, terminal, Agent, Operator ve AI automation kimlikleri ayrıdır. SSH shell/PTY/forwarding vermeyen forced-command kullanır; mTLS rolleri sınırlar; nftables yalnızca açık Links'e izin verir; SQLite güvenlik duvarı değişmeden önce durum ve audit kaydeder.
+ 
+-`v0.1.0-alpha.4` test sürümüdür. Güncel geliştirme dalında Windows client, Hub/Node installer, Links, mTLS, sertifika iptali ve yeniden kayıt, SQLite, audit, event stream ve downsampling kullanan sınırlı offline buffer hazırdır. Yeniden bağlantı uzlaştırması, 50–100 Node yük testi ve imzalı Windows installer sıradadır.
++`v0.1.0-alpha.10` güncel test ön sürümüdür. Depoda izlenen bootstrap, SHA-256 checksum'u ve imzalı compatibility manifest bulunur. Gerçek donanımda fiziksel kabul ve güvenilir Windows imzası açık kalmaktadır.
+ 
+ ## Lisans
+ 
+diff --git a/docs/i18n/README.zh-CN.md b/docs/i18n/README.zh-CN.md
+index 147dfd9..d347300 100644
+--- a/docs/i18n/README.zh-CN.md
++++ b/docs/i18n/README.zh-CN.md
+@@ -34,7 +34,7 @@ sudo ./ochenstarik-server-monitor-manager.sh hub
+ 
+ 系统不共享 root 密码，Node 的 WireGuard 私钥不会离开本机。监控、终端、Agent、Operator 和 AI 自动化身份相互隔离。SSH 使用无 shell、PTY、转发权限的 forced-command；mTLS 限制角色；nftables 仅允许明确 Link；SQLite 在执行防火墙变更前保存目标状态和审计。
+ 
+-`v0.1.0-alpha.4` 是测试版。当前开发分支已包含 Windows 客户端、Hub/Node 安装器、Links、mTLS、证书撤销与重新注册、SQLite、审计、事件流以及带降采样的有限离线缓冲。待完成：重连协调、50–100 Node 压测和签名 Windows 安装器。
++`v0.1.0-alpha.10` 是当前测试预发布版。仓库包含受版本控制的 bootstrap、SHA-256 checksum 和已签名的 compatibility manifest。真实硬件上的 physical acceptance 与可信 Windows 签名仍未完成。
+ 
+ ## 许可证
+ 
+diff --git a/docs/linux-platform-matrix.md b/docs/linux-platform-matrix.md
+index 9f1db6d..fc934a2 100644
+--- a/docs/linux-platform-matrix.md
++++ b/docs/linux-platform-matrix.md
+@@ -17,4 +17,6 @@ Workflow `linux-platform-matrix.yml` собирает те же self-contained r
+ 
+ Debian 12/13 проверяются для x64 и arm64 в privileged systemd-контейнерах на соответствующей архитектуре runner. Тест выполняет чистую и повторную установку, затем полностью перезапускает контейнер и проверяет автоматический запуск Control и HTTPS healthcheck после нового systemd boot.
+ 
+-Systemd-контейнер проверяет дистрибутив, users, permissions, units, certificates, SQLite state и service lifecycle, но не считается полноценной Debian VM. Отдельным незакрытым критерием остаётся reboot настоящих Debian VM с собственным kernel. Физическая проверка WireGuard/nftables также выполняется по `three-server-acceptance.md`, поскольку GitHub runners не моделируют внешний NAT и cloud firewall.
++Systemd-контейнер проверяет дистрибутив, users, permissions, units, certificates, SQLite state и service lifecycle, но не считается полноценной Debian VM. GitHub-hosted Linux runners сами являются временными Ubuntu VM и не предоставляют управляемую Debian guest VM с отдельным kernel и гарантированным nested virtualization; перезапуск privileged Debian-контейнера разделяет kernel хоста и поэтому не доказывает полный Debian reboot.
++
++Отдельным незакрытым критерием остаётся reboot настоящих Debian VM с собственным kernel. До owner-run проверки риск компенсируется матрицей Debian 12/13 x64/arm64 с повторной установкой и systemd-container restart, нативными Ubuntu 22.04/24.04 x64/arm64 VM и физической проверкой Control, WireGuard, firewall-таблицы и Agent по `three-server-acceptance.md`. GitHub runners не моделируют внешний NAT, cloud firewall и полный reboot владельческой Debian-топологии, поэтому эта физическая приёмка не заменяется зелёным CI.
+diff --git a/docs/release-policy.md b/docs/release-policy.md
+index 08d40c2..deeca61 100644
+--- a/docs/release-policy.md
++++ b/docs/release-policy.md
+@@ -6,4 +6,4 @@ A tag that has been published must never be moved, reused, deleted and recreated
+ 
+ `.github/workflows/linux-release.yml` is the sole GitHub Release publisher. On a version tag, it builds the Linux and Windows packages from the tagged commit, generates the signed manifest, and publishes the complete release asset set. `.github/workflows/windows-release.yml` is manual-only and may package and verify a Windows installer as a workflow artifact, but it never publishes or replaces GitHub Release assets. The tracked production source for the convenience installer is `deploy/smm-setup.sh`; the Linux release workflow copies that exact file to the release artifact set, records its SHA-256 in the signed manifest, and publishes its standalone checksum. The default release in that source must match the tag being produced.
+ 
+-For `v0.1.0-alpha.9`, this makes `smm-setup.sh`, `smm-setup.sh.sha256`, the bootstrap script, platform archives, SBOMs, and the signed manifest reproducible from the tagged tree. The installer fetches only same-tag assets and verifies the bootstrap checksum before execution. Corrections after publication require another tag; the `v0.1.0-alpha.9` tag and assets remain unchanged.
++The current testing prerelease is `v0.1.0-alpha.10`. For this release, `smm-setup.sh`, `smm-setup.sh.sha256`, the bootstrap script, platform archives, SBOMs, and the signed manifest are reproducible from the tagged tree. The installer fetches only same-tag assets and verifies the bootstrap checksum before execution. The published `v0.1.0-alpha.9` tag and assets remain unchanged and immutable. Corrections after publication require another, higher tag.
+diff --git a/docs/roadmap.md b/docs/roadmap.md
+index 4c960ea..d6f1f24 100644
+--- a/docs/roadmap.md
++++ b/docs/roadmap.md
+@@ -92,13 +92,13 @@
+ - [x] SHA-256 для Windows package и Linux binaries;
+ - [x] self-contained Control/Agent release artifacts;
+ - [ ] настроить постоянную доверенную Windows code-signing identity;
+-- [ ] синхронизировать все переводы README с текущим release status.
++- [x] синхронизировать все переводы README с текущим release status.
+ 
+ ## Этап 7 — собственный bootstrap Server Monitor Manager
+ 
+ - [x] добавить bootstrap source в этот репозиторий;
+ - [x] упаковывать bootstrap, checksum и compatibility manifest в release workflow;
+-- [ ] добавить криптографическую подпись compatibility manifest для production release;
++- [x] добавить криптографическую подпись compatibility manifest для production release;
+ - [x] проверять Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
+ - [x] добавить non-interactive install/update/rollback/uninstall;
+ - [x] устанавливать Control/Agent, restricted helper и systemd units;
+diff --git a/tests/bootstrap/test-release-contract.sh b/tests/bootstrap/test-release-contract.sh
+index fa764ce..73ec81a 100644
+--- a/tests/bootstrap/test-release-contract.sh
++++ b/tests/bootstrap/test-release-contract.sh
+@@ -14,7 +14,7 @@ installer_contract="$root/docs/installer-contract.md"
+     exit 1
+ }
+ bash -n "$setup"
+-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.9"' "$setup"
++grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.10"' "$setup"
+ if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
+     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
+     exit 1
+@@ -83,7 +83,7 @@ chmod +x "$work/bin/curl"
+ 
+ HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
+ grep -Fq 'INNER_COMMAND=version' "$work/output"
+-grep -Fq '/releases/download/v0.1.0-alpha.9/ochenstarik-server-monitor-manager.sh' "$work/urls"
+-grep -Fq '/releases/download/v0.1.0-alpha.9/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
++grep -Fq '/releases/download/v0.1.0-alpha.10/ochenstarik-server-monitor-manager.sh' "$work/urls"
++grep -Fq '/releases/download/v0.1.0-alpha.10/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+ 
+ printf '%s\n' 'RELEASE_CONTRACT=PASS'

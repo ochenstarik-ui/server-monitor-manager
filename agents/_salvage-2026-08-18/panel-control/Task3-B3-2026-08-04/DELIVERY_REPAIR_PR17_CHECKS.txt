@@ -1,0 +1,19 @@
+PR #17 final checks
+TOTAL=14
+PASS=14
+NON_GREEN=0
+
+pass	Linux platform matrix	Ubuntu 24.04 arm64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801430
+pass	Linux platform matrix	Debian 12 x64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801429
+pass	Linux platform matrix	Debian 13 arm64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801426
+pass	Linux platform matrix	Ubuntu 24.04 x64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801444
+pass	Linux platform matrix	Debian 13 x64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801440
+pass	Linux platform matrix	Ubuntu 22.04 x64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801425
+pass	Linux platform matrix	Ubuntu 22.04 arm64 native VM	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801456
+pass	Linux platform matrix	Debian 12 arm64 systemd restart	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234801436
+pass	Linux control and agent	build-and-test	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370814/job/93234678936
+pass	Windows build	build	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370812/job/93234678892
+pass	Linux platform matrix	Release archive (linux-arm64)	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234678882
+pass	Linux platform matrix	Release archive (linux-x64)	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309370823/job/93234678932
+pass	Linux control and agent	build-and-test	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309336621/job/93234598681
+pass	Windows build	build	SUCCESS	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309336626/job/93234598682

@@ -1,0 +1,16 @@
+ochenstarik-server-monitor-manager.sh
+ochenstarik-server-monitor-manager.sh.sha256
+server-monitor-manager-linux-arm64.tar.gz
+server-monitor-manager-linux-arm64.tar.gz.sha256
+server-monitor-manager-linux-arm64-sbom.json
+server-monitor-manager-linux-x64.tar.gz
+server-monitor-manager-linux-x64.tar.gz.sha256
+server-monitor-manager-linux-x64-sbom.json
+server-monitor-manager-manifest.json
+server-monitor-manager-manifest.sig
+ServerMonitorManager-test-signing.cer
+ServerMonitorManager-win-x64.msix
+server-monitor-manager-win-x64-sbom.json
+SHA256SUMS
+smm-setup.sh
+smm-setup.sh.sha256

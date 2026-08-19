@@ -1,0 +1,21 @@
+Delivery repair post-merge CI for d645812d29d077e9a4dee1596ef09a70dc138090
+RUNS=3
+JOBS=12
+SUCCESS=12
+NON_GREEN=0
+
+RUN	31309549382	Windows build	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549382
+JOB	build	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549382/job/93235108400
+RUN	31309549384	Linux control and agent	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549384
+JOB	build-and-test	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549384/job/93235108242
+RUN	31309549383	Linux platform matrix	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383
+JOB	Release archive (linux-x64)	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235108369
+JOB	Release archive (linux-arm64)	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235108413
+JOB	Debian 13 x64 systemd restart	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249867
+JOB	Ubuntu 22.04 x64 native VM	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249868
+JOB	Ubuntu 24.04 arm64 native VM	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249877
+JOB	Debian 13 arm64 systemd restart	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249882
+JOB	Debian 12 arm64 systemd restart	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249883
+JOB	Ubuntu 24.04 x64 native VM	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249887
+JOB	Debian 12 x64 systemd restart	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249898
+JOB	Ubuntu 22.04 arm64 native VM	completed	success	https://github.com/ochenstarik-ui/server-monitor-manager/actions/runs/31309549383/job/93235249899

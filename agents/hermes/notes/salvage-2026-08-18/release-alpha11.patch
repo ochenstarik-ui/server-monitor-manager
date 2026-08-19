@@ -1,0 +1,546 @@
+diff --git a/.github/workflows/linux-release.yml b/.github/workflows/linux-release.yml
+index 1341fbe..2f76b46 100644
+--- a/.github/workflows/linux-release.yml
++++ b/.github/workflows/linux-release.yml
+@@ -22,21 +22,34 @@ jobs:
+ 
+       - name: Validate bootstrap
+         run: |
+-          bash -n deploy/ochenstarik-server-monitor-manager.sh
+-          bash -n deploy/smm-setup.sh
+-          bash -n deploy/ochenstarik-smm-policy-apply
+-          bash -n deploy/ochenstarik-smm-emergency
+-          bash -n tests/bootstrap/run-native-systemd-smoke.sh
+-          bash -n tests/bootstrap/run-systemd-container-smoke.sh
+-          shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
+-          shellcheck --severity=error deploy/smm-setup.sh
+-          shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
+-          shellcheck --severity=error deploy/ochenstarik-smm-emergency
+-          shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
+-          shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
+-          bash tests/bootstrap/test-bootstrap-contract.sh
+-          bash tests/bootstrap/test-manifest-verification.sh
+-          bash tests/bootstrap/test-release-contract.sh
++          run_check() {
++            local description="$1"
++            shift
++            printf 'CHECK: %s\n' "$description"
++            if "$@"; then
++              printf 'PASS: %s\n' "$description"
++            else
++              local status=$?
++              printf 'FAIL: %s (exit %s)\n' "$description" "$status" >&2
++              return "$status"
++            fi
++          }
++
++          run_check "bootstrap syntax" bash -n deploy/ochenstarik-server-monitor-manager.sh
++          run_check "setup syntax" bash -n deploy/smm-setup.sh
++          run_check "policy helper syntax" bash -n deploy/ochenstarik-smm-policy-apply
++          run_check "emergency helper syntax" bash -n deploy/ochenstarik-smm-emergency
++          run_check "native smoke syntax" bash -n tests/bootstrap/run-native-systemd-smoke.sh
++          run_check "container smoke syntax" bash -n tests/bootstrap/run-systemd-container-smoke.sh
++          run_check "bootstrap shellcheck" shellcheck --severity=error deploy/ochenstarik-server-monitor-manager.sh
++          run_check "setup shellcheck" shellcheck --severity=error deploy/smm-setup.sh
++          run_check "policy helper shellcheck" shellcheck --severity=error deploy/ochenstarik-smm-policy-apply
++          run_check "emergency helper shellcheck" shellcheck --severity=error deploy/ochenstarik-smm-emergency
++          run_check "native smoke shellcheck" shellcheck --severity=error tests/bootstrap/run-native-systemd-smoke.sh
++          run_check "container smoke shellcheck" shellcheck --severity=error tests/bootstrap/run-systemd-container-smoke.sh
++          run_check "bootstrap contract" bash tests/bootstrap/test-bootstrap-contract.sh
++          run_check "manifest verification contract" bash tests/bootstrap/test-manifest-verification.sh
++          run_check "release contract" bash tests/bootstrap/test-release-contract.sh
+ 
+       - name: Package bootstrap
+         shell: bash
+@@ -292,7 +305,10 @@ jobs:
+       - name: Sign Manifest
+         shell: bash
+         run: |
+-          cosign sign-blob --yes --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
++          cosign sign-blob --yes \
++            --output-signature server-monitor-manager-manifest.sig \
++            --output-certificate server-monitor-manager-manifest.pem \
++            server-monitor-manager-manifest.json
+ 
+       - name: Attach artifacts to GitHub Release
+         if: startsWith(github.ref, 'refs/tags/')
+@@ -307,3 +323,4 @@ jobs:
+             artifacts/server-monitor-manager-win-x64/artifacts/windows-installer/*
+             server-monitor-manager-manifest.json
+             server-monitor-manager-manifest.sig
++            server-monitor-manager-manifest.pem
+diff --git a/README.md b/README.md
+index 3bea0c3..33e7183 100644
+--- a/README.md
++++ b/README.md
+@@ -98,7 +98,7 @@ In the application, generate or copy the monitoring SSH key, add the Hub profile
+ 
+ ## Current status
+ 
+-`v0.1.0-alpha.11` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
++`v0.1.0-alpha.12` is an early testing release, not a production security appliance. Windows and Linux builds, control-plane tests, a test-signed x64 MSIX, self-contained `linux-x64`/`linux-arm64` artifacts, and SHA-256 checksums are automated in GitHub Actions.
+ 
+ The current development branch implements dedicated Windows pages for Servers, Links, Sessions, and Settings; SSH monitoring; directional Links; one-time enrollment; separate mTLS Agent, Operator, and source-scoped Automation identities; certificate revocation/re-enrollment; SQLite control state; audit; authenticated event streaming; Windows Control API integration; and a bounded durable Agent buffer with downsampling.
+ 
+diff --git a/deploy/ochenstarik-server-monitor-manager.sh b/deploy/ochenstarik-server-monitor-manager.sh
+index 10f46ca..8413e63 100755
+--- a/deploy/ochenstarik-server-monitor-manager.sh
++++ b/deploy/ochenstarik-server-monitor-manager.sh
+@@ -290,7 +290,7 @@ validate_control_url() {
+ }
+ 
+ verify_manifest() {
+-    local manifest="$1" signature="$2"
++    local manifest="$1" signature="$2" certificate="$3"
+     if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
+         log "WARNING: Signature verification skipped due to SMM_ALLOW_UNSIGNED=1."
+         return 0
+@@ -299,10 +299,13 @@ verify_manifest() {
+     [[ -f "$manifest" ]] || fail "Manifest not found: $manifest"
+     [[ -f "$signature" ]] || fail "Signature not found: $signature"
+     log "Verifying manifest signature..."
+-    local verify_args=(--certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
++    local verify_args
+     if [[ -n "${SMM_TEST_PUBKEY:-}" ]]; then
+-        verify_args=(--key "$SMM_TEST_PUBKEY")
++        verify_args=(--key "$SMM_TEST_PUBKEY" --insecure-ignore-tlog)
+         log "WARNING: Using test public key for verification. This must NOT happen in production."
++    else
++        [[ -f "$certificate" ]] || fail "Certificate not found: $certificate"
++        verify_args=(--certificate "$certificate" --certificate-oidc-issuer "$COSIGN_ISSUER" --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP")
+     fi
+     if ! cosign verify-blob "${verify_args[@]}" \
+         --signature "$signature" "$manifest" >/dev/null 2>&1; then
+@@ -312,13 +315,14 @@ verify_manifest() {
+ }
+ 
+ verify_archive() {
+-    local archive="$1" expected actual entry manifest signature
++    local archive="$1" expected actual entry manifest signature certificate
+     [[ -f "$archive" ]] || fail "Archive not found: $archive"
+     manifest="$(dirname "$archive")/server-monitor-manager-manifest.json"
+     signature="$(dirname "$archive")/server-monitor-manager-manifest.sig"
++    certificate="$(dirname "$archive")/server-monitor-manager-manifest.pem"
+     
+-    if [[ -f "$manifest" && -f "$signature" ]]; then
+-        verify_manifest "$manifest" "$signature"
++    if [[ -f "$manifest" && -f "$signature" && -f "$certificate" ]]; then
++        verify_manifest "$manifest" "$signature" "$certificate"
+         local archive_basename
+         archive_basename="$(basename "$archive")"
+         expected="$(awk -F'"' -v name="$archive_basename" '$2 == name {print $4}' "$manifest" || true)"
+@@ -328,13 +332,13 @@ verify_archive() {
+         [[ -n "$expected" ]] || fail "Could not extract archive hash from manifest."
+     else
+         if [[ "${SMM_ALLOW_UNSIGNED:-0}" == "1" ]]; then
+-            log "WARNING: Manifest and signature not found, falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1."
++            log "WARNING: Manifest, signature, or certificate not found; falling back to .sha256 file due to SMM_ALLOW_UNSIGNED=1."
+             local checksum_file="${archive}.sha256"
+             [[ -f "$checksum_file" ]] || fail "Checksum file not found: $checksum_file"
+             expected="$(awk 'NR == 1 { print $1 }' "$checksum_file")"
+             [[ "$expected" =~ ^[0-9a-fA-F]{64}$ ]] || fail "Invalid checksum file: $checksum_file"
+         else
+-            fail "Manifest and signature are required for archive verification. Set SMM_ALLOW_UNSIGNED=1 to bypass."
++            fail "Manifest, signature, and certificate are required for archive verification. Set SMM_ALLOW_UNSIGNED=1 to bypass."
+         fi
+     fi
+ 
+@@ -1493,7 +1497,7 @@ main() {
+         install-control) [[ $# -ge 2 && $# -le 3 ]] || fail "install-control requires ARCHIVE PUBLIC_HOST [HTTPS_PORT]"; install_control "$@" ;;
+         install-agent) [[ $# -eq 4 ]] || fail "install-agent requires ARCHIVE NODE_ID CONTROL_URL CA_CERT"; install_agent "$@" ;;
+         install-node) [[ $# -eq 1 ]] || fail "install-node requires ARCHIVE"; install_node_from_code "$1" ;;
+-        verify-manifest) [[ $# -eq 2 ]] || fail "verify-manifest requires MANIFEST SIGNATURE"; verify_manifest "$1" "$2" ;;
++        verify-manifest) [[ $# -eq 3 ]] || fail "verify-manifest requires MANIFEST SIGNATURE CERTIFICATE"; verify_manifest "$1" "$2" "$3" ;;
+         install-monitor) [[ $# -eq 1 ]] || fail "install-monitor requires PUBLIC_KEY"; install_monitor "$1" ;;
+         uninstall-monitor) [[ $# -eq 0 ]] || fail "uninstall-monitor takes no arguments"; uninstall_monitor ;;
+         mesh-init) [[ $# -ge 1 && $# -le 2 ]] || fail "mesh-init requires PUBLIC_ENDPOINT [WG_PORT]"; mesh_init "$@" ;;
+diff --git a/deploy/smm-setup.sh b/deploy/smm-setup.sh
+index 35e467d..d4ec066 100644
+--- a/deploy/smm-setup.sh
++++ b/deploy/smm-setup.sh
+@@ -3,7 +3,7 @@ set -Eeuo pipefail
+ IFS=$'\n\t'
+ 
+ readonly PROGRAM_NAME="smm-setup"
+-readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.11"
++readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.12"
+ readonly DEFAULT_REPOSITORY="ochenstarik-ui/server-monitor-manager"
+ readonly INNER_ASSET="ochenstarik-server-monitor-manager.sh"
+ 
+@@ -22,7 +22,7 @@ asset from the selected immutable GitHub release. Common commands:
+   backup-create | backup-restore | version
+ 
+ Environment overrides:
+-  SMM_TAG         Release tag (default: v0.1.0-alpha.11)
++  SMM_TAG         Release tag (default: v0.1.0-alpha.12)
+   SMM_REPOSITORY  GitHub repository (default: ochenstarik-ui/server-monitor-manager)
+   SMM_CACHE_DIR   Verified-download cache directory
+ USAGE
+diff --git a/docs/release-policy.md b/docs/release-policy.md
+index 08d40c2..6e89da2 100644
+--- a/docs/release-policy.md
++++ b/docs/release-policy.md
+@@ -7,3 +7,7 @@ A tag that has been published must never be moved, reused, deleted and recreated
+ `.github/workflows/linux-release.yml` is the sole GitHub Release publisher. On a version tag, it builds the Linux and Windows packages from the tagged commit, generates the signed manifest, and publishes the complete release asset set. `.github/workflows/windows-release.yml` is manual-only and may package and verify a Windows installer as a workflow artifact, but it never publishes or replaces GitHub Release assets. The tracked production source for the convenience installer is `deploy/smm-setup.sh`; the Linux release workflow copies that exact file to the release artifact set, records its SHA-256 in the signed manifest, and publishes its standalone checksum. The default release in that source must match the tag being produced.
+ 
+ For `v0.1.0-alpha.9`, this makes `smm-setup.sh`, `smm-setup.sh.sha256`, the bootstrap script, platform archives, SBOMs, and the signed manifest reproducible from the tagged tree. The installer fetches only same-tag assets and verifies the bootstrap checksum before execution. Corrections after publication require another tag; the `v0.1.0-alpha.9` tag and assets remain unchanged.
++
++`v0.1.0-alpha.10` and `v0.1.0-alpha.11` exist as tags, but their release pipelines failed before publication. No GitHub Release or release assets were published for either tag. Both version numbers remain reserved and must not be moved, deleted, recreated, or reused; the next corrected release is `v0.1.0-alpha.12`.
++
++All changes to `main` require a pull request. A branch must be current with `main`, and the required `build-and-test` and `build` status checks must pass before merge. Force-push and deletion of `main` are prohibited. One pull request must cover one topic and may merge only after its CI is green.
+diff --git a/src/ServerMonitorManager.Desktop/UpdateService.cs b/src/ServerMonitorManager.Desktop/UpdateService.cs
+index bd9bdd9..f2d7560 100644
+--- a/src/ServerMonitorManager.Desktop/UpdateService.cs
++++ b/src/ServerMonitorManager.Desktop/UpdateService.cs
+@@ -22,7 +22,7 @@ public interface IHttpTransport
+ 
+ public interface ISignatureVerifier
+ {
+-    Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default);
++    Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default);
+ }
+ 
+ public interface IFileStorage
+@@ -88,7 +88,12 @@ public class ProcessSignatureVerifier : ISignatureVerifier
+         _httpTransport = httpTransport;
+     }
+ 
+-    public async Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default)
++    internal static string BuildVerificationArguments(string signaturePath, string manifestPath, string certificatePath)
++    {
++        return $"verify-blob --certificate \"{certificatePath}\" --certificate-oidc-issuer \"{OidcIssuer}\" --certificate-identity-regexp \"{OidcIdentityRegexp}\" --signature \"{signaturePath}\" \"{manifestPath}\"";
++    }
++
++    public async Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default)
+     {
+         var cosignPath = Path.Combine(_fileStorage.GetTempFolder(), "cosign.exe");
+         if (!_fileStorage.FileExists(cosignPath) || !VerifyFileHash(cosignPath, CosignHash))
+@@ -107,7 +112,7 @@ public class ProcessSignatureVerifier : ISignatureVerifier
+             StartInfo = new ProcessStartInfo
+             {
+                 FileName = cosignPath,
+-                Arguments = $"verify-blob --certificate-oidc-issuer \"{OidcIssuer}\" --certificate-identity-regexp \"{OidcIdentityRegexp}\" --signature \"{signaturePath}\" \"{manifestPath}\"",
++                Arguments = BuildVerificationArguments(signaturePath, manifestPath, certificatePath),
+                 UseShellExecute = false,
+                 RedirectStandardError = true,
+                 RedirectStandardOutput = true,
+@@ -217,20 +222,24 @@ public class UpdateService
+ 
+         var manifestUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.json")?["browser_download_url"]?.GetValue<string>();
+         var sigUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.sig")?["browser_download_url"]?.GetValue<string>();
++        var certificateUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "server-monitor-manager-manifest.pem")?["browser_download_url"]?.GetValue<string>();
+         
+-        if (manifestUrl is null || sigUrl is null)
++        if (manifestUrl is null || sigUrl is null || certificateUrl is null)
+         {
+-            throw new InvalidOperationException("Manifest or signature not found in the release. Update rejected.");
++            throw new InvalidOperationException("Manifest, signature, or certificate not found in the release. Update rejected.");
+         }
+ 
+         // Validate URLs belong to the same tag!
+-        if (!manifestUrl.Contains($"/releases/download/{releaseTagName}/") || !sigUrl.Contains($"/releases/download/{releaseTagName}/"))
++        if (!manifestUrl.Contains($"/releases/download/{releaseTagName}/") ||
++            !sigUrl.Contains($"/releases/download/{releaseTagName}/") ||
++            !certificateUrl.Contains($"/releases/download/{releaseTagName}/"))
+         {
+-             throw new InvalidOperationException("Manifest or signature URL does not match the release tag. Update rejected.");
++             throw new InvalidOperationException("Manifest, signature, or certificate URL does not match the release tag. Update rejected.");
+         }
+ 
+         var manifestJson = await _http.GetStringAsync(manifestUrl, cancellationToken);
+         var manifestSig = await _http.GetStringAsync(sigUrl, cancellationToken);
++        var manifestCertificate = await _http.GetStringAsync(certificateUrl, cancellationToken);
+ 
+         var manifestNode = JsonNode.Parse(manifestJson);
+         if (manifestNode is null)
+@@ -257,11 +266,13 @@ public class UpdateService
+         var tempFolder = _fileStorage.GetTempFolder();
+         var manifestPath = Path.Combine(tempFolder, "server-monitor-manager-manifest.json");
+         var sigPath = Path.Combine(tempFolder, "server-monitor-manager-manifest.sig");
++        var certificatePath = Path.Combine(tempFolder, "server-monitor-manager-manifest.pem");
+         await _fileStorage.WriteAllTextAsync(manifestPath, manifestJson, cancellationToken);
+         await _fileStorage.WriteAllTextAsync(sigPath, manifestSig, cancellationToken);
++        await _fileStorage.WriteAllTextAsync(certificatePath, manifestCertificate, cancellationToken);
+ 
+         Log.TraceEvent(TraceEventType.Information, 0, "Verifying manifest signature...");
+-        await _signatureVerifier.VerifySignatureAsync(sigPath, manifestPath, cancellationToken);
++        await _signatureVerifier.VerifySignatureAsync(sigPath, manifestPath, certificatePath, cancellationToken);
+         Log.TraceEvent(TraceEventType.Information, 0, "Manifest signature verified successfully.");
+         
+         var msixUrl = assets.FirstOrDefault(a => a?["name"]?.GetValue<string>() == "ServerMonitorManager-win-x64.msix")?["browser_download_url"]?.GetValue<string>();
+diff --git a/tests/ServerMonitorManager.Desktop.Security.Tests/UpdateServiceTests.cs b/tests/ServerMonitorManager.Desktop.Security.Tests/UpdateServiceTests.cs
+index 3825d75..7df31b6 100644
+--- a/tests/ServerMonitorManager.Desktop.Security.Tests/UpdateServiceTests.cs
++++ b/tests/ServerMonitorManager.Desktop.Security.Tests/UpdateServiceTests.cs
+@@ -21,8 +21,8 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+ 
+     public class MockSignatureVerifier : ISignatureVerifier
+     {
+-        public Func<string, string, Task> VerifySignatureAsyncFunc { get; set; } = (_, _) => Task.CompletedTask;
+-        public Task VerifySignatureAsync(string signaturePath, string manifestPath, CancellationToken cancellationToken = default) => VerifySignatureAsyncFunc(signaturePath, manifestPath);
++        public Func<string, string, string, Task> VerifySignatureAsyncFunc { get; set; } = (_, _, _) => Task.CompletedTask;
++        public Task VerifySignatureAsync(string signaturePath, string manifestPath, string certificatePath, CancellationToken cancellationToken = default) => VerifySignatureAsyncFunc(signaturePath, manifestPath, certificatePath);
+     }
+ 
+     public class MockFileStorage : IFileStorage
+@@ -45,6 +45,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             ""assets"": [
+                 { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+                 { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
++                { ""name"": ""server-monitor-manager-manifest.pem"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.pem"" },
+                 { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
+             ]
+         }";
+@@ -59,6 +60,16 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             ]
+         }";
+ 
++        private const string NoCertificateReleaseJson = @"
++        {
++            ""tag_name"": ""v0.1.0-alpha.9"",
++            ""assets"": [
++                { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
++                { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
++                { ""name"": ""ServerMonitorManager-win-x64.msix"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/ServerMonitorManager-win-x64.msix"" }
++            ]
++        }";
++
+         private const string ValidManifestJson = @"
+         {
+             ""version"": ""v0.1.0-alpha.9"",
+@@ -101,7 +112,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             var http = new MockHttpTransport { GetStringAsyncFunc = url => Task.FromResult(url.EndsWith("releases/latest") ? ValidReleaseJson : ValidManifestJson) };
+             var verifier = new MockSignatureVerifier
+             {
+-                VerifySignatureAsyncFunc = (_, _) => throw new InvalidOperationException("Signature verification failed: identity mismatch")
++                VerifySignatureAsyncFunc = (_, _, _) => throw new InvalidOperationException("Signature verification failed: identity mismatch")
+             };
+             var storage = new MockFileStorage();
+ 
+@@ -144,7 +155,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
+ 
+             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
+-            Assert.Contains("Manifest or signature not found", ex.Message);
++            Assert.Contains("signature", ex.Message, StringComparison.OrdinalIgnoreCase);
+         }
+ 
+         [Fact]
+@@ -153,7 +164,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             var http = new MockHttpTransport { GetStringAsyncFunc = url => Task.FromResult(url.EndsWith("releases/latest") ? ValidReleaseJson : ValidManifestJson) };
+             var verifier = new MockSignatureVerifier
+             {
+-                VerifySignatureAsyncFunc = (_, _) => throw new InvalidOperationException("Signature verification failed: invalid signature format")
++                VerifySignatureAsyncFunc = (_, _, _) => throw new InvalidOperationException("Signature verification failed: invalid signature format")
+             };
+             var storage = new MockFileStorage();
+ 
+@@ -169,7 +180,7 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             bool signatureVerified = false;
+             var verifier = new MockSignatureVerifier
+             {
+-                VerifySignatureAsyncFunc = (_, _) => { signatureVerified = true; return Task.CompletedTask; }
++                VerifySignatureAsyncFunc = (_, _, _) => { signatureVerified = true; return Task.CompletedTask; }
+             };
+             var storage = new MockFileStorage();
+ 
+@@ -246,7 +257,8 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+                 ""tag_name"": ""v0.1.0-alpha.9"",
+                 ""assets"": [
+                     { ""name"": ""server-monitor-manager-manifest.json"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.json"" },
+-                    { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" }
++                    { ""name"": ""server-monitor-manager-manifest.sig"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.sig"" },
++                    { ""name"": ""server-monitor-manager-manifest.pem"", ""browser_download_url"": ""https://example.com/releases/download/v0.1.0-alpha.9/server-monitor-manager-manifest.pem"" }
+                 ]
+             }";
+             var http = new MockHttpTransport
+@@ -264,5 +276,25 @@ namespace ServerMonitorManager.Desktop.Security.Tests
+             var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
+             Assert.Contains("MSIX", ex.Message, StringComparison.OrdinalIgnoreCase);
+         }
++
++        [Fact]
++        public async Task MissingCertificateAsset_IsRejected()
++        {
++            var http = new MockHttpTransport { GetStringAsyncFunc = _ => Task.FromResult(NoCertificateReleaseJson) };
++            var service = new UpdateService(http, new MockSignatureVerifier(), new MockFileStorage());
++
++            var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => service.CheckForUpdatesAsync());
++            Assert.Contains("certificate", ex.Message, StringComparison.OrdinalIgnoreCase);
++        }
++
++        [Fact]
++        public void ProductionVerifierArguments_PinCertificateIssuerAndReleaseWorkflow()
++        {
++            var arguments = ProcessSignatureVerifier.BuildVerificationArguments("manifest.sig", "manifest.json", "manifest.pem");
++
++            Assert.Contains("--certificate \"manifest.pem\"", arguments, StringComparison.Ordinal);
++            Assert.Contains("--certificate-oidc-issuer \"https://token.actions.githubusercontent.com\"", arguments, StringComparison.Ordinal);
++            Assert.Contains("linux-release\\.yml@refs/tags/v.*$", arguments, StringComparison.Ordinal);
++        }
+     }
+ }
+diff --git a/tests/bootstrap/test-manifest-verification.sh b/tests/bootstrap/test-manifest-verification.sh
+index 535f0c7..74c8fff 100644
+--- a/tests/bootstrap/test-manifest-verification.sh
++++ b/tests/bootstrap/test-manifest-verification.sh
+@@ -34,11 +34,12 @@ cat <<EOF > server-monitor-manager-manifest.json
+ }
+ EOF
+ 
+-cosign sign-blob --yes --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
+-CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig)
++cosign sign-blob --yes --tlog-upload=false --key cosign.key --output-signature server-monitor-manager-manifest.sig server-monitor-manager-manifest.json
++printf '%s\n' 'test-key certificate placeholder' >server-monitor-manager-manifest.pem
++CLEANUP_FILES+=(server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem)
+ 
+ echo "Test 1: Valid signature and hash"
+-if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig; then
++if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem; then
+     echo "FAIL: Valid payload rejected"
+     exit 1
+ fi
+@@ -65,34 +66,30 @@ cat <<EOF > server-monitor-manager-manifest.json
+   }
+ }
+ EOF
+-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
++if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Substituted hash accepted"
+     exit 1
+ fi
+ echo "PASS: Substituted hash rejected"
+ 
+ echo "Test 4: Manifest without signature"
+-if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
++if bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Missing signature accepted"
+     exit 1
+ fi
+ echo "PASS: Missing signature rejected"
+ 
+-echo "Test 5: Real alpha.8 manifest fallback matching (REQUIRES_NETWORK)"
+-ALPHA8_ARCHIVE="ochenstarik-server-monitor-manager-linux-x64.tar.gz"
+-if ! wget -qO "$ALPHA8_ARCHIVE" https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-linux-x64.tar.gz; then
+-    echo "SKIP: Could not download alpha.8 archive (network unavailable)"
+-else
+-    wget -qO server-monitor-manager-manifest.json https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.json
+-    wget -qO server-monitor-manager-manifest.sig https://github.com/ochenstarik-ui/server-monitor-manager/releases/download/v0.1.0-alpha.8/server-monitor-manager-manifest.sig
+-    CLEANUP_FILES+=("$ALPHA8_ARCHIVE")
+-    # Use keyless verification against real Sigstore/Rekor (requires network)
+-    unset SMM_TEST_PUBKEY
+-    if ! bash deploy/ochenstarik-server-monitor-manager.sh verify-release "$ALPHA8_ARCHIVE" >/dev/null 2>&1; then
+-        echo "FAIL: Alpha.8 real release verification failed"
+-        exit 1
+-    fi
+-    echo "PASS: Alpha.8 real release verification succeeded"
++echo "Test 5: Manifest without certificate"
++unset SMM_TEST_PUBKEY
++if output="$(bash deploy/ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json server-monitor-manager-manifest.sig "" 2>&1)"; then
++    echo "FAIL: Missing certificate accepted"
++    exit 1
++fi
++if [[ "$output" != *"Certificate not found"* ]]; then
++    printf 'FAIL: Missing certificate rejection lacked diagnostic. Output: %s\n' "$output" >&2
++    exit 1
+ fi
++export SMM_TEST_PUBKEY="cosign.pub"
++echo "PASS: Missing certificate rejected with diagnostic"
+ 
+ echo "All tests passed."
+diff --git a/tests/bootstrap/test-release-contract.sh b/tests/bootstrap/test-release-contract.sh
+index e5f230b..77f0022 100644
+--- a/tests/bootstrap/test-release-contract.sh
++++ b/tests/bootstrap/test-release-contract.sh
+@@ -8,13 +8,15 @@ workflow="$root/.github/workflows/linux-release.yml"
+ windows_workflow="$root/.github/workflows/windows-release.yml"
+ policy="$root/docs/release-policy.md"
+ installer_contract="$root/docs/installer-contract.md"
++manifest_test="$root/tests/bootstrap/test-manifest-verification.sh"
++release_negative_test="$root/tests/release-verification/run-negative-tests.sh"
+ 
+ [[ -s "$setup" ]] || {
+     printf '%s\n' 'tracked production smm-setup.sh source is missing' >&2
+     exit 1
+ }
+ bash -n "$setup"
+-grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.11"' "$setup"
++grep -Fq 'readonly DEFAULT_RELEASE_TAG="v0.1.0-alpha.12"' "$setup"
+ if grep -Fq 'validate_control_url' "$setup" || grep -Fq '${CONTROL_URL%/}/control' "$setup"; then
+     printf '%s\n' 'temporary control URL workaround must not be present in smm-setup.sh' >&2
+     exit 1
+@@ -26,6 +28,15 @@ grep -Fq 'dist/smm-setup.sh' "$workflow"
+ grep -Fq "      - 'v*'" "$workflow"
+ grep -Fq 'contents: write' "$workflow"
+ grep -Fq 'softprops/action-gh-release@' "$workflow"
++grep -Fq -- '--output-certificate server-monitor-manager-manifest.pem' "$workflow"
++grep -Fq 'server-monitor-manager-manifest.pem' "$workflow"
++grep -Fq 'gh release download "$TAG" -p "server-monitor-manager-manifest.pem"' "$release_negative_test"
++grep -Fq 'server-monitor-manager-manifest.pem' "$release_negative_test"
++grep -Fq 'run_check "manifest verification contract" bash tests/bootstrap/test-manifest-verification.sh' "$workflow"
++if grep -Fq 'v0.1.0-alpha.8' "$manifest_test" || grep -Eq 'wget|curl|gh release download' "$manifest_test"; then
++    printf '%s\n' 'bootstrap manifest contract must be deterministic and must not depend on a legacy published release' >&2
++    exit 1
++fi
+ grep -Fq 'workflow_dispatch:' "$windows_workflow"
+ if grep -Eq '^[[:space:]]+tags:' "$windows_workflow"; then
+     printf '%s\n' 'Windows packaging workflow must not trigger on tags' >&2
+@@ -43,6 +54,9 @@ grep -Fq 'Published tags and release assets are immutable.' "$policy"
+ grep -Fq 'publish a new, higher version tag' "$policy"
+ grep -Fq 'Published release tags and their assets are immutable.' "$installer_contract"
+ grep -Fq 'publish a new, higher version tag' "$installer_contract"
++grep -Fq '`v0.1.0-alpha.10` and `v0.1.0-alpha.11` exist as tags, but their release pipelines failed before publication.' "$policy"
++grep -Fq 'All changes to `main` require a pull request' "$policy"
++grep -Fq '`build-and-test` and `build`' "$policy"
+ 
+ work="$(mktemp -d -t smm-setup-contract.XXXXXXXX)"
+ trap 'rm -rf -- "$work"' EXIT
+@@ -83,7 +97,7 @@ chmod +x "$work/bin/curl"
+ 
+ HOME="$work/home" PATH="$work/bin:$PATH" bash "$setup" version >"$work/output"
+ grep -Fq 'INNER_COMMAND=version' "$work/output"
+-grep -Fq '/releases/download/v0.1.0-alpha.11/ochenstarik-server-monitor-manager.sh' "$work/urls"
+-grep -Fq '/releases/download/v0.1.0-alpha.11/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
++grep -Fq '/releases/download/v0.1.0-alpha.12/ochenstarik-server-monitor-manager.sh' "$work/urls"
++grep -Fq '/releases/download/v0.1.0-alpha.12/ochenstarik-server-monitor-manager.sh.sha256' "$work/urls"
+ 
+ printf '%s\n' 'RELEASE_CONTRACT=PASS'
+diff --git a/tests/release-verification/run-negative-tests.sh b/tests/release-verification/run-negative-tests.sh
+index 64128f3..a44dde5 100644
+--- a/tests/release-verification/run-negative-tests.sh
++++ b/tests/release-verification/run-negative-tests.sh
+@@ -19,6 +19,7 @@ ARCHIVE="server-monitor-manager-linux-$(uname -m | sed -e 's/x86_64/x64/' -e 's/
+ gh release download "$TAG" -p "$ARCHIVE"
+ gh release download "$TAG" -p "server-monitor-manager-manifest.json"
+ gh release download "$TAG" -p "server-monitor-manager-manifest.sig"
++gh release download "$TAG" -p "server-monitor-manager-manifest.pem"
+ 
+ echo "Test 1: Altered byte in archive"
+ cp "$ARCHIVE" "corrupted-$ARCHIVE"
+@@ -35,7 +36,7 @@ cp server-monitor-manager-manifest.json corrupted-manifest.json
+ # Replace all hashes with zeros
+ sed -i 's/"[a-f0-9]\{64\}"/"0000000000000000000000000000000000000000000000000000000000000000"/g' corrupted-manifest.json
+ # Test verify-manifest directly
+-if ./ochenstarik-server-monitor-manager.sh verify-manifest corrupted-manifest.json server-monitor-manager-manifest.sig >/dev/null 2>&1; then
++if ./ochenstarik-server-monitor-manager.sh verify-manifest corrupted-manifest.json server-monitor-manager-manifest.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Manifest with substituted hash accepted!"
+     exit 1
+ fi
+@@ -44,7 +45,7 @@ rm corrupted-manifest.json
+ 
+ echo "Test 3: Manifest without signature"
+ # We just pass an empty string for the signature file argument
+-if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" >/dev/null 2>&1; then
++if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json "" server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Manifest without signature accepted!"
+     exit 1
+ fi
+@@ -56,7 +57,7 @@ export COSIGN_PASSWORD=""
+ cosign generate-key-pair
+ cosign sign-blob --yes --key cosign.key --output-signature fake.sig server-monitor-manager-manifest.json
+ # Verification must fail because ochenstarik-server-monitor-manager.sh enforces keyless OIDC identity!
+-if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json fake.sig >/dev/null 2>&1; then
++if ./ochenstarik-server-monitor-manager.sh verify-manifest server-monitor-manager-manifest.json fake.sig server-monitor-manager-manifest.pem >/dev/null 2>&1; then
+     echo "FAIL: Signature from wrong identity accepted!"
+     exit 1
+ fi

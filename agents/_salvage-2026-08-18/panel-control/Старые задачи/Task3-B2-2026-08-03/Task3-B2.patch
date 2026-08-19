@@ -1,0 +1,1922 @@
+diff --git a/deploy/ochenstarik-server-monitor-manager.sh b/deploy/ochenstarik-server-monitor-manager.sh
+index d6957af..d043fbc 100755
+--- a/deploy/ochenstarik-server-monitor-manager.sh
++++ b/deploy/ochenstarik-server-monitor-manager.sh
+@@ -494,6 +494,7 @@ Control__CertificateAuthorityPath=$ETC_DIR/control-ca.pfx
+ Control__BackupDirectory=$STATE_DIR/backups
+ Control__HubHelperPath=$POLICY_HELPER
+ Control__PrivilegeEscalationPath=/usr/bin/sudo
++Control__LinkReconciliationSeconds=300
+ EOF
+     printf '%s\n' "https://$public_host:$port" >"$ETC_DIR/control-public-url"
+     chown root:"$CONTROL_USER" "$ETC_DIR/control.env"
+diff --git a/deploy/ochenstarik-smm-emergency b/deploy/ochenstarik-smm-emergency
+index 51cbad9..40c0415 100755
+--- a/deploy/ochenstarik-smm-emergency
++++ b/deploy/ochenstarik-smm-emergency
+@@ -1,11 +1,14 @@
+ #!/usr/bin/env bash
+ set -Eeuo pipefail
+ IFS=$'\n\t'
++umask 077
+ 
+ readonly PROGRAM="ochenstarik-smm-emergency"
+ readonly STATE_DIR="/var/lib/ochenstarik-server-monitor-manager"
+ readonly ETC_DIR="/etc/ochenstarik-server-monitor-manager"
+ readonly MARKER="$STATE_DIR/mesh/emergency-disabled"
++readonly RECONCILE_MARKER="$STATE_DIR/mesh/reconcile-requested"
++readonly RECONCILE_LOCK="$STATE_DIR/mesh/reconcile-requested.lock"
+ readonly CONTROL_UNIT="ochenstarik-smm-control.service"
+ readonly AGENT_UNIT="ochenstarik-smm-agent.service"
+ readonly FIREWALL_UNIT="ochenstarik-smm-firewall.service"
+@@ -71,6 +74,25 @@ delete_project_firewall() {
+     fi
+ }
+ 
++request_reconciliation() {
++    local marker_directory temporary_marker generation
++    marker_directory="$(dirname "$RECONCILE_MARKER")"
++    install -d -o root -g root -m 0700 "$marker_directory"
++    exec 9>"$RECONCILE_LOCK"
++    chown root:root "$RECONCILE_LOCK"
++    chmod 0600 "$RECONCILE_LOCK"
++    /usr/bin/flock -x 9
++    generation="$(</proc/sys/kernel/random/uuid)"
++    temporary_marker="$(mktemp "$marker_directory/.reconcile-requested.XXXXXXXX")"
++    if ! printf '%s\n' "$generation" >"$temporary_marker" \
++        || ! chown root:root "$temporary_marker" \
++        || ! chmod 0600 "$temporary_marker" \
++        || ! mv -f -- "$temporary_marker" "$RECONCILE_MARKER"; then
++        rm -f -- "$temporary_marker"
++        fail "could not create the Link reconciliation request"
++    fi
++}
++
+ mesh_disable() {
+     require_root
+     systemctl disable --now "$WIREGUARD_UNIT" 2>/dev/null || true
+@@ -97,6 +119,7 @@ restore_project_firewall() {
+     if systemctl list-unit-files "$FIREWALL_UNIT" --no-legend 2>/dev/null | grep -q "^$FIREWALL_UNIT"; then
+         systemctl enable "$FIREWALL_UNIT" >/dev/null
+     fi
++    request_reconciliation
+     log "Base deny-by-default Mesh firewall restored; Control must reconcile active Links."
+ }
+ 
+@@ -108,6 +131,7 @@ mesh_enable() {
+     fi
+     systemctl enable "$WIREGUARD_UNIT" >/dev/null
+     systemctl restart "$WIREGUARD_UNIT"
++    request_reconciliation
+     rm -f -- "$MARKER"
+     log "Mesh enabled locally."
+ }
+diff --git a/deploy/ochenstarik-smm-policy-apply b/deploy/ochenstarik-smm-policy-apply
+index 557e01e..87b3392 100755
+--- a/deploy/ochenstarik-smm-policy-apply
++++ b/deploy/ochenstarik-smm-policy-apply
+@@ -1,23 +1,33 @@
+ #!/usr/bin/env bash
+ set -Eeuo pipefail
+ IFS=$'\n\t'
++export LC_ALL=C
++umask 077
+ 
+ readonly TABLE_FAMILY="inet"
+ readonly TABLE_NAME="ochenstarik_smm"
+ readonly CHAIN_NAME="links"
+ 
+ fail() { printf '%s\n' "policy helper: $*" >&2; exit 78; }
++firewall_unavailable() { printf '%s\n' "mesh.firewall-unavailable" >&2; exit 79; }
+ 
+ testing="${SMM_POLICY_TESTING:-0}"
+ if [[ "$testing" != "1" ]]; then
+     [[ ${EUID:-$(id -u)} -eq 0 ]] || fail "root is required"
+     readonly STATE_FILE="/var/lib/ochenstarik-server-monitor-manager/mesh/nodes.tsv"
++    readonly RECONCILE_MARKER="/var/lib/ochenstarik-server-monitor-manager/mesh/reconcile-requested"
++    readonly RECONCILE_LOCK="/var/lib/ochenstarik-server-monitor-manager/mesh/reconcile-requested.lock"
++    readonly FLOCK_COMMAND="/usr/bin/flock"
+ else
+-    readonly STATE_FILE="${SMM_POLICY_STATE_FILE:?SMM_POLICY_STATE_FILE is required in testing mode}"
++    readonly STATE_FILE="${SMM_POLICY_STATE_FILE:-/dev/null}"
++    readonly RECONCILE_MARKER="${SMM_POLICY_RECONCILE_MARKER:-${TMPDIR:-/tmp}/smm-policy-reconcile-requested}"
++    readonly RECONCILE_LOCK="${SMM_POLICY_RECONCILE_LOCK:-${RECONCILE_MARKER}.lock}"
++    readonly FLOCK_COMMAND="${SMM_POLICY_FLOCK:-/usr/bin/flock}"
+ fi
+ 
+ node_pattern='^[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?$'
+ ipv4_pattern='^([0-9]{1,3}\.){3}[0-9]{1,3}$'
++generation_pattern='^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+ 
+ validate_node_id() {
+     [[ "$1" =~ $node_pattern ]] || fail "invalid node id"
+@@ -59,20 +69,38 @@ run_nft() {
+     fi
+ }
+ 
+-rule_exists() {
+-    local comment="$1" listing
++inspect_firewall() {
++    local listing
+     if [[ "$testing" == "1" ]]; then
+-        return 1
++        [[ "${SMM_POLICY_FIREWALL_UNAVAILABLE:-0}" != "1" ]] || firewall_unavailable
++        [[ -z "${SMM_POLICY_FIREWALL_ERROR:-}" ]] \
++            || fail "could not inspect nftables Link policy: $SMM_POLICY_FIREWALL_ERROR"
++        return 0
++    fi
++    if listing="$(/usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME" 2>&1)"; then
++        printf '%s\n' "$listing"
++        return 0
+     fi
+-    if ! listing="$(/usr/sbin/nft -a list chain "$TABLE_FAMILY" "$TABLE_NAME" "$CHAIN_NAME")"; then
+-        fail "could not inspect nftables Link policy"
++    if grep -Eiq 'No such file or directory|does not exist' <<<"$listing"; then
++        firewall_unavailable
+     fi
++    fail "could not inspect nftables Link policy: ${listing%%$'\n'*}"
++}
++
++ensure_firewall_available() {
++    inspect_firewall >/dev/null
++}
++
++rule_exists() {
++    local comment="$1" listing
++    listing="$(inspect_firewall)"
+     grep -Fq "comment \"$comment\"" <<<"$listing"
+ }
+ 
+ connect_rule() {
+     local source_id="$1" target_id="$2" protocol="$3" port="$4"
+     local source_ip target_ip comment
++    ensure_firewall_available
+     source_ip="$(lookup_node_ip "$source_id")"
+     target_ip="$(lookup_node_ip "$target_id")"
+     comment="smm:${source_id}:${target_id}:${protocol}:${port}"
+@@ -84,6 +112,7 @@ connect_rule() {
+ 
+ disconnect_rule() {
+     local source_id="$1" target_id="$2" protocol="$3" port="$4" comment handle
++    ensure_firewall_available
+     # Resolve both identities before touching firewall state.
+     lookup_node_ip "$source_id" >/dev/null
+     lookup_node_ip "$target_id" >/dev/null
+@@ -104,6 +133,7 @@ disconnect_rule() {
+ 
+ status_rule() {
+     local source_id="$1" target_id="$2" protocol="$3" port="$4" comment
++    ensure_firewall_available
+     # A status is meaningful only for identities currently known to the mesh.
+     lookup_node_ip "$source_id" >/dev/null
+     lookup_node_ip "$target_id" >/dev/null
+@@ -115,7 +145,49 @@ status_rule() {
+     fi
+ }
+ 
++reconcile_status() {
++    local generation
++    exec 9>"$RECONCILE_LOCK"
++    chmod 0600 "$RECONCILE_LOCK"
++    "$FLOCK_COMMAND" -x 9
++    if [[ ! -f "$RECONCILE_MARKER" ]]; then
++        printf '%s\n' complete
++        return
++    fi
++    IFS= read -r generation <"$RECONCILE_MARKER" || fail "invalid reconciliation marker"
++    [[ "$generation" =~ $generation_pattern ]] || fail "invalid reconciliation marker"
++    printf 'requested:%s\n' "$generation"
++}
++
++reconcile_complete() {
++    local expected_generation="$1" current_generation=''
++    [[ "$expected_generation" =~ $generation_pattern ]] || fail "invalid reconciliation generation"
++    exec 9>"$RECONCILE_LOCK"
++    chmod 0600 "$RECONCILE_LOCK"
++    "$FLOCK_COMMAND" -x 9
++    if [[ -f "$RECONCILE_MARKER" ]]; then
++        IFS= read -r current_generation <"$RECONCILE_MARKER" || fail "invalid reconciliation marker"
++        [[ "$current_generation" =~ $generation_pattern ]] || fail "invalid reconciliation marker"
++        if [[ "$current_generation" == "$expected_generation" ]]; then
++            rm -f -- "$RECONCILE_MARKER"
++        fi
++    fi
++    printf '%s\n' complete
++}
++
+ action="${1:-}"
++case "$action" in
++    reconcile-status)
++        [[ $# -eq 1 ]] || fail "invalid reconcile-status argument count"
++        reconcile_status
++        exit 0
++        ;;
++    reconcile-complete)
++        [[ $# -eq 2 ]] || fail "invalid reconcile-complete argument count"
++        reconcile_complete "$2"
++        exit 0
++        ;;
++esac
+ validate_rule "$@"
+ case "$action" in
+     link-connect) connect_rule "$2" "$3" "$4" "$5" ;;
+diff --git a/docs/linux-bootstrap.md b/docs/linux-bootstrap.md
+index 13e73c3..47566f8 100644
+--- a/docs/linux-bootstrap.md
++++ b/docs/linux-bootstrap.md
+@@ -108,4 +108,4 @@ sudo ochenstarik-smm-emergency firewall-restore
+ sudo ochenstarik-smm-emergency mesh-enable
+ ```
+ 
+-`mesh-disable` останавливает WireGuard, удаляет только таблицу `inet ochenstarik_smm` и ставит локальный emergency marker, не останавливая Control, Agent или SSH. `firewall-restore` восстанавливает базовую политику deny-by-default; разрешающие Link-правила после этого должен повторно применить Control. Если firewall не удаётся восстановить, команда отключает Mesh для fail-closed результата. `mesh-enable` запускайте только после проверки конфигурации и доступности Hub.
++`mesh-disable` останавливает WireGuard, удаляет только таблицу `inet ochenstarik_smm` и ставит локальный emergency marker, не останавливая Control, Agent или SSH. `firewall-restore` восстанавливает базовую политику deny-by-default и атомарно создаёт root-only запрос реконсиляции с уникальным generation. Control немедленно выполняет первый фоновый проход после старта, затем сверяет все действующие Link-политики не реже настроенного интервала `Control__LinkReconciliationSeconds` (по умолчанию 300 секунд). Новый marker запускает внеочередной проход на следующем poll tick, но не обходит backoff недоступного firewall. Helper удаляет только тот generation, который был прочитан перед успешно завершившимся проходом; более новый запрос сохраняется. При недоступной таблице запрос остаётся для retry с backoff, а Desktop показывает единый баннер «Mesh firewall не загружен». Если firewall не удаётся восстановить, команда отключает Mesh для fail-closed результата. `mesh-enable` также создаёт запрос реконсиляции; запускайте его только после проверки конфигурации и доступности Hub.
+diff --git a/docs/roadmap.md b/docs/roadmap.md
+index b6bf159..da161fc 100644
+--- a/docs/roadmap.md
++++ b/docs/roadmap.md
+@@ -57,6 +57,8 @@
+ - [x] обязательное восстановление disabled policy после reconnect;
+ - [x] append-only audit операций Link;
+ - [x] интеграционные тесты kill switch, process restart и helper failure;
++- [x] B-2: независимая фоновая и emergency-triggered реконсиляция, агрегированное состояние недоступного Mesh firewall и Desktop banner;
++- [ ] B-3: развести результат реконсиляции на `Examined` / `Converged` / `Failed` (M2), выбрать фильтр или retention завершённых Disabled-политик (M4) и типизировать ещё не активированный Mesh Node (M5). Эти изменения вынесены отдельно, потому что меняют API/UI semantics и helper classification, тогда как B-2 ограничен восстановлением фактических правил и общим firewall failure;
+ - [ ] выполнить физический acceptance Hub + source Node + два destination Node с WireGuard/nftables/reboot.
+ 
+ ## Этап 4 — мониторинг и терминал
+diff --git a/src/ServerMonitorManager.Control/ControlOptions.cs b/src/ServerMonitorManager.Control/ControlOptions.cs
+index 090369c..3db0896 100644
+--- a/src/ServerMonitorManager.Control/ControlOptions.cs
++++ b/src/ServerMonitorManager.Control/ControlOptions.cs
+@@ -24,6 +24,8 @@ public sealed class ControlOptions
+ 
+     public int LinkExpirationPollSeconds { get; init; } = 15;
+ 
++    public int LinkReconciliationSeconds { get; init; } = 300;
++
+     public string BackupDirectory { get; init; } = "/var/lib/ochenstarik-server-monitor-manager/backups";
+ 
+     public int BackupIntervalHours { get; init; } = 24;
+diff --git a/src/ServerMonitorManager.Control/ControlStore.cs b/src/ServerMonitorManager.Control/ControlStore.cs
+index 469294a..f970fe9 100644
+--- a/src/ServerMonitorManager.Control/ControlStore.cs
++++ b/src/ServerMonitorManager.Control/ControlStore.cs
+@@ -1353,6 +1353,17 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
+         return link;
+     }
+ 
++    public async Task<LinkPolicy?> GetLinkAsync(
++        string id,
++        CancellationToken cancellationToken = default)
++    {
++        await using var connection = await OpenAsync(cancellationToken);
++        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
++        var link = await ReadLinkAsync(connection, transaction, id, cancellationToken);
++        await transaction.CommitAsync(cancellationToken);
++        return link;
++    }
++
+     public async Task<IReadOnlyList<LinkPolicy>> ListLinksAsync(CancellationToken cancellationToken = default)
+     {
+         var result = new List<LinkPolicy>();
+@@ -1367,6 +1378,57 @@ public sealed partial class ControlStore(IOptions<ControlOptions> options)
+         return result;
+     }
+ 
++    public async Task<IReadOnlyList<LinkPolicy>> ListEffectiveLinksAsync(
++        CancellationToken cancellationToken = default)
++    {
++        var result = new List<LinkPolicy>();
++        await using var connection = await OpenAsync(cancellationToken);
++        var command = connection.CreateCommand();
++        command.CommandText = """
++            SELECT current.*
++            FROM links AS current
++            WHERE (current.desired_state = 'Active'
++                   OR (current.desired_state = 'Disabled' AND current.actual_state != 'Disabled'))
++              AND NOT EXISTS (
++                  SELECT 1 FROM links AS newer
++                  WHERE newer.source_node_id = current.source_node_id
++                    AND newer.target_node_id = current.target_node_id
++                    AND newer.protocol = current.protocol
++                    AND newer.port = current.port
++                    AND newer.version > current.version)
++            ORDER BY current.version;
++            """;
++        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
++        while (await reader.ReadAsync(cancellationToken))
++        {
++            result.Add(ReadLink(reader));
++        }
++        return result;
++    }
++
++    public async Task<bool> IsEffectiveLinkAsync(
++        LinkPolicy link,
++        CancellationToken cancellationToken = default)
++    {
++        await using var connection = await OpenAsync(cancellationToken);
++        var command = connection.CreateCommand();
++        command.CommandText = """
++            SELECT NOT EXISTS(
++                SELECT 1 FROM links
++                WHERE source_node_id = $source
++                  AND target_node_id = $target
++                  AND protocol = $protocol
++                  AND port = $port
++                  AND version > $version);
++            """;
++        command.Parameters.AddWithValue("$source", link.SourceNodeId);
++        command.Parameters.AddWithValue("$target", link.TargetNodeId);
++        command.Parameters.AddWithValue("$protocol", link.Protocol);
++        command.Parameters.AddWithValue("$port", link.Port);
++        command.Parameters.AddWithValue("$version", link.Version);
++        return Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken)) == 1;
++    }
++
+     public async Task<IReadOnlyList<LinkPolicy>> ListExpiredLinksAsync(
+         DateTimeOffset now,
+         CancellationToken cancellationToken = default)
+diff --git a/src/ServerMonitorManager.Control/LinkPolicyApplier.cs b/src/ServerMonitorManager.Control/LinkPolicyApplier.cs
+index 184f636..106a948 100644
+--- a/src/ServerMonitorManager.Control/LinkPolicyApplier.cs
++++ b/src/ServerMonitorManager.Control/LinkPolicyApplier.cs
+@@ -9,6 +9,17 @@ public interface ILinkPolicyApplier
+     Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken);
+     Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken);
+     Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken);
++    Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
++        => Task.FromResult<string?>(null);
++    Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
++        => Task.CompletedTask;
++}
++
++public sealed class MeshFirewallUnavailableException : InvalidOperationException
++{
++    public MeshFirewallUnavailableException(string message) : base(message)
++    {
++    }
+ }
+ 
+ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkPolicyApplier
+@@ -55,6 +66,24 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
+         };
+     }
+ 
++    public async Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
++        => await RunAsync(["reconcile-status"], cancellationToken) switch
++        {
++            "complete" => null,
++            var status when status.StartsWith("requested:", StringComparison.Ordinal)
++                && Guid.TryParseExact(status[10..], "D", out _) => status[10..],
++            _ => throw new InvalidOperationException("Hub policy helper returned an invalid reconciliation marker status.")
++        };
++
++    public async Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
++    {
++        if (!Guid.TryParseExact(generation, "D", out _))
++        {
++            throw new ArgumentException("Invalid reconciliation generation.", nameof(generation));
++        }
++        _ = await RunAsync(["reconcile-complete", generation], cancellationToken);
++    }
++
+     private async Task<string> RunAsync(IReadOnlyList<string> arguments, CancellationToken cancellationToken)
+     {
+         var startInfo = new ProcessStartInfo
+@@ -80,6 +109,11 @@ public sealed class LinkPolicyApplier(IOptions<ControlOptions> options) : ILinkP
+         if (process.ExitCode != 0)
+         {
+             var message = (await error).Trim();
++            if (process.ExitCode == 79
++                && string.Equals(message, LinkService.FirewallUnavailableCode, StringComparison.Ordinal))
++            {
++                throw new MeshFirewallUnavailableException(LinkService.FirewallUnavailableCode);
++            }
+             throw new InvalidOperationException(string.IsNullOrWhiteSpace(message)
+                 ? $"Hub policy helper exited with code {process.ExitCode}."
+                 : message);
+diff --git a/src/ServerMonitorManager.Control/LinkReconciliationBackgroundService.cs b/src/ServerMonitorManager.Control/LinkReconciliationBackgroundService.cs
+new file mode 100644
+index 0000000..ac7abe5
+--- /dev/null
++++ b/src/ServerMonitorManager.Control/LinkReconciliationBackgroundService.cs
+@@ -0,0 +1,96 @@
++using Microsoft.Extensions.Options;
++
++namespace ServerMonitorManager.Control;
++
++public sealed class LinkReconciliationBackgroundService(
++    LinkService links,
++    ILinkPolicyApplier applier,
++    IOptions<ControlOptions> options,
++    TimeProvider timeProvider,
++    ILogger<LinkReconciliationBackgroundService> logger) : BackgroundService
++{
++    private readonly SemaphoreSlim _passGate = new(1, 1);
++    private DateTimeOffset? _nextRegularAt;
++    private DateTimeOffset? _backoffUntil;
++    private int _unavailableAttempts;
++
++    internal async Task<LinkFullReconciliationResult?> RunOnceAsync(
++        CancellationToken cancellationToken = default)
++    {
++        await _passGate.WaitAsync(cancellationToken);
++        try
++        {
++            var now = timeProvider.GetUtcNow();
++            string? requestGeneration = null;
++            try
++            {
++                requestGeneration = await applier.GetReconciliationRequestAsync(cancellationToken);
++            }
++            catch (Exception exception) when (exception is not OperationCanceledException)
++            {
++                logger.LogWarning(exception, "Could not inspect the Link reconciliation marker.");
++            }
++            if (_backoffUntil is not null && now < _backoffUntil)
++            {
++                return null;
++            }
++            if (requestGeneration is null && _nextRegularAt is not null && now < _nextRegularAt)
++            {
++                return null;
++            }
++
++            var result = await links.ReconcileAllAsync(cancellationToken);
++            var interval = TimeSpan.FromSeconds(options.Value.LinkReconciliationSeconds);
++            if (result.FirewallUnavailable)
++            {
++                _unavailableAttempts = Math.Min(_unavailableAttempts + 1, 4);
++                _backoffUntil = now + TimeSpan.FromTicks(interval.Ticks * _unavailableAttempts);
++            }
++            else
++            {
++                _unavailableAttempts = 0;
++                _backoffUntil = null;
++                _nextRegularAt = now + interval;
++                if (requestGeneration is not null && result.Failed == 0)
++                {
++                    await applier.CompleteReconciliationAsync(requestGeneration, cancellationToken);
++                }
++            }
++            return result;
++        }
++        finally
++        {
++            _passGate.Release();
++        }
++    }
++
++    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
++    {
++        var pollSeconds = Math.Min(options.Value.LinkReconciliationSeconds, 30);
++        using var timer = new PeriodicTimer(TimeSpan.FromSeconds(pollSeconds), timeProvider);
++        do
++        {
++            try
++            {
++                var result = await RunOnceAsync(stoppingToken);
++                if (result is not null)
++                {
++                    logger.LogInformation(
++                        "Link reconciliation completed: {Examined} examined, {Failed} failed, firewall unavailable: {Unavailable}.",
++                        result.Examined,
++                        result.Failed,
++                        result.FirewallUnavailable);
++                }
++            }
++            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
++            {
++                break;
++            }
++            catch (Exception exception)
++            {
++                logger.LogError(exception, "Link reconciliation failed.");
++            }
++        }
++        while (await timer.WaitForNextTickAsync(stoppingToken));
++    }
++}
+diff --git a/src/ServerMonitorManager.Control/LinkService.cs b/src/ServerMonitorManager.Control/LinkService.cs
+index d9b5980..e76176a 100644
+--- a/src/ServerMonitorManager.Control/LinkService.cs
++++ b/src/ServerMonitorManager.Control/LinkService.cs
+@@ -9,6 +9,8 @@ public sealed class LinkService(
+     ILinkPolicyApplier applier,
+     ControlEventBroker events)
+ {
++    public const string FirewallUnavailableCode = "mesh.firewall-unavailable";
++    public const string FirewallAvailableCode = "mesh.firewall-available";
+     private readonly ConcurrentDictionary<string, SemaphoreSlim> _reconciliationLocks = new();
+     private readonly ConcurrentDictionary<string, SemaphoreSlim> _nodeLocks = new();
+ 
+@@ -25,35 +27,20 @@ public sealed class LinkService(
+         {
+             return link;
+         }
+-        var gate = _reconciliationLocks.GetOrAdd(link.Id, static _ => new SemaphoreSlim(1, 1));
+-        await gate.WaitAsync(cancellationToken);
++        var gate = await AcquireLinkGateAsync(link.Id, cancellationToken);
+         try
+         {
+-            var current = (await store.ListLinksAsync(cancellationToken))
+-                .SingleOrDefault(candidate => candidate.Id == link.Id)
++            var current = await store.GetLinkAsync(link.Id, cancellationToken)
+                 ?? throw new InvalidOperationException("The persisted Link disappeared.");
+-            if (current.DesiredState != "Active")
++            if (current.DesiredState != "Active" || !await store.IsEffectiveLinkAsync(current, cancellationToken))
+             {
+                 return current;
+             }
+-            link = current;
+-            Publish("link.connecting", link);
+-            try
++            if (!mutation.IsReplay)
+             {
+-                await applier.ApplyConnectAsync(link, cancellationToken);
+-                await VerifyFactualStateAsync(link, expectedConnected: true, cancellationToken);
+-                link = await store.SetLinkActualStateAsync(link.Id, "Active", null, actor, cancellationToken)
+-                    ?? throw new InvalidOperationException("The persisted Link disappeared.");
+-                Publish("link.active", link);
++                Publish("link.connecting", current);
+             }
+-            catch (Exception exception) when (exception is not OperationCanceledException)
+-            {
+-                link = await store.SetLinkActualStateAsync(
+-                        link.Id, "Failed", CompactError(exception), actor, cancellationToken)
+-                    ?? link;
+-                Publish("link.failed", link);
+-            }
+-            return link;
++            return await ConvergeAsync(current, expectedConnected: true, actor, cancellationToken);
+         }
+         finally
+         {
+@@ -67,8 +54,7 @@ public sealed class LinkService(
+         string actor,
+         CancellationToken cancellationToken)
+     {
+-        var gate = _reconciliationLocks.GetOrAdd(id, static _ => new SemaphoreSlim(1, 1));
+-        await gate.WaitAsync(cancellationToken);
++        var gate = await AcquireLinkGateAsync(id, cancellationToken);
+         try
+         {
+             return await DisableCoreAsync(id, request, actor, cancellationToken);
+@@ -99,7 +85,7 @@ public sealed class LinkService(
+         {
+             Publish("link.disconnecting", link);
+         }
+-        return await ConvergeDisabledCoreAsync(link, actor, cancellationToken);
++        return await ConvergeAsync(link, expectedConnected: false, actor, cancellationToken);
+     }
+ 
+     internal async Task<LinkPolicy> ConvergeDisabledAsync(
+@@ -107,11 +93,10 @@ public sealed class LinkService(
+         string actor,
+         CancellationToken cancellationToken)
+     {
+-        var gate = _reconciliationLocks.GetOrAdd(link.Id, static _ => new SemaphoreSlim(1, 1));
+-        await gate.WaitAsync(cancellationToken);
++        var gate = await AcquireLinkGateAsync(link.Id, cancellationToken);
+         try
+         {
+-            return await ConvergeDisabledCoreAsync(link, actor, cancellationToken);
++            return await ConvergeAsync(link, expectedConnected: false, actor, cancellationToken);
+         }
+         finally
+         {
+@@ -130,61 +115,94 @@ public sealed class LinkService(
+         {
+             using var nodeLease = await AcquireNodeLocksAsync(
+                 [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
+-            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
+-            await gate.WaitAsync(cancellationToken);
++            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
+             try
+             {
+-                var current = (await store.ListEffectiveLinksForNodeAsync(nodeId, cancellationToken))
+-                    .SingleOrDefault(link => link.Id == candidate.Id);
+-                if (current is null)
++                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
++                if (current is null || (current.SourceNodeId != nodeId && current.TargetNodeId != nodeId))
+                 {
+                     continue;
+                 }
++                var result = await ConvergeAsync(
++                    current,
++                    current.DesiredState == "Active",
++                    $"system:reconnect:{nodeId}",
++                    cancellationToken);
++                reconciled++;
++                if (result.ActualState is "Failed" or "Partial")
++                {
++                    failed++;
++                }
++            }
++            finally
++            {
++                gate.Release();
++            }
++        }
++        return new LinkReconciliationResult(reconciled, failed);
++    }
+ 
+-                var actor = $"system:reconnect:{nodeId}";
+-                var expectedConnected = current.DesiredState == "Active";
+-                var pendingState = expectedConnected ? "Connecting" : "Disconnecting";
+-                var completedState = expectedConnected ? "Active" : "Disabled";
+-                var completedEvent = expectedConnected ? "link.active" : "link.disabled";
+-                var failureState = expectedConnected ? "Failed" : "Partial";
+-                var failureEvent = expectedConnected ? "link.failed" : "link.partial";
+-                var link = await store.SetLinkActualStateAsync(
+-                    current.Id, pendingState, null, actor, cancellationToken) ?? current;
+-                Publish("link.reconciling", link);
+-                try
++    public async Task<LinkFullReconciliationResult> ReconcileAllAsync(
++        CancellationToken cancellationToken = default)
++    {
++        var candidates = await store.ListEffectiveLinksAsync(cancellationToken);
++        var recoveringFirewall = candidates.Any(candidate =>
++            string.Equals(candidate.LastError, FirewallUnavailableCode, StringComparison.Ordinal));
++        var examined = 0;
++        var failed = 0;
++        var firewallUnavailable = false;
++        foreach (var candidate in candidates)
++        {
++            using var nodeLease = await AcquireNodeLocksAsync(
++                [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
++            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
++            try
++            {
++                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
++                if (current is null || !IsEligibleForFullReconciliation(current))
++                {
++                    continue;
++                }
++                var result = await ConvergeAsync(
++                    current, current.DesiredState == "Active", "system:reconcile", cancellationToken);
++                examined++;
++                if (result.LastError == FirewallUnavailableCode)
+                 {
+-                    var isConnected = await applier.IsConnectedAsync(link, cancellationToken);
+-                    if (isConnected != expectedConnected)
+-                    {
+-                        if (expectedConnected)
+-                        {
+-                            await applier.ApplyConnectAsync(link, cancellationToken);
+-                        }
+-                        else
+-                        {
+-                            await applier.ApplyDisconnectAsync(link, cancellationToken);
+-                        }
+-                        await VerifyFactualStateAsync(link, expectedConnected, cancellationToken);
+-                    }
+-                    link = await store.SetLinkActualStateAsync(
+-                        link.Id, completedState, null, actor, cancellationToken) ?? link;
+-                    Publish(completedEvent, link);
++                    firewallUnavailable = true;
+                 }
+-                catch (Exception exception) when (exception is not OperationCanceledException)
++                else if (result.ActualState is "Failed" or "Partial")
+                 {
+-                    link = await store.SetLinkActualStateAsync(
+-                        link.Id, failureState, CompactError(exception), actor, cancellationToken) ?? link;
+-                    Publish(failureEvent, link);
+                     failed++;
+                 }
+-                reconciled++;
+             }
+             finally
+             {
+                 gate.Release();
+             }
++            if (firewallUnavailable)
++            {
++                break;
++            }
+         }
+-        return new LinkReconciliationResult(reconciled, failed);
++        if (firewallUnavailable)
++        {
++            await MarkFirewallUnavailableAsync(candidates, cancellationToken);
++            events.Publish(
++                FirewallUnavailableCode,
++                "mesh",
++                JsonSerializer.Serialize(
++                    new ControlError(FirewallUnavailableCode), SmmJsonContext.Default.ControlError));
++            return new LinkFullReconciliationResult(examined, candidates.Count, true);
++        }
++        if (recoveringFirewall)
++        {
++            events.Publish(
++                FirewallAvailableCode,
++                "mesh",
++                JsonSerializer.Serialize(
++                    new ControlError(FirewallAvailableCode), SmmJsonContext.Default.ControlError));
++        }
++        return new LinkFullReconciliationResult(examined, failed, false);
+     }
+ 
+     public async Task<LinkExpirationResult> ExpireDueLinksAsync(
+@@ -196,53 +214,36 @@ public sealed class LinkService(
+         var links = await store.ListExpiredLinksAsync(now, cancellationToken);
+         foreach (var candidate in links)
+         {
+-            var gate = _reconciliationLocks.GetOrAdd(candidate.Id, static _ => new SemaphoreSlim(1, 1));
+-            await gate.WaitAsync(cancellationToken);
++            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
+             try
+             {
+-                var current = (await store.ListExpiredLinksAsync(now, cancellationToken))
+-                    .SingleOrDefault(link => link.Id == candidate.Id);
+-                if (current is null)
++                var current = await store.GetLinkAsync(candidate.Id, cancellationToken);
++                if (current is null || current.ExpiresAt is null || current.ExpiresAt > now
++                    || !await store.IsEffectiveLinkAsync(current, cancellationToken))
+                 {
+                     continue;
+                 }
+-
++                LinkPolicy? result;
+                 if (current.DesiredState == "Active")
+                 {
+-                    var result = await DisableCoreAsync(
++                    result = await DisableCoreAsync(
+                         current.Id,
+                         new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
+                         "system:ttl",
+                         cancellationToken);
+-                    if (result?.ActualState == "Disabled")
+-                    {
+-                        disabled++;
+-                    }
+-                    else
+-                    {
+-                        failed++;
+-                    }
+-                    continue;
+                 }
+-
+-                var retrying = await store.SetLinkActualStateAsync(
+-                    current.Id, "Disconnecting", null, "system:ttl-retry", cancellationToken) ?? current;
+-                Publish("link.disconnecting", retrying);
+-                try
++                else
++                {
++                    Publish("link.disconnecting", current);
++                    result = await ConvergeAsync(
++                        current, expectedConnected: false, "system:ttl-retry", cancellationToken);
++                }
++                if (result?.ActualState == "Disabled")
+                 {
+-                    await applier.ApplyDisconnectAsync(retrying, cancellationToken);
+-                    await VerifyFactualStateAsync(retrying, expectedConnected: false, cancellationToken);
+-                    var completed = await store.SetLinkActualStateAsync(
+-                        retrying.Id, "Disabled", null, "system:ttl-retry", cancellationToken) ?? retrying;
+-                    Publish("link.disabled", completed);
+                     disabled++;
+                 }
+-                catch (Exception exception) when (exception is not OperationCanceledException)
++                else
+                 {
+-                    var partial = await store.SetLinkActualStateAsync(
+-                        retrying.Id, "Partial", CompactError(exception), "system:ttl-retry", cancellationToken)
+-                        ?? retrying;
+-                    Publish("link.partial", partial);
+                     failed++;
+                 }
+             }
+@@ -254,6 +255,119 @@ public sealed class LinkService(
+         return new LinkExpirationResult(disabled, failed);
+     }
+ 
++    private async Task<LinkPolicy> ConvergeAsync(
++        LinkPolicy link,
++        bool expectedConnected,
++        string actor,
++        CancellationToken cancellationToken)
++    {
++        var current = await store.GetLinkAsync(link.Id, cancellationToken) ?? link;
++        if ((current.DesiredState == "Active") != expectedConnected
++            || !await store.IsEffectiveLinkAsync(current, cancellationToken))
++        {
++            return current;
++        }
++
++        var completedState = expectedConnected ? "Active" : "Disabled";
++        var failureState = expectedConnected ? "Failed" : "Partial";
++        var completedEvent = expectedConnected ? "link.active" : "link.disabled";
++        var failureEvent = expectedConnected ? "link.failed" : "link.partial";
++        try
++        {
++            var isConnected = await applier.IsConnectedAsync(current, cancellationToken);
++            var changedFact = isConnected != expectedConnected;
++            if (changedFact)
++            {
++                var pendingState = expectedConnected ? "Connecting" : "Disconnecting";
++                if (current.ActualState != pendingState || current.LastError is not null)
++                {
++                    current = await store.SetLinkActualStateAsync(
++                        current.Id, pendingState, null, actor, cancellationToken) ?? current;
++                }
++                if (actor.StartsWith("system:", StringComparison.Ordinal))
++                {
++                    Publish("link.reconciling", current);
++                }
++                if (expectedConnected)
++                {
++                    await applier.ApplyConnectAsync(current, cancellationToken);
++                }
++                else
++                {
++                    await applier.ApplyDisconnectAsync(current, cancellationToken);
++                }
++                await VerifyFactualStateAsync(current, expectedConnected, cancellationToken);
++            }
++            if (current.ActualState != completedState || current.LastError is not null)
++            {
++                current = await store.SetLinkActualStateAsync(
++                    current.Id, completedState, null, actor, cancellationToken) ?? current;
++                Publish(completedEvent, current);
++            }
++            if (changedFact && actor == "system:reconcile")
++            {
++                Publish(expectedConnected ? "link.reapplied" : "link.orphan-removed", current);
++            }
++        }
++        catch (MeshFirewallUnavailableException)
++        {
++            current = await store.SetLinkActualStateAsync(
++                current.Id, failureState, FirewallUnavailableCode, actor, cancellationToken) ?? current;
++            if (actor != "system:reconcile")
++            {
++                Publish(failureEvent, current);
++            }
++        }
++        catch (Exception exception) when (exception is not OperationCanceledException)
++        {
++            current = await store.SetLinkActualStateAsync(
++                current.Id, failureState, CompactError(exception), actor, cancellationToken) ?? current;
++            Publish(failureEvent, current);
++        }
++        return current;
++    }
++
++    private async Task<LinkPolicy?> GetCurrentEffectiveAsync(
++        string id,
++        CancellationToken cancellationToken)
++    {
++        var current = await store.GetLinkAsync(id, cancellationToken);
++        if (current is null || !await store.IsEffectiveLinkAsync(current, cancellationToken))
++        {
++            return null;
++        }
++        return current;
++    }
++
++    private async Task MarkFirewallUnavailableAsync(
++        IReadOnlyList<LinkPolicy> candidates,
++        CancellationToken cancellationToken)
++    {
++        foreach (var candidate in candidates)
++        {
++            using var nodeLease = await AcquireNodeLocksAsync(
++                [candidate.SourceNodeId, candidate.TargetNodeId], cancellationToken);
++            var gate = await AcquireLinkGateAsync(candidate.Id, cancellationToken);
++            try
++            {
++                var current = await GetCurrentEffectiveAsync(candidate.Id, cancellationToken);
++                if (current is not null && IsEligibleForFullReconciliation(current))
++                {
++                    await store.SetLinkActualStateAsync(
++                        current.Id, "Partial", FirewallUnavailableCode, "system:reconcile", cancellationToken);
++                }
++            }
++            finally
++            {
++                gate.Release();
++            }
++        }
++    }
++
++    private static bool IsEligibleForFullReconciliation(LinkPolicy link)
++        => link.DesiredState == "Active"
++            || (link.DesiredState == "Disabled" && link.ActualState != "Disabled");
++
+     private void Publish(string type, LinkPolicy link)
+         => events.Publish(
+             type,
+@@ -289,38 +403,13 @@ public sealed class LinkService(
+         }
+     }
+ 
+-    private async Task<LinkPolicy> ConvergeDisabledCoreAsync(
+-        LinkPolicy link,
+-        string actor,
++    private async Task<SemaphoreSlim> AcquireLinkGateAsync(
++        string id,
+         CancellationToken cancellationToken)
+     {
+-        var current = (await store.ListLinksAsync(cancellationToken))
+-            .SingleOrDefault(candidate => candidate.Id == link.Id) ?? link;
+-        if (current.DesiredState != "Disabled")
+-        {
+-            return current;
+-        }
+-        try
+-        {
+-            if (await applier.IsConnectedAsync(current, cancellationToken))
+-            {
+-                await applier.ApplyDisconnectAsync(current, cancellationToken);
+-                await VerifyFactualStateAsync(current, expectedConnected: false, cancellationToken);
+-            }
+-            if (current.ActualState != "Disabled" || current.LastError is not null)
+-            {
+-                current = await store.SetLinkActualStateAsync(
+-                    current.Id, "Disabled", null, actor, cancellationToken) ?? current;
+-                Publish("link.disabled", current);
+-            }
+-        }
+-        catch (Exception exception) when (exception is not OperationCanceledException)
+-        {
+-            current = await store.SetLinkActualStateAsync(
+-                current.Id, "Partial", CompactError(exception), actor, cancellationToken) ?? current;
+-            Publish("link.partial", current);
+-        }
+-        return current;
++        var gate = _reconciliationLocks.GetOrAdd(id, static _ => new SemaphoreSlim(1, 1));
++        await gate.WaitAsync(cancellationToken);
++        return gate;
+     }
+ 
+     private async Task VerifyFactualStateAsync(
+@@ -336,7 +425,7 @@ public sealed class LinkService(
+     }
+ 
+     private static string CompactError(Exception exception)
+-        => exception.Message.Split([(char)13, '\n'], StringSplitOptions.RemoveEmptyEntries)
++        => exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)
+             .FirstOrDefault() ?? "Policy application failed.";
+ 
+     private sealed class LockLease(SemaphoreSlim[] gates) : IDisposable
+@@ -352,3 +441,4 @@ public sealed class LinkService(
+ }
+ 
+ public sealed record LinkExpirationResult(int Disabled, int Failed);
++public sealed record LinkFullReconciliationResult(int Examined, int Failed, bool FirewallUnavailable);
+diff --git a/src/ServerMonitorManager.Control/Program.cs b/src/ServerMonitorManager.Control/Program.cs
+index a898afb..9ee3a22 100644
+--- a/src/ServerMonitorManager.Control/Program.cs
++++ b/src/ServerMonitorManager.Control/Program.cs
+@@ -46,9 +46,10 @@ builder.Services.AddOptions<ControlOptions>()
+             && options.AuditRetentionDays is >= 1 and <= 3650
+             && options.MaintenanceIntervalMinutes is >= 1 and <= 1440
+             && options.LinkExpirationPollSeconds is >= 1 and <= 300
++            && options.LinkReconciliationSeconds is >= 30 and <= 3600
+             && options.BackupIntervalHours is >= 1 and <= 720
+             && options.BackupRetentionCount is >= 1 and <= 100,
+-        "Invalid Control paths, heartbeat, retention, maintenance, expiration, or backup settings.")
++        "Invalid Control paths, heartbeat, retention, maintenance, expiration, reconciliation, or backup settings.")
+     .ValidateOnStart();
+ builder.Services.AddSingleton(TimeProvider.System);
+ builder.Services.AddSingleton<ControlStore>();
+@@ -59,6 +60,7 @@ builder.Services.AddSingleton<LinkService>();
+ builder.Services.AddSingleton<CertificateLifecycleService>();
+ builder.Services.AddSingleton<ControlBackupService>();
+ builder.Services.AddHostedService<LinkExpirationBackgroundService>();
++builder.Services.AddHostedService<LinkReconciliationBackgroundService>();
+ builder.Services.AddHostedService<ControlMaintenanceBackgroundService>();
+ builder.Services.AddAuthentication(CertificateAuthenticationDefaults.AuthenticationScheme)
+     .AddCertificate(options =>
+diff --git a/src/ServerMonitorManager.Control/appsettings.json b/src/ServerMonitorManager.Control/appsettings.json
+index 86942c0..d395405 100644
+--- a/src/ServerMonitorManager.Control/appsettings.json
++++ b/src/ServerMonitorManager.Control/appsettings.json
+@@ -10,6 +10,7 @@
+     "AuditRetentionDays": 90,
+     "MaintenanceIntervalMinutes": 15,
+     "LinkExpirationPollSeconds": 15,
++    "LinkReconciliationSeconds": 300,
+     "BackupDirectory": "/var/lib/ochenstarik-server-monitor-manager/backups",
+     "BackupIntervalHours": 24,
+     "BackupRetentionCount": 7,
+diff --git a/src/ServerMonitorManager.Desktop/MainPage.xaml.cs b/src/ServerMonitorManager.Desktop/MainPage.xaml.cs
+index 4716803..8b953ce 100644
+--- a/src/ServerMonitorManager.Desktop/MainPage.xaml.cs
++++ b/src/ServerMonitorManager.Desktop/MainPage.xaml.cs
+@@ -28,6 +28,7 @@ public sealed partial class MainPage : Page
+     private SettingsPage? _settingsPage;
+     private bool _loaded;
+     private bool _controlListening;
++    private bool _meshFirewallUnavailable;
+ 
+     public MainPage()
+     {
+@@ -160,7 +161,7 @@ public sealed partial class MainPage : Page
+                 InfoBarSeverity.Warning);
+         }
+ 
+-        if (Servers.Count > 0)
++        if (Servers.Count > 0 || _control.IsConfigured)
+         {
+             await RefreshAllAsync();
+         }
+@@ -449,6 +450,18 @@ public sealed partial class MainPage : Page
+     {
+         DispatcherQueue.TryEnqueue(() =>
+         {
++            if (controlEvent.Type == MeshLinkViewModel.FirewallUnavailableErrorCode)
++            {
++                SetMeshFirewallUnavailable(true);
++                _ = RefreshMeshAsync(showSuccess: false);
++                return;
++            }
++            if (controlEvent.Type == "mesh.firewall-available")
++            {
++                SetMeshFirewallUnavailable(false);
++                _ = RefreshMeshAsync(showSuccess: false);
++                return;
++            }
+             if (controlEvent.Type.StartsWith("link.", StringComparison.Ordinal))
+             {
+                 ShowInfo(
+@@ -730,6 +743,11 @@ public sealed partial class MainPage : Page
+         {
+             if (Servers.Count == 0)
+             {
++                if (_control.IsConfigured)
++                {
++                    await RefreshControlMeshAsync(showSuccess: false);
++                    return;
++                }
+                 ShowInfo("Серверы не добавлены", "Сначала создайте SSH-ключ и установите его на сервере.", InfoBarSeverity.Informational);
+                 return;
+             }
+@@ -916,6 +934,12 @@ public sealed partial class MainPage : Page
+         LinkActionInfo.IsOpen = true;
+     }
+ 
++    private void SetMeshFirewallUnavailable(bool unavailable)
++    {
++        _meshFirewallUnavailable = unavailable;
++        _linksPage?.SetFirewallUnavailable(unavailable);
++    }
++
+     private ServerViewModel? FindHub()
+         => Servers.FirstOrDefault(server => server.IsHub);
+ 
+@@ -1031,6 +1055,11 @@ public sealed partial class MainPage : Page
+                     link.LastError));
+             }
+ 
++            SetMeshFirewallUnavailable(links
++                .GroupBy(link => new { link.SourceNodeId, link.TargetNodeId, link.Protocol, link.Port })
++                .Select(group => group.MaxBy(link => link.Version)!)
++                .Any(link => link.LastError == MeshLinkViewModel.FirewallUnavailableErrorCode));
++
+             var activeLinks = MeshLinks.Count(link => link.ActualState == "Active");
+             ActiveLinksValueText.Text = activeLinks.ToString(CultureInfo.InvariantCulture);
+             MeshStatusText.Text = $"Control · {MeshNodes.Count} узлов · {activeLinks} активных · {MeshLinks.Count} политик";
+@@ -1289,6 +1318,7 @@ public sealed partial class MainPage : Page
+                 break;
+             case "links":
+                 _linksPage ??= new LinksPage(this);
++                _linksPage.SetFirewallUnavailable(_meshFirewallUnavailable);
+                 ShowNavigationPage(_linksPage);
+                 break;
+             case "sessions":
+diff --git a/src/ServerMonitorManager.Desktop/MeshModels.cs b/src/ServerMonitorManager.Desktop/MeshModels.cs
+index c899d62..79446d2 100644
+--- a/src/ServerMonitorManager.Desktop/MeshModels.cs
++++ b/src/ServerMonitorManager.Desktop/MeshModels.cs
+@@ -19,6 +19,8 @@ public sealed class MeshNodeViewModel
+ 
+ public sealed class MeshLinkViewModel
+ {
++    public const string FirewallUnavailableErrorCode = "mesh.firewall-unavailable";
++
+     public MeshLinkViewModel(
+         string source,
+         string target,
+@@ -63,7 +65,8 @@ public sealed class MeshLinkViewModel
+     public string DesiredStatusText => $"Желаемое состояние: {DesiredState}";
+     public string ActualStatusText => $"Фактическое состояние: {ActualState}";
+     public string DriftText => HasDrift ? "Расхождение: требуется сверка политики" : "Расхождение: нет";
+-    public string ErrorText => string.IsNullOrWhiteSpace(LastError) ? "Ошибка: нет" : $"Ошибка: {LastError}";
++    public string ErrorText => LastError == FirewallUnavailableErrorCode ? string.Empty
++        : string.IsNullOrWhiteSpace(LastError) ? "Ошибка: нет" : $"Ошибка: {LastError}";
+     public string VersionText => $"Версия политики: {Version}";
+     public string ExpirationText => ExpiresUnix == 0
+         ? "вручную"
+diff --git a/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml b/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml
+index 32af5f3..f7a3415 100644
+--- a/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml
++++ b/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml
+@@ -7,6 +7,7 @@
+ 
+     <Grid RowSpacing="16">
+         <Grid.RowDefinitions>
++            <RowDefinition Height="Auto" />
+             <RowDefinition Height="Auto" />
+             <RowDefinition Height="*" />
+         </Grid.RowDefinitions>
+@@ -27,7 +28,15 @@
+             </CommandBar>
+         </Grid>
+ 
+-        <Grid x:Name="LinksWorkspace" Grid.Row="1" ColumnSpacing="20" RowSpacing="20">
++        <InfoBar
++            x:Name="FirewallUnavailableInfo"
++            Grid.Row="1"
++            IsClosable="False"
++            IsOpen="False"
++            Message="Mesh firewall не загружен"
++            Severity="Error" />
++
++        <Grid x:Name="LinksWorkspace" Grid.Row="2" ColumnSpacing="20" RowSpacing="20">
+             <Grid.ColumnDefinitions>
+                 <ColumnDefinition x:Name="EditorColumn" Width="*" />
+                 <ColumnDefinition x:Name="ListColumn" Width="0" />
+diff --git a/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml.cs b/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml.cs
+index 2669c49..4eb545f 100644
+--- a/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml.cs
++++ b/src/ServerMonitorManager.Desktop/Pages/LinksPage.xaml.cs
+@@ -18,6 +18,9 @@ public sealed partial class LinksPage : Page
+ 
+     public ObservableCollection<MeshLinkViewModel> Links => _host.MeshLinks;
+ 
++    internal void SetFirewallUnavailable(bool unavailable)
++        => FirewallUnavailableInfo.IsOpen = unavailable;
++
+     private async void RefreshButton_Click(object sender, RoutedEventArgs e)
+         => await _host.RefreshLinksFromPageAsync();
+ 
+diff --git a/tests/ServerMonitorManager.Control.Tests/LinkPolicyApplierIntegrationTests.cs b/tests/ServerMonitorManager.Control.Tests/LinkPolicyApplierIntegrationTests.cs
+index 3700663..9e217ca 100644
+--- a/tests/ServerMonitorManager.Control.Tests/LinkPolicyApplierIntegrationTests.cs
++++ b/tests/ServerMonitorManager.Control.Tests/LinkPolicyApplierIntegrationTests.cs
+@@ -26,6 +26,7 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
+         var sudoPath = Path.Combine(_directory, "sudo");
+         var helperPath = Path.Combine(_directory, "policy-helper");
+         var failureMarkerPath = Path.Combine(_directory, "fail-disconnect");
++        var firewallUnavailableMarkerPath = Path.Combine(_directory, "firewall-unavailable");
+         var connectedMarkerPath = Path.Combine(_directory, "connected");
+         var invocationLogPath = Path.Combine(_directory, "helper.log");
+         await WriteExecutableAsync(
+@@ -58,6 +59,10 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
+                 rm -f '{{ShellQuote(connectedMarkerPath)}}'
+             fi
+             if [ "${1:-}" = "link-status" ]; then
++                if [ -f '{{ShellQuote(firewallUnavailableMarkerPath)}}' ]; then
++                    echo "mesh.firewall-unavailable" >&2
++                    exit 79
++                fi
+                 if [ -f '{{ShellQuote(connectedMarkerPath)}}' ]; then
+                     printf '%s\n' active
+                 else
+@@ -79,6 +84,28 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
+             cancellationToken);
+         Assert.Equal("Active", active.ActualState);
+ 
++        File.Delete(connectedMarkerPath);
++        await File.WriteAllTextAsync(invocationLogPath, string.Empty, cancellationToken);
++        var restored = await service.ReconcileAllAsync(cancellationToken);
++        Assert.False(restored.FirewallUnavailable);
++        Assert.Equal("Active", (await store.GetLinkAsync(active.Id, cancellationToken))!.ActualState);
++        Assert.Equal(
++            [
++                "link-status ai-agent home tcp 22",
++                "link-connect ai-agent home tcp 22 60",
++                "link-status ai-agent home tcp 22"
++            ],
++            await File.ReadAllLinesAsync(invocationLogPath, cancellationToken));
++
++        await File.WriteAllTextAsync(firewallUnavailableMarkerPath, "fail", cancellationToken);
++        var unavailable = await service.ReconcileAllAsync(cancellationToken);
++        Assert.True(unavailable.FirewallUnavailable);
++        Assert.Equal(LinkService.FirewallUnavailableCode,
++            (await store.GetLinkAsync(active.Id, cancellationToken))!.LastError);
++        File.Delete(firewallUnavailableMarkerPath);
++        Assert.False((await service.ReconcileAllAsync(cancellationToken)).FirewallUnavailable);
++        await File.WriteAllTextAsync(invocationLogPath, string.Empty, cancellationToken);
++
+         await File.WriteAllTextAsync(failureMarkerPath, "fail", cancellationToken);
+         var partial = await service.DisableAsync(
+             active.Id,
+@@ -110,16 +137,14 @@ public sealed class LinkPolicyApplierIntegrationTests : IAsyncDisposable
+         Assert.Equal("Disabled", persisted.ActualState);
+ 
+         var invocations = await File.ReadAllLinesAsync(invocationLogPath, cancellationToken);
+-        Assert.Equal(9, invocations.Length);
+-        Assert.Equal("link-connect ai-agent home tcp 22 60", invocations[0]);
+-        Assert.Equal("link-status ai-agent home tcp 22", invocations[1]);
++        Assert.Equal(7, invocations.Length);
++        Assert.Equal("link-status ai-agent home tcp 22", invocations[0]);
++        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[1]);
+         Assert.Equal("link-status ai-agent home tcp 22", invocations[2]);
+         Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[3]);
+         Assert.Equal("link-status ai-agent home tcp 22", invocations[4]);
+         Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[5]);
+         Assert.Equal("link-status ai-agent home tcp 22", invocations[6]);
+-        Assert.Equal("link-disconnect ai-agent home tcp 22", invocations[7]);
+-        Assert.Equal("link-status ai-agent home tcp 22", invocations[8]);
+     }
+ 
+     public ValueTask DisposeAsync()
+diff --git a/tests/ServerMonitorManager.Control.Tests/LinkReconciliationTests.cs b/tests/ServerMonitorManager.Control.Tests/LinkReconciliationTests.cs
+new file mode 100644
+index 0000000..ceee620
+--- /dev/null
++++ b/tests/ServerMonitorManager.Control.Tests/LinkReconciliationTests.cs
+@@ -0,0 +1,338 @@
++using Microsoft.Data.Sqlite;
++using Microsoft.Extensions.Logging.Abstractions;
++using Microsoft.Extensions.Options;
++using ServerMonitorManager.Control;
++using ServerMonitorManager.Core;
++using Xunit;
++
++namespace ServerMonitorManager.Control.Tests;
++
++public sealed class LinkReconciliationTests : IAsyncDisposable
++{
++    private readonly string _directory = Path.Combine(
++        Path.GetTempPath(), $"smm-link-reconciliation-{Guid.NewGuid():N}");
++
++    [Fact]
++    public async Task AllPolicyPassReappliesErasedActiveRulesWithoutHeartbeat()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "AA11", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "BB22", cancellationToken);
++        await EnrollAgentAsync(store, "target-two", "CC33", cancellationToken);
++        var applier = new RecordingPolicyApplier();
++        var service = new LinkService(store, applier, new ControlEventBroker());
++        var first = await service.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        var second = await service.CreateAsync(CreateRequest("target-two"), "operator", cancellationToken);
++        applier.EraseRules();
++        var mutationsBefore = applier.ConnectCalls;
++
++        var result = await service.ReconcileAllAsync(cancellationToken);
++
++        Assert.Equal(2, result.Examined);
++        Assert.Equal(0, result.Failed);
++        Assert.Equal(mutationsBefore + 2, applier.ConnectCalls);
++        Assert.All(await store.ListEffectiveLinksAsync(cancellationToken),
++            link => Assert.Equal("Active", link.ActualState));
++        Assert.True(applier.IsConnected(first));
++        Assert.True(applier.IsConnected(second));
++    }
++
++    [Fact]
++    public async Task SecondUnchangedPassDoesNotMutateFirewall()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "A111", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "B222", cancellationToken);
++        var applier = new RecordingPolicyApplier();
++        var service = new LinkService(store, applier, new ControlEventBroker());
++        await service.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++
++        await service.ReconcileAllAsync(cancellationToken);
++        var connects = applier.ConnectCalls;
++        var disconnects = applier.DisconnectCalls;
++        await service.ReconcileAllAsync(cancellationToken);
++
++        Assert.Equal(connects, applier.ConnectCalls);
++        Assert.Equal(disconnects, applier.DisconnectCalls);
++    }
++
++    [Fact]
++    public async Task AllPolicyPassRemovesOrphanRuleForDesiredDisabledLink()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "DD44", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "EE55", cancellationToken);
++        var broker = new ControlEventBroker();
++        using var subscription = broker.Subscribe();
++        var applier = new RecordingPolicyApplier();
++        var service = new LinkService(store, applier, broker);
++        var active = await service.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        await store.BeginDisableLinkMutationAsync(
++            active.Id,
++            new LinkPolicyDisableRequest(Guid.NewGuid().ToString()),
++            "operator",
++            cancellationToken);
++
++        await service.ReconcileAllAsync(cancellationToken);
++
++        Assert.Equal(1, applier.DisconnectCalls);
++        Assert.Equal("Disabled", (await store.GetLinkAsync(active.Id, cancellationToken))!.ActualState);
++        var eventTypes = new List<string>();
++        while (subscription.Reader.TryRead(out var controlEvent))
++        {
++            eventTypes.Add(controlEvent.Type);
++        }
++        Assert.Contains("link.orphan-removed", eventTypes);
++    }
++
++    [Fact]
++    public async Task FirewallUnavailableAbortsWithoutMutationsAndPublishesOneSharedEvent()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "FF66", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "0011", cancellationToken);
++        await EnrollAgentAsync(store, "target-two", "0022", cancellationToken);
++        var broker = new ControlEventBroker();
++        using var subscription = broker.Subscribe();
++        var applier = new RecordingPolicyApplier();
++        var service = new LinkService(store, applier, broker);
++        await service.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        await service.CreateAsync(CreateRequest("target-two"), "operator", cancellationToken);
++        while (subscription.Reader.TryRead(out _)) { }
++        var connectBefore = applier.ConnectCalls;
++        var disconnectBefore = applier.DisconnectCalls;
++        applier.FirewallUnavailable = true;
++
++        var result = await service.ReconcileAllAsync(cancellationToken);
++
++        Assert.True(result.FirewallUnavailable);
++        Assert.Equal(connectBefore, applier.ConnectCalls);
++        Assert.Equal(disconnectBefore, applier.DisconnectCalls);
++        Assert.All(await store.ListEffectiveLinksAsync(cancellationToken), link =>
++        {
++            Assert.Equal("Partial", link.ActualState);
++            Assert.Equal(LinkService.FirewallUnavailableCode, link.LastError);
++        });
++        var eventTypes = new List<string>();
++        while (subscription.Reader.TryRead(out var controlEvent))
++        {
++            eventTypes.Add(controlEvent.Type);
++        }
++        Assert.Equal([LinkService.FirewallUnavailableCode], eventTypes);
++
++        applier.FirewallUnavailable = false;
++        Assert.False((await service.ReconcileAllAsync(cancellationToken)).FirewallUnavailable);
++        eventTypes.Clear();
++        while (subscription.Reader.TryRead(out var controlEvent))
++        {
++            eventTypes.Add(controlEvent.Type);
++        }
++        Assert.Single(eventTypes, eventType => eventType == LinkService.FirewallAvailableCode);
++    }
++
++    [Fact]
++    public async Task MarkerCreatedAfterNormalPassTriggersPromptAdditionalPass()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "A333", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "B444", cancellationToken);
++        var applier = new RecordingPolicyApplier();
++        var links = new LinkService(store, applier, new ControlEventBroker());
++        await links.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        var background = CreateBackgroundService(
++            links,
++            applier,
++            new TestTimeProvider(DateTimeOffset.Parse("2026-08-03T12:00:00Z")));
++
++        Assert.NotNull(await background.RunOnceAsync(cancellationToken));
++        Assert.Equal(0, applier.CompleteReconciliationCalls);
++        applier.ReconciliationRequest = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
++
++        Assert.NotNull(await background.RunOnceAsync(cancellationToken));
++        Assert.Equal(2, applier.ReconciliationStatusCalls);
++        Assert.Equal(1, applier.CompleteReconciliationCalls);
++        Assert.Null(applier.ReconciliationRequest);
++        Assert.Null(await background.RunOnceAsync(cancellationToken));
++    }
++
++    [Fact]
++    public async Task CompletingObservedGenerationDoesNotConsumeNewerRequest()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "A355", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "B466", cancellationToken);
++        var generationA = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
++        var generationB = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
++        var applier = new RecordingPolicyApplier { ReconciliationRequest = generationA };
++        var links = new LinkService(store, applier, new ControlEventBroker());
++        await links.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        applier.ReplacementRequestOnNextProbe = generationB;
++        var background = CreateBackgroundService(
++            links,
++            applier,
++            new TestTimeProvider(DateTimeOffset.Parse("2026-08-03T12:00:00Z")));
++
++        Assert.NotNull(await background.RunOnceAsync(cancellationToken));
++        Assert.Equal([generationA], applier.CompletedGenerations);
++        Assert.Equal(generationB, applier.ReconciliationRequest);
++
++        Assert.NotNull(await background.RunOnceAsync(cancellationToken));
++        Assert.Equal([generationA, generationB], applier.CompletedGenerations);
++        Assert.Null(applier.ReconciliationRequest);
++    }
++
++    [Fact]
++    public async Task BackgroundPassRetainsMarkerWhenFirewallIsUnavailable()
++    {
++        var cancellationToken = TestContext.Current.CancellationToken;
++        var store = CreateStore();
++        await store.InitializeAsync(cancellationToken);
++        await EnrollAgentAsync(store, "source", "A555", cancellationToken);
++        await EnrollAgentAsync(store, "target-one", "B666", cancellationToken);
++        var applier = new RecordingPolicyApplier
++        {
++            ReconciliationRequest = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
++        };
++        var links = new LinkService(store, applier, new ControlEventBroker());
++        await links.CreateAsync(CreateRequest("target-one"), "operator", cancellationToken);
++        applier.FirewallUnavailable = true;
++        var time = new TestTimeProvider(DateTimeOffset.Parse("2026-08-03T12:00:00Z"));
++        var background = CreateBackgroundService(links, applier, time);
++
++        var result = await background.RunOnceAsync(cancellationToken);
++
++        Assert.NotNull(result);
++        Assert.True(result.FirewallUnavailable);
++        Assert.Equal(0, applier.CompleteReconciliationCalls);
++        Assert.NotNull(applier.ReconciliationRequest);
++        applier.FirewallUnavailable = false;
++        Assert.Null(await background.RunOnceAsync(cancellationToken));
++        time.Advance(TimeSpan.FromSeconds(30));
++        Assert.NotNull(await background.RunOnceAsync(cancellationToken));
++        Assert.Null(applier.ReconciliationRequest);
++    }
++
++    public ValueTask DisposeAsync()
++    {
++        SqliteConnection.ClearAllPools();
++        if (Directory.Exists(_directory))
++        {
++            Directory.Delete(_directory, recursive: true);
++        }
++        return ValueTask.CompletedTask;
++    }
++
++    private ControlStore CreateStore()
++    {
++        Directory.CreateDirectory(_directory);
++        return new ControlStore(Options.Create(new ControlOptions
++        {
++            DatabasePath = Path.Combine(_directory, "control.db"),
++            CertificateAuthorityPath = Path.Combine(_directory, "unused.pfx")
++        }));
++    }
++
++    private static LinkPolicyCreateRequest CreateRequest(string target)
++        => new("source", target, "tcp", 22, 0, "test", Guid.NewGuid().ToString());
++
++    private static LinkReconciliationBackgroundService CreateBackgroundService(
++        LinkService links,
++        ILinkPolicyApplier applier,
++        TimeProvider timeProvider)
++        => new(
++            links,
++            applier,
++            Options.Create(new ControlOptions { LinkReconciliationSeconds = 30 }),
++            timeProvider,
++            NullLogger<LinkReconciliationBackgroundService>.Instance);
++
++    private static async Task EnrollAgentAsync(
++        ControlStore store,
++        string nodeId,
++        string thumbprint,
++        CancellationToken cancellationToken)
++    {
++        var token = await store.CreateEnrollmentTokenAsync(nodeId, TimeSpan.FromMinutes(10), cancellationToken);
++        Assert.NotNull(await store.EnrollAsync(
++            new EnrollmentRequest(nodeId, token, "csr", Guid.NewGuid().ToString()),
++            () => new IssuedCertificate("certificate", "ca", thumbprint, DateTimeOffset.UtcNow.AddYears(1)),
++            cancellationToken));
++    }
++
++    private sealed class RecordingPolicyApplier : ILinkPolicyApplier
++    {
++        private readonly HashSet<string> _connected = [];
++        public int ConnectCalls { get; private set; }
++        public int DisconnectCalls { get; private set; }
++        public bool FirewallUnavailable { get; set; }
++        public string? ReconciliationRequest { get; set; }
++        public string? ReplacementRequestOnNextProbe { get; set; }
++        public int ReconciliationStatusCalls { get; private set; }
++        public int CompleteReconciliationCalls { get; private set; }
++        public List<string> CompletedGenerations { get; } = [];
++
++        public void EraseRules() => _connected.Clear();
++        public bool IsConnected(LinkPolicy link) => _connected.Contains(link.Id);
++
++        public Task ApplyConnectAsync(LinkPolicy link, CancellationToken cancellationToken)
++        {
++            ConnectCalls++;
++            _connected.Add(link.Id);
++            return Task.CompletedTask;
++        }
++
++        public Task ApplyDisconnectAsync(LinkPolicy link, CancellationToken cancellationToken)
++        {
++            DisconnectCalls++;
++            _connected.Remove(link.Id);
++            return Task.CompletedTask;
++        }
++
++        public Task<bool> IsConnectedAsync(LinkPolicy link, CancellationToken cancellationToken)
++        {
++            if (ReplacementRequestOnNextProbe is not null)
++            {
++                ReconciliationRequest = ReplacementRequestOnNextProbe;
++                ReplacementRequestOnNextProbe = null;
++            }
++            return FirewallUnavailable
++                ? Task.FromException<bool>(new MeshFirewallUnavailableException(LinkService.FirewallUnavailableCode))
++                : Task.FromResult(IsConnected(link));
++        }
++
++        public Task<string?> GetReconciliationRequestAsync(CancellationToken cancellationToken)
++        {
++            ReconciliationStatusCalls++;
++            return Task.FromResult(ReconciliationRequest);
++        }
++
++        public Task CompleteReconciliationAsync(string generation, CancellationToken cancellationToken)
++        {
++            CompleteReconciliationCalls++;
++            CompletedGenerations.Add(generation);
++            if (ReconciliationRequest == generation)
++            {
++                ReconciliationRequest = null;
++            }
++            return Task.CompletedTask;
++        }
++    }
++
++    private sealed class TestTimeProvider(DateTimeOffset now) : TimeProvider
++    {
++        public override DateTimeOffset GetUtcNow() => now;
++        public void Advance(TimeSpan value) => now += value;
++    }
++}
+diff --git a/tests/acceptance/three-server-mesh.sh b/tests/acceptance/three-server-mesh.sh
+index 761ba2f..5f45d6f 100644
+--- a/tests/acceptance/three-server-mesh.sh
++++ b/tests/acceptance/three-server-mesh.sh
+@@ -22,6 +22,7 @@ SOURCE_NODE_ID="${SOURCE_NODE_ID:-ai-agent}"
+ HOME_NODE_ID="${HOME_NODE_ID:-home}"
+ SECOND_NODE_ID="${SECOND_NODE_ID:-second}"
+ TARGET_PORT="${TARGET_PORT:-22}"
++LINK_RECONCILIATION_SECONDS="${LINK_RECONCILIATION_SECONDS:-300}"
+ CONTROL_DEVICE_ID="acceptance-$(date +%s)"
+ INSTALLER_COMMAND="${INSTALLER_COMMAND:-sudo /usr/local/sbin/ochenstarik-server-monitor-manager.sh}"
+ WORK_DIRECTORY="$(mktemp -d)"
+@@ -48,31 +49,54 @@ source_ssh() {
+     "$SOURCE_SSH_USER@$SOURCE_SSH_HOST" "$@"
+ }
+ 
++probe_reachable() {
++    local ip="$1"
++    source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"
++}
++
+ expect_reachable() {
+-  local ip="$1"
+-  source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"
++    local ip="$1"
++    probe_reachable "$ip" || {
++        echo "Expected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
++        exit 1
++    }
++}
++
++probe_blocked() {
++    local ip="$1"
++    ! probe_reachable "$ip"
+ }
+ 
+ expect_blocked() {
+-  local ip="$1"
+-  if source_ssh "nc -z -w 5 '$ip' '$TARGET_PORT'"; then
+-    echo "Unexpected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
+-    exit 1
+-  fi
++    local ip="$1"
++    if ! probe_blocked "$ip"; then
++        echo "Unexpected access from $SOURCE_NODE_ID to $ip:$TARGET_PORT" >&2
++        exit 1
++    fi
+ }
+ 
+-expect_factual_status() {
+-  local target="$1"
+-  local expected="$2"
+-  local command output
++probe_factual_status() {
++    local target="$1"
++    local expected="$2"
++    local command output
+   printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
+     link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
+   output="$(hub_ssh "$command")"
+-  [[ "$output" == "$expected" ]] || {
+-    echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
+-    exit 1
++  [[ "$output" == "$expected" ]]
++  }
++
++  expect_factual_status() {
++  local target="$1"
++  local expected="$2"
++  if ! probe_factual_status "$target" "$expected"; then
++      local command output
++      printf -v command '%q ' sudo /usr/local/libexec/ochenstarik-smm-policy-apply \
++          link-status "$SOURCE_NODE_ID" "$target" tcp "$TARGET_PORT"
++      output="$(hub_ssh "$command")"
++      echo "Unexpected factual Link status for $SOURCE_NODE_ID -> $target: $output (expected $expected)" >&2
++      exit 1
++  fi
+   }
+-}
+ 
+ decode_base64url() {
+   local value="${1//-/+}"
+@@ -85,11 +109,11 @@ decode_base64url() {
+   printf '%s' "$value" | base64 --decode
+ }
+ 
+-echo '[1/11] Checking installed services on all three nodes'
++echo '[1/12] Checking installed services on all three nodes'
+ hub_ssh "sudo systemctl is-active ochenstarik-smm-control.service >/dev/null"
+ source_ssh "sudo systemctl is-active ochenstarik-smm-agent.service >/dev/null"
+ 
+-echo '[2/11] Creating an isolated operator identity for this acceptance run'
++echo '[2/12] Creating an isolated operator identity for this acceptance run'
+ device_code="$(hub_ssh "$INSTALLER_COMMAND control-device-code '$CONTROL_DEVICE_ID'" | tr -d '\r' | grep -o 'SMMDEV1-[A-Za-z0-9_-]*' | tail -n1)"
+ [[ -n "$device_code" ]] || { echo 'Hub did not return SMMDEV1 code' >&2; exit 1; }
+ decode_base64url "${device_code#SMMDEV1-}" >"$WORK_DIRECTORY/device.env"
+@@ -147,7 +171,7 @@ disable_link() {
+     "$(jq -cn --arg key "$(cat /proc/sys/kernel/random/uuid)" '{idempotencyKey:$key}')"
+ }
+ 
+-echo '[3/11] Confirming all expected Agent identities are online'
++echo '[3/12] Confirming all expected Agent identities are online'
+ agents="$(api_get '/api/v1/control/agents')"
+ for node in "$SOURCE_NODE_ID" "$HOME_NODE_ID" "$SECOND_NODE_ID"; do
+   jq -e --arg node "$node" '.[] | select(.nodeId == $node)' <<<"$agents" >/dev/null || {
+@@ -156,7 +180,7 @@ for node in "$SOURCE_NODE_ID" "$HOME_NODE_ID" "$SECOND_NODE_ID"; do
+   }
+ done
+ 
+-echo '[4/11] Creating independent Links to home and second server'
++echo '[4/12] Creating independent Links to home and second server'
+ home_link="$(create_link "$HOME_NODE_ID" 0)"
+ second_link="$(create_link "$SECOND_NODE_ID" 0)"
+ LINK_HOME_ID="$(jq -r '.id' <<<"$home_link")"
+@@ -166,18 +190,18 @@ jq -e '.desiredState == "Active" and .actualState == "Active" and .lastError ==
+ expect_factual_status "$HOME_NODE_ID" active
+ expect_factual_status "$SECOND_NODE_ID" active
+ 
+-echo '[5/11] Verifying routed access through both Links'
++echo '[5/12] Verifying routed access through both Links'
+ expect_reachable "$HOME_WG_IP"
+ expect_reachable "$SECOND_WG_IP"
+ 
+-echo '[6/11] Disabling only the second Link'
++echo '[6/12] Disabling only the second Link'
+ disable_link "$LINK_SECOND_ID" | jq -e \
+   '.desiredState == "Disabled" and .actualState == "Disabled" and .lastError == null' >/dev/null
+ expect_factual_status "$SECOND_NODE_ID" disabled
+ expect_reachable "$HOME_WG_IP"
+ expect_blocked "$SECOND_WG_IP"
+ 
+-echo '[7/11] Verifying automatic TTL expiration'
++echo '[7/12] Verifying automatic TTL expiration'
+ ttl_link="$(create_link "$SECOND_NODE_ID" 1)"
+ ttl_id="$(jq -r '.id' <<<"$ttl_link")"
+ expect_reachable "$SECOND_WG_IP"
+@@ -196,13 +220,34 @@ expect_factual_status "$SECOND_NODE_ID" disabled
+ expect_blocked "$SECOND_WG_IP"
+ expect_reachable "$HOME_WG_IP"
+ 
+-echo '[8/11] Creating and validating a Control backup'
++if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
++  echo '[8/12] Restoring the base firewall without restarting any Node'
++  hub_ssh 'sudo /usr/local/sbin/ochenstarik-smm-emergency firewall-restore'
++  deadline=$((SECONDS + LINK_RECONCILIATION_SECONDS + 30))
++  while ((SECONDS < deadline)); do
++    if probe_factual_status "$HOME_NODE_ID" active \
++        && probe_factual_status "$SECOND_NODE_ID" disabled \
++        && probe_reachable "$HOME_WG_IP" \
++        && probe_blocked "$SECOND_WG_IP"; then
++      break
++    fi
++    sleep 5
++  done
++  expect_factual_status "$HOME_NODE_ID" active
++  expect_factual_status "$SECOND_NODE_ID" disabled
++  expect_reachable "$HOME_WG_IP"
++  expect_blocked "$SECOND_WG_IP"
++else
++  echo '[8/12] Firewall restore reconciliation skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
++fi
++
++echo '[9/12] Creating and validating a Control backup'
+ backup_path="$(hub_ssh "sudo systemd-run --wait --pipe --quiet --collect --uid=ochenstarik-smm-control --gid=ochenstarik-smm-control -p EnvironmentFile=/etc/ochenstarik-server-monitor-manager/control.env /usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control backup-create" | grep '/backup-' | tail -n1)"
+ [[ "$backup_path" == */backup-* ]] || { echo 'Backup command did not return a backup path' >&2; exit 1; }
+ hub_ssh "sudo test -s '$backup_path/manifest.json' && sudo test -s '$backup_path/control.db' && sudo test -s '$backup_path/control-ca.pfx'"
+ 
+ if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
+-  echo '[9/11] Restoring the verified backup and restarting Control'
++  echo '[10/12] Restoring the verified backup and restarting Control'
+   hub_ssh "sudo sh -c 'set -a; . /etc/ochenstarik-server-monitor-manager/control.env; set +a; systemctl stop ochenstarik-smm-control.service; /usr/local/lib/ochenstarik-server-monitor-manager/control/ochenstarik-smm-control backup-restore \"\$1\"; status=\$?; systemctl start ochenstarik-smm-control.service; exit \$status' sh '$backup_path'"
+   for _ in {1..30}; do
+     if api_get '/healthz' >/dev/null 2>&1; then
+@@ -216,11 +261,11 @@ if [[ "${SMM_ACCEPT_RESTORE:-0}" == '1' ]]; then
+   expect_factual_status "$HOME_NODE_ID" active
+   expect_factual_status "$SECOND_NODE_ID" disabled
+ else
+-  echo '[9/11] Restore check skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
++  echo '[10/12] Restore check skipped; set SMM_ACCEPT_RESTORE=1 to enable it'
+ fi
+ 
+ if [[ "${SMM_ACCEPT_REBOOT:-0}" == '1' ]]; then
+-  echo '[10/11] Rebooting the Hub and source Node and rechecking policy state'
++  echo '[11/12] Rebooting the Hub and source Node and rechecking policy state'
+   hub_ssh 'sudo systemctl reboot' || true
+   source_ssh 'sudo systemctl reboot' || true
+   sleep 15
+@@ -235,10 +280,10 @@ if [[ "${SMM_ACCEPT_REBOOT:-0}" == '1' ]]; then
+   expect_factual_status "$HOME_NODE_ID" active
+   expect_factual_status "$SECOND_NODE_ID" disabled
+ else
+-  echo '[10/11] Reboot check skipped; set SMM_ACCEPT_REBOOT=1 to enable it'
++  echo '[11/12] Reboot check skipped; set SMM_ACCEPT_REBOOT=1 to enable it'
+ fi
+ 
+-echo '[11/11] Revoking the temporary Operator certificate'
++echo '[12/12] Revoking the temporary Operator certificate'
+ api_post "/api/v1/control/devices/$CONTROL_DEVICE_ID/reenroll" \
+   "$(jq -cn --arg key "$(cat /proc/sys/kernel/random/uuid)" \
+     '{reason:"three-server acceptance completed",idempotencyKey:$key}')" \
+diff --git a/tests/bootstrap/test-bootstrap-contract.sh b/tests/bootstrap/test-bootstrap-contract.sh
+index a28687f..3316e60 100755
+--- a/tests/bootstrap/test-bootstrap-contract.sh
++++ b/tests/bootstrap/test-bootstrap-contract.sh
+@@ -6,11 +6,13 @@ root="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
+ bootstrap="$root/deploy/ochenstarik-server-monitor-manager.sh"
+ helper="$root/deploy/ochenstarik-smm-policy-apply"
+ emergency="$root/deploy/ochenstarik-smm-emergency"
++acceptance="$root/tests/acceptance/three-server-mesh.sh"
+ 
+-grep -Fq 'if ! listing="$(/usr/sbin/nft -a list chain' "$helper" || {
++grep -Fq 'listing="$(/usr/sbin/nft -a list chain' "$helper" || {
+     printf '%s\n' "policy status probe must fail closed when nftables cannot be inspected" >&2
+     exit 1
+ }
++grep -Fq "grep -Eiq 'No such file or directory|does not exist'" "$helper"
+ provisioning_helper_unit="$root/deploy/ochenstarik-smm-provisioning-helper.service"
+ 
+ grep -Fq 'EnvironmentFile=/etc/ochenstarik-server-monitor-manager/agent.env' "$provisioning_helper_unit"
+@@ -61,6 +63,13 @@ grep -Eq '^ochenstarik-server-monitor-manager [0-9]+\.[0-9]+\.[0-9]+-' <<<"$vers
+ emergency_help="$(bash "$emergency" --help)"
+ grep -Fq 'mesh-disable' <<<"$emergency_help"
+ grep -Fq 'firewall-restore' <<<"$emergency_help"
++grep -Fq 'readonly RECONCILE_MARKER="$STATE_DIR/mesh/reconcile-requested"' "$emergency"
++grep -Fq 'chown root:root "$temporary_marker"' "$emergency"
++grep -Fq 'chmod 0600 "$temporary_marker"' "$emergency"
++grep -Fq 'mv -f -- "$temporary_marker" "$RECONCILE_MARKER"' "$emergency"
++grep -Fq '/usr/bin/flock -x 9' "$emergency"
++grep -Fq 'generation="$(</proc/sys/kernel/random/uuid)"' "$emergency"
++[[ "$(grep -Fc '    request_reconciliation' "$emergency")" -ge 2 ]]
+ 
+ if bash "$bootstrap" unsupported-action >/dev/null 2>&1; then
+     printf '%s\n' "unsupported bootstrap action unexpectedly succeeded" >&2
+@@ -97,8 +106,83 @@ if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
+     printf '%s\n' "policy helper unexpectedly accepted extra link-status arguments" >&2
+     exit 1
+ fi
++
++generation_a='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
++generation_b='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
++reconcile_marker="$(mktemp -t smm-reconcile-marker.XXXXXXXX)"
++printf '%s\n' "$generation_a" >"$reconcile_marker"
++[[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
++    bash "$helper" reconcile-status)" == "requested:$generation_a" ]]
++printf '%s\n' "$generation_b" >"$reconcile_marker"
++SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
++    bash "$helper" reconcile-complete "$generation_a" >/dev/null
++[[ "$(<"$reconcile_marker")" == "$generation_b" ]]
++SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
++    bash "$helper" reconcile-complete "$generation_b" >/dev/null
++[[ ! -e "$reconcile_marker" ]]
++[[ "$(SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
++    bash "$helper" reconcile-status)" == 'complete' ]]
++if SMM_POLICY_TESTING=1 SMM_POLICY_FLOCK=true SMM_POLICY_RECONCILE_MARKER="$reconcile_marker" \
++    bash "$helper" reconcile-complete unexpected extra >/dev/null 2>&1; then
++    printf '%s\n' "policy helper unexpectedly accepted extra reconcile-complete arguments" >&2
++    exit 1
++fi
++
++firewall_error="$(mktemp -t smm-firewall-error.XXXXXXXX)"
++if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
++    SMM_POLICY_FIREWALL_UNAVAILABLE=1 bash "$helper" \
++    link-status source target tcp 22 >/dev/null 2>"$firewall_error"; then
++    printf '%s\n' "missing firewall unexpectedly produced a factual Link status" >&2
++    exit 1
++else
++    [[ $? -eq 79 ]]
++fi
++[[ "$(<"$firewall_error")" == 'mesh.firewall-unavailable' ]]
++if SMM_POLICY_TESTING=1 SMM_POLICY_STATE_FILE="$policy_state" \
++    SMM_POLICY_FIREWALL_ERROR='permission denied' bash "$helper" \
++    link-status source target tcp 22 >/dev/null 2>"$firewall_error"; then
++    printf '%s\n' "unknown nft inspection error unexpectedly produced a factual Link status" >&2
++    exit 1
++else
++    [[ $? -eq 78 ]]
++fi
++grep -Fq 'permission denied' "$firewall_error"
++if grep -Fq 'mesh.firewall-unavailable' "$firewall_error"; then
++    printf '%s\n' "unknown nft inspection error was misclassified as missing firewall" >&2
++    exit 1
++fi
++rm -f -- "$firewall_error" "$reconcile_marker"
+ rm -f -- "$policy_state"
+ 
++extract_shell_function() {
++    local name="$1"
++    awk -v signature="$name() {" '
++        $0 == signature { emitting = 1 }
++        emitting { print }
++        emitting && $0 == "}" { exit }
++    ' "$acceptance"
++}
++eval "$(extract_shell_function probe_factual_status)"
++SOURCE_NODE_ID=source
++TARGET_PORT=22
++probe_counter="$(mktemp -t smm-factual-probe.XXXXXXXX)"
++printf '%s\n' 0 >"$probe_counter"
++hub_ssh() {
++    local count
++    count="$(( $(<"$probe_counter") + 1 ))"
++    printf '%s\n' "$count" >"$probe_counter"
++    [[ "$count" -eq 1 ]] && printf '%s\n' disabled || printf '%s\n' active
++}
++if probe_factual_status target active; then
++    printf '%s\n' "initial factual mismatch unexpectedly passed" >&2
++    exit 1
++fi
++probe_factual_status target active || {
++    printf '%s\n' "factual probe did not allow convergence after an initial mismatch" >&2
++    exit 1
++}
++rm -f -- "$probe_counter" "${reconcile_marker}.lock"
++
+ fixture="$(mktemp -d -t smm-bootstrap-test.XXXXXXXX)"
+ trap 'rm -rf -- "$fixture"' EXIT
+ mkdir -p "$fixture/payload/agent" "$fixture/payload/control" "$fixture/payload/provisioning-helper" "$fixture/payload/deploy" "$fixture/payload/bootstrap"
+diff --git a/tests/windows/Test-DesktopContracts.ps1 b/tests/windows/Test-DesktopContracts.ps1
+index 73a8028..f5ac6f9 100644
+--- a/tests/windows/Test-DesktopContracts.ps1
++++ b/tests/windows/Test-DesktopContracts.ps1
+@@ -19,6 +19,8 @@ $linksCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+     Join-Path $root 'src\ServerMonitorManager.Desktop\Pages\LinksPage.xaml.cs')
+ $mainCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+     Join-Path $root 'src\ServerMonitorManager.Desktop\MainPage.xaml.cs')
++$meshModelsCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
++    Join-Path $root 'src\ServerMonitorManager.Desktop\MeshModels.cs')
+ $appCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+     Join-Path $root 'src\ServerMonitorManager.Desktop\App.xaml.cs')
+ $sshCode = Get-Content -Raw -Encoding UTF8 -LiteralPath (
+@@ -52,6 +54,22 @@ if ($linksCode.IndexOf(
+         'LinksList.SelectedItem as MeshLinkViewModel', [StringComparison]::Ordinal) -lt 0) {
+     throw 'Links page must pass its selected Link to the command handler.'
+ }
++if ($linksXaml.IndexOf('x:Name="FirewallUnavailableInfo"', [StringComparison]::Ordinal) -lt 0 -or
++    $linksXaml.IndexOf('Message="Mesh firewall ', [StringComparison]::Ordinal) -lt 0) {
++    throw 'Links page must expose one persistent Mesh firewall unavailable banner.'
++}
++if ($linksCode.IndexOf('SetFirewallUnavailable', [StringComparison]::Ordinal) -lt 0 -or
++    $mainCode.IndexOf('MeshLinkViewModel.FirewallUnavailableErrorCode', [StringComparison]::Ordinal) -lt 0) {
++    throw 'Desktop must project both event and persisted Mesh firewall unavailable state.'
++}
++if ($meshModelsCode.IndexOf('LastError == FirewallUnavailableErrorCode ? string.Empty',
++        [StringComparison]::Ordinal) -lt 0) {
++    throw 'Shared Mesh firewall errors must be suppressed from individual Link rows.'
++}
++if ($mainCode.IndexOf('Servers.Count > 0 || _control.IsConfigured', [StringComparison]::Ordinal) -lt 0 -or
++    $mainCode.IndexOf('await RefreshControlMeshAsync(showSuccess: false);', [StringComparison]::Ordinal) -lt 0) {
++    throw 'Configured Control state must refresh even when no SSH profiles exist.'
++}
+ if ($mainCode.IndexOf(
+         'MeshLinksList.SelectedItem = selectedLink;', [StringComparison]::Ordinal) -lt 0) {
+     throw 'Main page must synchronize the selected Link before disconnecting it.'

@@ -1,0 +1,6 @@
+PR_URL=https://github.com/ochenstarik-ui/server-monitor-manager/pull/12
+BASE_SHA=89ef2fd9d3e596777fba47e4a17e181e7e788993
+IMPLEMENTATION_SHA=c757920791673dbc34c4a1e826caf16f6ba07da1
+MERGE_SHA=b11c277ac7f79a18670932eca4622982d9ff48e0
+MERGED_AT=2026-08-03T06:55:49Z
+DELIVERY_STATUS=verified_and_merged_physical_acceptance_pending

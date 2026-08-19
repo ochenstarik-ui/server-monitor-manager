@@ -25,9 +25,13 @@
           <span class="btn-icon">↻</span>
           <span>Обновить</span>
         </button>
-        <button id="add-node-btn" class="btn btn-primary">
+        <button id="add-node-btn" class="btn btn-secondary">
           <span class="btn-icon">+</span>
           <span>Добавить узел</span>
+        </button>
+        <button id="header-create-link-btn" class="btn btn-primary">
+          <span class="btn-icon">🔗</span>
+          <span>Создать Link</span>
         </button>
         <button id="logout-btn" class="btn btn-secondary hidden" title="Выйти из сессии">
           <span class="btn-icon">🚪</span>
@@ -86,7 +90,13 @@
             <h2>Сетевые связи (Links)</h2>
             <span id="links-count" class="counter-badge">0</span>
           </div>
-          <span class="section-hint">Политики взаимодействия между узлами mesh-сети</span>
+          <div class="section-actions">
+            <span class="section-hint">Политики взаимодействия между узлами mesh-сети</span>
+            <button id="create-link-btn" class="btn btn-primary btn-sm">
+              <span class="btn-icon">+</span>
+              <span>Создать Link</span>
+            </button>
+          </div>
         </div>
 
         <div class="table-container">
@@ -97,21 +107,57 @@
                 <th>Источник</th>
                 <th>Назначение</th>
                 <th>Протокол / Порт</th>
-                <th>Требуемое состояние</th>
-                <th>Фактическое состояние</th>
+                <th>Желаемое</th>
+                <th>Фактическое</th>
+                <th>Причина</th>
                 <th>Срок действия</th>
+                <th>Действия</th>
               </tr>
             </thead>
             <tbody id="links-table-body">
               <tr class="loading-row">
-                <td colspan="7">Загрузка сетевых связей...</td>
+                <td colspan="9">Загрузка сетевых связей...</td>
               </tr>
             </tbody>
           </table>
           <div id="links-empty" class="empty-state hidden">
             <div class="empty-state-icon">🔗</div>
             <div class="empty-state-text">Нет активных связей</div>
-            <p class="empty-state-subtext">Сетевые политики взаимодействия между узлами ещё не созданы.</p>
+            <p class="empty-state-subtext">Сетевые политики взаимодействия между узлами ещё не созданы. Нажмите «Создать Link» для добавления нового правила.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Раздел: Журнал событий (Events Journal) -->
+      <section class="dashboard-section" id="events-section">
+        <div class="section-header">
+          <div class="section-title-group">
+            <h2>Журнал событий</h2>
+            <span id="events-count" class="counter-badge">0</span>
+          </div>
+          <span class="section-hint">Поток системных событий в реальном времени (агенты, сетевые связи, аудит)</span>
+        </div>
+
+        <div class="table-container">
+          <table class="data-table" id="events-table">
+            <thead>
+              <tr>
+                <th style="width: 170px;">Время</th>
+                <th style="width: 180px;">Тип события</th>
+                <th style="width: 180px;">Субъект</th>
+                <th>Подробности</th>
+              </tr>
+            </thead>
+            <tbody id="events-table-body">
+              <tr class="loading-row">
+                <td colspan="4">Ожидание потока событий...</td>
+              </tr>
+            </tbody>
+          </table>
+          <div id="events-empty" class="empty-state hidden">
+            <div class="empty-state-icon">📜</div>
+            <div class="empty-state-text">Журнал пуст</div>
+            <p class="empty-state-subtext">События появятся здесь в реальном времени при изменении состояния узлов и правил.</p>
           </div>
         </div>
       </section>
@@ -127,6 +173,8 @@
         <span id="last-updated-text">Синхронизировано</span>
       </div>
     </footer>
+  </div>
+
   <!-- Модальное окно: Вход по логину и паролю (для тестирования) -->
   <div id="login-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="login-modal-title">
     <div class="modal-window login-modal-window">
@@ -254,6 +302,125 @@
             <button type="button" id="result-done-btn" class="btn btn-secondary">Готово</button>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Модальное окно: Создание сетевой связи (Link) -->
+  <div id="create-link-modal" class="modal-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="create-link-title">
+    <div class="modal-window create-link-modal-window">
+      <div class="modal-header">
+        <h3 id="create-link-title">Создание сетевой связи (Link)</h3>
+        <button id="link-modal-close-btn" class="modal-close" aria-label="Закрыть">×</button>
+      </div>
+
+      <div class="modal-body">
+        <datalist id="nodes-datalist"></datalist>
+
+        <form id="create-link-form">
+          <div class="form-row-2">
+            <div class="form-group">
+              <label for="link-source-node">Узел-источник (Source Node ID):</label>
+              <input
+                type="text"
+                id="link-source-node"
+                class="form-control"
+                placeholder="например: web-prod-01"
+                list="nodes-datalist"
+                maxlength="63"
+                pattern="^[a-z0-9-]{1,63}$"
+                required
+                autocomplete="off"
+                spellcheck="false">
+              <span class="form-hint">Откуда разрешается исходящий трафик</span>
+            </div>
+
+            <div class="form-group">
+              <label for="link-target-node">Узел-назначение (Target Node ID):</label>
+              <input
+                type="text"
+                id="link-target-node"
+                class="form-control"
+                placeholder="например: db-prod-01"
+                list="nodes-datalist"
+                maxlength="63"
+                pattern="^[a-z0-9-]{1,63}$"
+                required
+                autocomplete="off"
+                spellcheck="false">
+              <span class="form-hint">Куда разрешается входящий трафик</span>
+            </div>
+          </div>
+
+          <div class="form-row-3">
+            <div class="form-group">
+              <label for="link-protocol">Протокол:</label>
+              <select id="link-protocol" class="form-control form-select">
+                <option value="tcp" selected>TCP</option>
+                <option value="udp">UDP</option>
+              </select>
+            </div>
+
+            <div class="form-group">
+              <label for="link-port">Порт назначения:</label>
+              <input
+                type="number"
+                id="link-port"
+                class="form-control"
+                placeholder="8080"
+                min="1"
+                max="65535"
+                required>
+            </div>
+
+            <div class="form-group">
+              <label for="link-ttl">Срок действия (мин):</label>
+              <input
+                type="number"
+                id="link-ttl"
+                class="form-control"
+                value="60"
+                min="1"
+                max="525600"
+                required>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="link-reason">Причина открытия доступа (Reason):</label>
+            <input
+              type="text"
+              id="link-reason"
+              class="form-control"
+              placeholder="например: Доступ веб-сервера к реплике PostgreSQL для отчётов"
+              maxlength="256"
+              required
+              autocomplete="off">
+            <span class="form-hint">Обязательное поле: фиксируется в журнале аудита безопасности</span>
+          </div>
+
+          <!-- Явное подтверждение направления сетевого доступа -->
+          <div class="link-direction-card" id="link-direction-card" role="region" aria-label="Подтверждение направления связи">
+            <div class="direction-card-header">
+              <span class="direction-icon">🛡️</span>
+              <strong>Подтверждение направления правила доступа:</strong>
+            </div>
+            <div class="direction-card-body">
+              <div id="link-direction-summary" class="direction-summary-text">
+                Укажите узел-источник и узел-назначение для проверки направления связи.
+              </div>
+            </div>
+          </div>
+
+          <div id="link-modal-error" class="alert alert-error hidden" role="alert"></div>
+
+          <div class="form-actions">
+            <button type="button" id="link-modal-cancel-btn" class="btn btn-secondary">Отмена</button>
+            <button type="submit" id="link-modal-submit-btn" class="btn btn-primary">
+              <span>Подтвердить и создать Link</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

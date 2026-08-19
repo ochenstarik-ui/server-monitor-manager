@@ -97,6 +97,7 @@ body {
   display: flex;
   align-items: center;
   gap: 0.75rem;
+  flex-wrap: wrap;
 }
 
 .status-indicator {
@@ -165,6 +166,17 @@ body {
   background-color: #475569;
 }
 
+.btn-danger {
+  background-color: var(--danger-bg);
+  color: var(--danger-text);
+  border-color: var(--danger-border);
+}
+
+.btn-danger:hover {
+  background-color: #ef4444;
+  color: #ffffff;
+}
+
 .btn-outline {
   background-color: transparent;
   color: var(--text-primary);
@@ -209,8 +221,10 @@ body {
   padding: 1.25rem 1.5rem;
   border-bottom: 1px solid var(--border-color);
   display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.75rem;
 }
 
 .section-title-group {
@@ -223,6 +237,12 @@ body {
   font-size: 1.15rem;
   font-weight: 700;
   color: var(--text-primary);
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .counter-badge {
@@ -319,7 +339,8 @@ body {
 }
 
 .status-badge.connecting,
-.status-badge.pending {
+.status-badge.pending,
+.status-badge.applying {
   background-color: var(--warning-bg);
   color: var(--warning-text);
   border: 1px solid var(--warning-border);
@@ -332,6 +353,59 @@ body {
   background-color: var(--danger-bg);
   color: var(--danger-text);
   border: 1px solid var(--danger-border);
+}
+
+.state-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.state-mismatch-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: #fbbf24;
+  background-color: rgba(245, 158, 11, 0.15);
+  border: 1px dashed #d97706;
+  padding: 0.15rem 0.4rem;
+  border-radius: 4px;
+}
+
+.link-error-msg {
+  font-size: 0.775rem;
+  color: #f87171;
+  background-color: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  margin-top: 0.35rem;
+  max-width: 280px;
+  word-break: break-word;
+}
+
+/* Event Journal */
+.event-type-badge {
+  font-family: var(--font-mono);
+  font-size: 0.775rem;
+  font-weight: 600;
+  padding: 0.2rem 0.5rem;
+  border-radius: 4px;
+  background-color: var(--bg-tertiary);
+  color: #93c5fd;
+  display: inline-block;
+}
+
+.event-payload-box {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  max-width: 500px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 /* Empty State */
@@ -411,6 +485,10 @@ body {
   animation: modalEnter 0.15s ease-out;
 }
 
+.create-link-modal-window {
+  max-width: 680px;
+}
+
 @keyframes modalEnter {
   from {
     opacity: 0;
@@ -460,6 +538,18 @@ body {
 }
 
 /* Forms */
+.form-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+}
+
+.form-row-3 {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 1rem;
+}
+
 .form-group {
   display: flex;
   flex-direction: column;
@@ -482,6 +572,12 @@ body {
   color: var(--text-primary);
   outline: none;
   transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  width: 100%;
+}
+
+.form-select {
+  font-family: var(--font-sans);
+  cursor: pointer;
 }
 
 .form-control:focus {
@@ -498,7 +594,47 @@ body {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-top: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* Direction Confirmation Card */
+.link-direction-card {
+  background-color: #0b2246;
+  border: 2px solid #2563eb;
+  border-radius: 8px;
+  padding: 1rem 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.direction-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: #93c5fd;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.direction-summary-text {
+  font-size: 0.9rem;
+  color: #ffffff;
+  line-height: 1.45;
+  background-color: rgba(15, 23, 42, 0.6);
+  padding: 0.65rem 0.85rem;
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.3);
+}
+
+.direction-summary-text strong {
+  color: #60a5fa;
+}
+
+.direction-summary-text.warning {
+  color: #fbbf24;
+  border-color: #f59e0b;
+  background-color: rgba(69, 26, 3, 0.4);
 }
 
 /* Enrollment Code Result */
@@ -670,6 +806,14 @@ body {
   display: none !important;
 }
 
+.text-muted {
+  color: var(--text-muted);
+}
+
+.text-danger {
+  color: var(--danger-text);
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .app-header {
@@ -687,5 +831,9 @@ body {
   .testing-banner {
     padding: 0.5rem 1rem;
     font-size: 0.8rem;
+  }
+  .form-row-2,
+  .form-row-3 {
+    grid-template-columns: 1fr;
   }
 }

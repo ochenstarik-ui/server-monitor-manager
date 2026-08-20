@@ -20,10 +20,23 @@
    В workflow версия cosign не закреплена (`cosign-release` не задан), так
    что она определяется installer'ом. Сейчас это не определено.
 2. **Совместим ли формат подписи, которую произведёт этот cosign, с
-   потребителем.** `deploy/ochenstarik-server-monitor-manager.sh:34`
-   закрепляет `COSIGN_VERSION="v3.1.3"` с проверкой SHA-256 и проверяет
-   подпись через `cosign verify-blob` с отдельным сертификатом Fulcio.
-   Producer и consumer должны сойтись по формату.
+   потребителями — обоими.** Потребителей два, и они на разных версиях
+   cosign:
+
+   - **Linux.** `deploy/ochenstarik-server-monitor-manager.sh:34` закрепляет
+     `COSIGN_VERSION="v3.1.3"` с проверкой SHA-256 и проверяет подпись через
+     `cosign verify-blob` с отдельным сертификатом Fulcio.
+   - **Windows.** `src/ServerMonitorManager.Desktop/UpdateService.cs:79`
+     закрепляет `CosignVersion = "v2.4.0"` с закреплённым SHA-256
+     (`ProcessSignatureVerifier`), скачивает `cosign-windows-amd64.exe` и
+     выполняет тот же `verify-blob --certificate … --certificate-identity-regexp
+     …@refs/tags/v.*`.
+
+   То есть подпись одного релиза проверяется cosign v3.1.3 на Linux и cosign
+   v2.4.0 на Windows. Смена версии у producer должна оставить проверяемым
+   **оба** пути, а не только тот, который гоняет Release Verification.
+   Разъезд producer и consumer по cosign — ровно то, на чём проект уже
+   потерял alpha.12, alpha.13, alpha.17 и alpha.18.
 3. **Проходит ли полный релизный путь.** Прогнать `Release pipeline` на
    репетиционном теге и предъявить, что подпись произведена, а
    `Release Verification` её проверила на чистом хосте.
@@ -43,6 +56,9 @@ cosign-installer тегом вместо SHA уже числится отдел�
 
 - ссылки на прогоны `Release pipeline` и `Release Verification` с
   репетиционным тегом и их фактический итог;
+- **отдельно — проверка подписи потребителем на cosign v2.4.0**, как это
+  делает Windows-обновлятор. Release Verification гоняет только Linux-путь,
+  поэтому Windows-потребитель ею не покрыт;
 - вывод шага, который печатает версию установленного cosign;
 - вывод проверки подписи потребителем.
 

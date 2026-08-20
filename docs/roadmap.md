@@ -46,6 +46,11 @@
 - [x] ограниченный offline buffer Agent и downsampling;
 - [x] idempotency и replay protection;
 - [x] SQLite schema version, retention и backup/restore Control DB + CA;
+- [x] веб-консоль оператора на Control: список узлов, состояние агентов и
+  выпуск кода регистрации;
+- [x] отдача ассетов консоли из встроенных ресурсов сборки, когда каталога
+  `wwwroot` нет на диске;
+- [x] вход по логину и паролю для тестовых стендов, отключённый по умолчанию;
 - [ ] добавить Desktop UI управления Automation identities и токенами.
 
 ## Этап 3 — управляемые Links
@@ -62,6 +67,12 @@
 - [x] B-2: независимая фоновая и emergency-triggered реконсиляция, агрегированное состояние недоступного Mesh firewall и Desktop banner;
 - [x] B-3: факт-первичная реконсиляция использует один `link-list`, удаляет orphan/дубликаты (включая `Disabled/Disabled`), разводит `Examined` / `Converged` / `Failed` (M2), ограничивает marker-prompt тремя попытками, добавляет фильтр истории и retention завершённых Links (M4), а также типизированное ожидание активации Mesh Node (M5). Physical acceptance остаётся внешним блокером;
 - [ ] выполнить физический acceptance Hub + source Node + два destination Node с WireGuard/nftables/reboot.
+- [x] управление Links из веб-консоли: создание с подтверждением направления,
+  обязательной причиной и ключом идемпотентности;
+- [x] аварийное отключение Link из строки таблицы консоли;
+- [x] раздельное отображение желаемого и фактического состояния Link
+  с признаком рассогласования и последней ошибкой;
+- [x] журнал событий Control в реальном времени в веб-консоли;
 
 ## Этап 4 — мониторинг и терминал
 
@@ -101,6 +112,8 @@
 - [x] добавить криптографическую подпись compatibility manifest для production release;
 - [x] проверять Ubuntu 22.04/24.04 и Debian 12/13, `amd64`/`arm64`;
 - [x] добавить non-interactive install/update/rollback/uninstall;
+- [x] добавить режим полного удаления сервера;
+- [x] добавить пошаговый объединённый установщик;
 - [x] устанавливать Control/Agent, restricted helper и systemd units;
 - [x] локально создавать Agent key/CSR, выполнять mTLS enrollment и не сохранять token;
 - [x] добавить собственную установку WireGuard Hub/Node и выдачу внутренних адресов;
